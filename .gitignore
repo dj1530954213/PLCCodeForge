@@ -1,0 +1,55 @@
+# Build outputs
+bin/
+obj/
+target/
+dist/
+build/
+out/
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+
+# Dependencies
+node_modules/
+packages/
+*.lock
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.local
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# Test outputs
+coverage/
+*.coverage
+test-results/
+
+# Generated files
+*.generated.*
+
+# PLC specific
+*.ap*
+*.bak
+*.tmp
