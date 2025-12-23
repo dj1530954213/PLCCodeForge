@@ -20,5 +20,12 @@ dist-ssr
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
 *.sw?
+
+bin/
+obj/
+.vs/
+*.user
+*.rsuser
+*.userosscache
+*.sln.docstates
