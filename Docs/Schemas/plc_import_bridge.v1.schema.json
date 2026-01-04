@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plc_import_bridge.v1.schema.json",
+  "title": "PlcImportBridge v1",
+  "type": "object",
+  "$comment": "稳定契约：v1 仅允许新增可选字段，不得改名/删字段/改语义；破坏性变更必须 bump specVersion=v2。readArea 若从 Holding/Coil 扩展到 Input/Discrete，必须 bump specVersion 以避免静默改变语义。",
+  "additionalProperties": true,
+  "required": [
+    "schemaVersion",
+    "specVersion",
+    "generatedAtUtc",
+    "sourceIrPath",
+    "sources",
+    "points",
+    "statistics"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "specVersion": { "const": "v1" },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "sourceIrPath": { "type": "string" },
+    "sourceIrDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "sources": { "$ref": "#/$defs/sources" },
+    "points": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/point" }
+    },
+    "statistics": { "$ref": "#/$defs/runStats" }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["resultsSource"],
+      "properties": {
+        "unionXlsxPath": { "type": "string" },
+        "resultsSource": { "enum": ["appdata", "runLatest"] }
+      }
+    },
+    "runStats": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["total", "ok", "timeout", "commError", "decodeError", "configError"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "ok": { "type": "integer", "minimum": 0 },
+        "timeout": { "type": "integer", "minimum": 0 },
+        "commError": { "type": "integer", "minimum": 0 },
+        "decodeError": { "type": "integer", "minimum": 0 },
+        "configError": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "dataType": {
+      "enum": ["Bool", "Int16", "UInt16", "Int32", "UInt32", "Float32"]
+    },
+    "byteOrder32": {
+      "enum": ["ABCD", "BADC", "CDAB", "DCBA"]
+    },
+    "quality": {
+      "enum": ["Ok", "Timeout", "CommError", "DecodeError", "ConfigError"]
+    },
+    "registerAreaMvp": {
+      "enum": ["Holding", "Coil"]
+    },
+    "addressSpec": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["readArea", "addressBase"],
+      "properties": {
+        "readArea": { "$ref": "#/$defs/registerAreaMvp" },
+        "absoluteAddress": { "type": "integer", "minimum": 0 },
+        "unitLength": { "type": "integer", "minimum": 0 },
+        "profileStartAddress": { "type": "integer", "minimum": 0 },
+        "profileLength": { "type": "integer", "minimum": 0 },
+        "offsetFromProfileStart": { "type": "integer", "minimum": 0 },
+        "jobStartAddress": { "type": "integer", "minimum": 0 },
+        "jobLength": { "type": "integer", "minimum": 0 },
+        "addressBase": { "const": "zero" }
+      }
+    },
+    "pointComm": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["channelName", "addressSpec", "dataType", "endian", "scale", "rw"],
+      "properties": {
+        "channelName": { "type": "string" },
+        "addressSpec": { "$ref": "#/$defs/addressSpec" },
+        "dataType": { "$ref": "#/$defs/dataType" },
+        "endian": { "$ref": "#/$defs/byteOrder32" },
+        "scale": { "type": "number" },
+        "rw": { "type": "string" }
+      }
+    },
+    "pointVerification": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["quality", "valueDisplay", "timestamp", "message"],
+      "properties": {
+        "quality": { "$ref": "#/$defs/quality" },
+        "valueDisplay": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "message": { "type": "string" }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["name", "comm", "verification"],
+      "properties": {
+        "name": { "type": "string" },
+        "comm": { "$ref": "#/$defs/pointComm" },
+        "verification": { "$ref": "#/$defs/pointVerification" }
+      }
+    }
+  }
+}

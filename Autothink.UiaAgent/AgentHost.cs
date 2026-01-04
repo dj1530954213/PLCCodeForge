@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.ExceptionServices;
+using Autothink.UiaAgent.Rpc;
 using StreamJsonRpc;
 
 namespace Autothink.UiaAgent;
@@ -46,9 +47,8 @@ internal static class AgentHost
             // 能在纯字节流（stdin/stdout）上可靠地边界化 JSON-RPC 消息。
             using var messageHandler = new HeaderDelimitedMessageHandler(sendingStream, receivingStream);
 
-            // RPC target：其公开方法将被暴露为 JSON-RPC 方法。
-            // 在后续实现中，这里会放入 UIA/FlaUI 的业务入口（查找窗口、点击控件、输入文本等）。
-            var rpcTarget = new AgentRpc();
+            // RPC target：对外暴露 UIA/FlaUI 入口（OpenSession/Find/Click/RunFlow...）。
+            var rpcTarget = new UiaRpcService();
             using var rpc = new JsonRpc(messageHandler, rpcTarget)
             {
                 // 关键：将所有 RPC 方法调度回当前线程执行。
@@ -82,23 +82,6 @@ internal static class AgentHost
             // 避免将该 SynchronizationContext 泄漏到调用栈之外。
             SynchronizationContext.SetSynchronizationContext(null);
         }
-    }
-
-    /// <summary>
-    /// JSON-RPC 对外暴露的方法集合（最小骨架）。
-    /// </summary>
-    /// <remarks>
-    /// 约定：
-    /// - 这里的方法名将作为 JSON-RPC method 名称（例如 Ping => "Ping"）。
-    /// - 实际业务方法不应写 stdout（stdout 用于协议），必要日志写 stderr。
-    /// </remarks>
-    private sealed class AgentRpc
-    {
-        /// <summary>
-        /// 连通性/健康检查：用于宿主在握手后快速确认 RPC 通路可用。
-        /// </summary>
-        /// <returns>固定返回 "pong"。</returns>
-        public string Ping() => "pong";
     }
 
     /// <summary>

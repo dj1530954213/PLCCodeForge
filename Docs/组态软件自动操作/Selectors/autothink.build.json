@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "buildButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "编译", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "buildResult": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Pane", "NameContains": "编译", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "buildStatus": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "StatusBar", "NameContains": "完成", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "closeDialog": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "关闭", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    }
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "specVersion": "v1",
+  "generatedAtUtc": "2026-01-01T00:00:00Z",
+  "sources": {
+    "unionXlsxPath": "fixtures/union.xlsx",
+    "resultsSource": "runLatest"
+  },
+  "mapping": {
+    "points": [
+      {
+        "pointKey": "00000000-0000-0000-0000-000000000001",
+        "hmiName": "HOLD_U16_OK",
+        "channelName": "ch_holding",
+        "dataType": "UInt16",
+        "endian": "ABCD",
+        "scale": 1.0,
+        "rw": "R",
+        "addressSpec": {
+          "readArea": "Holding",
+          "absoluteAddress": 100,
+          "unitLength": 1,
+          "profileStartAddress": 100,
+          "profileLength": 10,
+          "offsetFromProfileStart": 0,
+          "jobStartAddress": 100,
+          "jobLength": 1,
+          "addressBase": "zero"
+        }
+      },
+      {
+        "pointKey": "00000000-0000-0000-0000-000000000002",
+        "hmiName": "COIL_BOOL_TIMEOUT",
+        "channelName": "ch_coil",
+        "dataType": "Bool",
+        "endian": "ABCD",
+        "scale": 1.0,
+        "rw": "R",
+        "addressSpec": {
+          "readArea": "Coil",
+          "absoluteAddress": 1,
+          "unitLength": 1,
+          "profileStartAddress": 0,
+          "profileLength": 16,
+          "offsetFromProfileStart": 1,
+          "jobStartAddress": 1,
+          "jobLength": 1,
+          "addressBase": "zero"
+        }
+      },
+      {
+        "pointKey": "00000000-0000-0000-0000-000000000003",
+        "hmiName": "HOLD_F32_OK",
+        "channelName": "ch_holding",
+        "dataType": "Float32",
+        "endian": "CDAB",
+        "scale": 1.0,
+        "rw": "R",
+        "addressSpec": {
+          "readArea": "Holding",
+          "absoluteAddress": 102,
+          "unitLength": 2,
+          "profileStartAddress": 100,
+          "profileLength": 10,
+          "offsetFromProfileStart": 2,
+          "jobStartAddress": 102,
+          "jobLength": 2,
+          "addressBase": "zero"
+        }
+      }
+    ],
+    "profiles": [
+      {
+        "protocolType": "TCP",
+        "channelName": "ch_holding",
+        "deviceId": 1,
+        "readArea": "Holding",
+        "startAddress": 100,
+        "length": 10,
+        "ip": "127.0.0.1",
+        "port": 502,
+        "timeoutMs": 1000,
+        "retryCount": 0,
+        "pollIntervalMs": 500
+      },
+      {
+        "protocolType": "TCP",
+        "channelName": "ch_coil",
+        "deviceId": 1,
+        "readArea": "Coil",
+        "startAddress": 0,
+        "length": 16,
+        "ip": "127.0.0.1",
+        "port": 502,
+        "timeoutMs": 1000,
+        "retryCount": 0,
+        "pollIntervalMs": 500
+      }
+    ]
+  },
+  "verification": {
+    "results": [
+      {
+        "pointKey": "00000000-0000-0000-0000-000000000001",
+        "valueDisplay": "123",
+        "quality": "Ok",
+        "timestamp": "2026-01-01T00:00:01Z",
+        "durationMs": 10,
+        "message": ""
+      },
+      {
+        "pointKey": "00000000-0000-0000-0000-000000000002",
+        "valueDisplay": "",
+        "quality": "Timeout",
+        "timestamp": "2026-01-01T00:00:02Z",
+        "durationMs": 1000,
+        "message": "timeout"
+      },
+      {
+        "pointKey": "00000000-0000-0000-0000-000000000003",
+        "valueDisplay": "3.14",
+        "quality": "Ok",
+        "timestamp": "2026-01-01T00:00:03Z",
+        "durationMs": 12,
+        "message": ""
+      }
+    ],
+    "stats": {
+      "total": 3,
+      "ok": 2,
+      "timeout": 1,
+      "commError": 0,
+      "decodeError": 0,
+      "configError": 0
+    }
+  },
+  "decisionsSummary": {
+    "reusedKeyV2": 0,
+    "reusedKeyV2NoDevice": 0,
+    "reusedKeyV1": 0,
+    "createdNew": 0,
+    "conflicts": 0
+  }
+}
+

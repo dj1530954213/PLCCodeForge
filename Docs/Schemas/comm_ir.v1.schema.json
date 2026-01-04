@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "comm_ir.v1.schema.json",
+  "title": "CommIR v1",
+  "type": "object",
+  "$comment": "稳定契约：v1 仅允许新增可选字段，不得改名/删字段/改语义；破坏性变更必须 bump specVersion=v2。内部地址语义统一 0-based：addressSpec.addressBase 固定为 'zero'。",
+  "additionalProperties": true,
+  "required": ["schemaVersion", "specVersion", "generatedAtUtc", "sources", "mapping", "verification", "decisionsSummary"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "specVersion": { "const": "v1" },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "sources": { "$ref": "#/$defs/sources" },
+    "mapping": { "$ref": "#/$defs/mapping" },
+    "verification": { "$ref": "#/$defs/verification" },
+    "decisionsSummary": { "$ref": "#/$defs/decisionsSummary" },
+    "conflicts": {}
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "resultsSource": {
+      "enum": ["appdata", "runLatest"]
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["resultsSource"],
+      "properties": {
+        "unionXlsxPath": { "type": "string" },
+        "resultsSource": { "$ref": "#/$defs/resultsSource" }
+      }
+    },
+    "dataType": {
+      "enum": ["Bool", "Int16", "UInt16", "Int32", "UInt32", "Float32", "Unknown"]
+    },
+    "byteOrder32": {
+      "enum": ["ABCD", "BADC", "CDAB", "DCBA", "Unknown"]
+    },
+    "registerArea": {
+      "enum": ["Holding", "Input", "Coil", "Discrete"]
+    },
+    "serialParity": {
+      "enum": ["None", "Even", "Odd"]
+    },
+    "quality": {
+      "enum": ["Ok", "Timeout", "CommError", "DecodeError", "ConfigError"]
+    },
+    "runStats": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["total", "ok", "timeout", "commError", "decodeError", "configError"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "ok": { "type": "integer", "minimum": 0 },
+        "timeout": { "type": "integer", "minimum": 0 },
+        "commError": { "type": "integer", "minimum": 0 },
+        "decodeError": { "type": "integer", "minimum": 0 },
+        "configError": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "addressSpec": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["addressBase"],
+      "properties": {
+        "readArea": { "$ref": "#/$defs/registerArea" },
+        "absoluteAddress": { "type": "integer", "minimum": 0 },
+        "unitLength": { "type": "integer", "minimum": 0 },
+        "profileStartAddress": { "type": "integer", "minimum": 0 },
+        "profileLength": { "type": "integer", "minimum": 0 },
+        "offsetFromProfileStart": { "type": "integer", "minimum": 0 },
+        "jobStartAddress": { "type": "integer", "minimum": 0 },
+        "jobLength": { "type": "integer", "minimum": 0 },
+        "addressBase": { "const": "zero" }
+      }
+    },
+    "irPoint": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["pointKey", "hmiName", "channelName", "dataType", "endian", "scale", "rw", "addressSpec"],
+      "properties": {
+        "pointKey": { "$ref": "#/$defs/uuid" },
+        "hmiName": { "type": "string" },
+        "channelName": { "type": "string" },
+        "dataType": { "$ref": "#/$defs/dataType" },
+        "endian": { "$ref": "#/$defs/byteOrder32" },
+        "scale": { "type": "number" },
+        "rw": { "type": "string" },
+        "addressSpec": { "$ref": "#/$defs/addressSpec" }
+      }
+    },
+    "connectionProfileTcp": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "protocolType",
+        "channelName",
+        "deviceId",
+        "readArea",
+        "startAddress",
+        "length",
+        "ip",
+        "port",
+        "timeoutMs",
+        "retryCount",
+        "pollIntervalMs"
+      ],
+      "properties": {
+        "protocolType": { "const": "TCP" },
+        "channelName": { "type": "string" },
+        "deviceId": { "type": "integer", "minimum": 0 },
+        "readArea": { "$ref": "#/$defs/registerArea" },
+        "startAddress": { "type": "integer", "minimum": 0 },
+        "length": { "type": "integer", "minimum": 0 },
+        "ip": { "type": "string" },
+        "port": { "type": "integer", "minimum": 0 },
+        "timeoutMs": { "type": "integer", "minimum": 0 },
+        "retryCount": { "type": "integer", "minimum": 0 },
+        "pollIntervalMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "connectionProfileRtu": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "protocolType",
+        "channelName",
+        "deviceId",
+        "readArea",
+        "startAddress",
+        "length",
+        "serialPort",
+        "baudRate",
+        "parity",
+        "dataBits",
+        "stopBits",
+        "timeoutMs",
+        "retryCount",
+        "pollIntervalMs"
+      ],
+      "properties": {
+        "protocolType": { "const": "485" },
+        "channelName": { "type": "string" },
+        "deviceId": { "type": "integer", "minimum": 0 },
+        "readArea": { "$ref": "#/$defs/registerArea" },
+        "startAddress": { "type": "integer", "minimum": 0 },
+        "length": { "type": "integer", "minimum": 0 },
+        "serialPort": { "type": "string" },
+        "baudRate": { "type": "integer", "minimum": 0 },
+        "parity": { "$ref": "#/$defs/serialParity" },
+        "dataBits": { "type": "integer", "minimum": 0 },
+        "stopBits": { "type": "integer", "minimum": 0 },
+        "timeoutMs": { "type": "integer", "minimum": 0 },
+        "retryCount": { "type": "integer", "minimum": 0 },
+        "pollIntervalMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "connectionProfile": {
+      "oneOf": [
+        { "$ref": "#/$defs/connectionProfileTcp" },
+        { "$ref": "#/$defs/connectionProfileRtu" }
+      ]
+    },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["points", "profiles"],
+      "properties": {
+        "points": { "type": "array", "items": { "$ref": "#/$defs/irPoint" } },
+        "profiles": { "type": "array", "items": { "$ref": "#/$defs/connectionProfile" } }
+      }
+    },
+    "irResult": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["pointKey", "valueDisplay", "quality", "timestamp", "durationMs", "message"],
+      "properties": {
+        "pointKey": { "$ref": "#/$defs/uuid" },
+        "valueDisplay": { "type": "string" },
+        "quality": { "$ref": "#/$defs/quality" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "message": { "type": "string" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["results", "stats"],
+      "properties": {
+        "results": { "type": "array", "items": { "$ref": "#/$defs/irResult" } },
+        "stats": { "$ref": "#/$defs/runStats" }
+      }
+    },
+    "decisionsSummary": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["reusedKeyV2", "reusedKeyV2NoDevice", "reusedKeyV1", "createdNew", "conflicts"],
+      "properties": {
+        "reusedKeyV2": { "type": "integer", "minimum": 0 },
+        "reusedKeyV2NoDevice": { "type": "integer", "minimum": 0 },
+        "reusedKeyV1": { "type": "integer", "minimum": 0 },
+        "createdNew": { "type": "integer", "minimum": 0 },
+        "conflicts": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
+

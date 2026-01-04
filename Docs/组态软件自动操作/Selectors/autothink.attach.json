@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "mainWindow": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "AUTOTHINK", "IgnoreCase": true, "Index": 0 }
+      ]
+    },
+    "projectTree": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Tree", "NameContains": "项目", "IgnoreCase": true, "Index": 0 }
+      ]
+    }
+  }
+}

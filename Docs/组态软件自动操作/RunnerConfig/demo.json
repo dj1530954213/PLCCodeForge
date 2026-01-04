@@ -1,0 +1,72 @@
+{
+  "session": {
+    "processName": "Autothink.UiaAgent.DemoTarget",
+    "mainWindowTitleContains": "DemoTarget",
+    "timeoutMs": 10000,
+    "bringToForeground": true
+  },
+  "agentPath": "..\\..\\..\\Autothink.UiaAgent\\bin\\Release\\net8.0-windows\\Autothink.UiaAgent.exe",
+  "inputsSource": {
+    "mode": "fromCommIr",
+    "commIrPath": "..\\..\\Samples\\comm_ir.sample.json"
+  },
+  "evidencePack": {
+    "enable": true
+  },
+  "uiStateRecovery": {
+    "enable": true,
+    "maxAttempts": 2,
+    "searchRoot": "desktop"
+  },
+  "selectorsRoot": "..\\Selectors",
+  "profile": "autothink",
+  "selectorPackVersion": "v1",
+  "logsRoot": "..\\..\\..\\logs",
+  "programTextPath": "..\\..\\Samples\\program_demo.st",
+  "variablesFilePath": "..\\..\\Samples\\variables_demo.xlsx",
+  "importVariables": {
+    "openImportDialogSteps": [
+      { "action": "Click", "selectorKey": "importVariablesMenuOrButton" }
+    ],
+    "dialogSelectorKey": "importVariablesDialogRoot",
+    "filePathEditorSelectorKey": "importVariablesFilePathEdit",
+    "confirmButtonSelectorKey": "importVariablesOkButton",
+    "successCondition": { "kind": "ElementNotExists", "selectorKey": "importVariablesDialogRoot" },
+    "waitTimeoutMs": 30000,
+    "searchRoot": "mainWindow"
+  },
+  "importProgram": {
+    "openProgramSteps": [
+      { "action": "Click", "selectorKey": "importProgramMenuOrButton" }
+    ],
+    "editorRootSelectorKey": "programEditorRoot",
+    "editorSelectorKey": "programEditorTextArea",
+    "verifyMode": "editorNotEmpty",
+    "afterPasteWaitMs": 1000,
+    "fallbackToType": true,
+    "preferClipboard": true,
+    "clipboardRetry": { "times": 3, "intervalMs": 200 },
+    "clipboardHealthCheck": true,
+    "forceFallbackOnClipboardFailure": false,
+    "searchRoot": "mainWindow",
+    "clipboardTimeoutMs": 5000
+  },
+  "build": {
+    "buildButtonSelectorKey": "buildButton",
+    "waitCondition": { "kind": "ElementEnabled", "selectorKey": "buildButton" },
+    "buildOutcome": {
+      "mode": "waitSelector",
+      "successSelectorKey": "buildSucceededIndicator",
+      "timeoutMs": 60000
+    },
+    "timeoutMs": 60000,
+    "searchRoot": "mainWindow",
+    "enablePopupHandling": true,
+    "popupSearchRoot": "desktop",
+    "popupTimeoutMs": 2000,
+    "allowPopupOk": false,
+    "popupDialogSelectorKey": "popupDialog",
+    "popupOkButtonSelectorKey": "popupOkButton",
+    "popupCancelButtonSelectorKey": "popupCancelButton"
+  }
+}

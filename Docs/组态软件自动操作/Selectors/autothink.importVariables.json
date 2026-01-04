@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "importMenu": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "MenuItem", "NameContains": "导入", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "importToolbar": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "导入", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "importDialog": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "导入", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "filePathInput": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Edit", "NameContains": "路径", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "confirmButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "确定", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "importResult": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "NameContains": "导入完成", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "popupDialog": {
+      "Path": [
+        {
+          "Search": "Descendants",
+          "ControlType": "Window",
+          "ClassNameContains": "Dialog",
+          "IgnoreCase": true,
+          "NormalizeWhitespace": true,
+          "Index": 0
+        }
+      ]
+    },
+    "popupOkButton": {
+      "Path": [
+        {
+          "Search": "Descendants",
+          "ControlType": "Button",
+          "NameContains": "确定",
+          "IgnoreCase": true,
+          "NormalizeWhitespace": true,
+          "Index": 0
+        }
+      ]
+    },
+    "popupCancelButton": {
+      "Path": [
+        {
+          "Search": "Descendants",
+          "ControlType": "Button",
+          "NameContains": "取消",
+          "IgnoreCase": true,
+          "NormalizeWhitespace": true,
+          "Index": 0
+        }
+      ]
+    }
+  }
+}

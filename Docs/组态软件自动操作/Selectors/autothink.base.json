@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "importVariablesMenuOrButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "openImportButton", "Index": 0 }
+      ]
+    },
+    "importDialog": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "变量导入", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "filePathEdit": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Edit", "AutomationId": "filePathEdit", "Index": 0 }
+      ]
+    },
+    "importOkButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "importOkButton", "Index": 0 }
+      ]
+    },
+    "importDoneIndicator": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "statusLabel", "Index": 0 }
+      ]
+    },
+    "importProgramMenuOrButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "importProgramButton", "Index": 0 }
+      ]
+    },
+    "programEditorRoot": {
+      "Path": [
+        { "Search": "Descendants", "AutomationId": "programEditor", "Index": 0 }
+      ]
+    },
+    "programEditorTextArea": {
+      "Path": [
+        { "Search": "Descendants", "AutomationId": "programEditor", "Index": 0 }
+      ]
+    },
+    "importProgramOkButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "importProgramOkButton", "Index": 0 }
+      ]
+    },
+    "programPastedIndicator": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "programPasteIndicator", "Index": 0 }
+      ]
+    },
+    "buildButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "buildButton", "Index": 0 }
+      ]
+    },
+    "buildStatus": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "statusLabel", "Index": 0 }
+      ]
+    }
+  }
+}

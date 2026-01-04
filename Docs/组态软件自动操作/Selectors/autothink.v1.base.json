@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "mainWindow": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "AUTOTHINK Demo Target", "IgnoreCase": true, "Index": 0 }
+      ]
+    },
+    "importVariablesMenuOrButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "openImportButton", "Index": 0 }
+      ]
+    },
+    "importVariablesDialogRoot": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "AutomationId": "importDialog", "Index": 0 }
+      ]
+    },
+    "importVariablesFilePathEdit": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Edit", "AutomationId": "filePathEdit", "Index": 0 }
+      ]
+    },
+    "importVariablesOkButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "importOkButton", "Index": 0 }
+      ]
+    },
+    "importVariablesDoneIndicator": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "statusLabel", "NameContains": "Imported", "IgnoreCase": true, "Index": 0 }
+      ]
+    },
+    "importProgramMenuOrButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "importProgramButton", "Index": 0 }
+      ]
+    },
+    "programEditorRoot": {
+      "Path": [
+        { "Search": "Descendants", "AutomationId": "programEditor", "Index": 0 }
+      ]
+    },
+    "programEditorTextArea": {
+      "Path": [
+        { "Search": "Descendants", "AutomationId": "programEditor", "Index": 0 }
+      ]
+    },
+    "importProgramOkButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "importProgramOkButton", "Index": 0 }
+      ]
+    },
+    "programPastedIndicator": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "programPasteIndicator", "Index": 0 }
+      ]
+    },
+    "buildButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "buildButton", "Index": 0 }
+      ]
+    },
+    "buildOutputPane": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "statusLabel", "Index": 0 }
+      ]
+    },
+    "buildStatus": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "statusLabel", "Index": 0 }
+      ]
+    },
+    "buildSucceededIndicator": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "statusLabel", "NameContains": "Build OK", "IgnoreCase": true, "Index": 0 }
+      ]
+    },
+    "global.popupRoot": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "AutomationIdContains": "Dialog", "Index": 0 }
+      ]
+    },
+    "global.popupOkButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "popupOkButton", "Index": 0 }
+      ]
+    },
+    "global.popupCancelButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "popupCancelButton", "Index": 0 }
+      ]
+    },
+    "global.popupNoButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "popupNoButton", "Index": 0 }
+      ]
+    },
+    "global.popupWarningText": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "popupWarningText", "Index": 0 }
+      ]
+    }
+  }
+}

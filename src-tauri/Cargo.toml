@@ -23,3 +23,15 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# 通讯地址采集模块相关依赖
+thiserror = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
+parking_lot = "0.12"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio-modbus = { version = "0.11", default-features = false, features = ["tcp", "rtu"] }
+tokio-serial = "5"
+rust_xlsxwriter = "0.82"
+calamine = "0.26"
+zip = "2.4.2"
+sha2 = "0.10"

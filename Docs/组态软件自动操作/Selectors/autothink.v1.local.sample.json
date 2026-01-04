@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "mainWindow": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "AUTOTHINK", "IgnoreCase": true, "Index": 0 }
+      ]
+    },
+    "importVariablesMenuOrButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "导入", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "importVariablesDialogRoot": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "导入", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "importVariablesFilePathEdit": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Edit", "NameContains": "路径", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "importVariablesOkButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "确定", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "importVariablesDoneIndicator": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "NameContains": "导入完成", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "importProgramMenuOrButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "程序", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "programEditorRoot": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Document", "NameContains": "程序", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "programEditorTextArea": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Document", "NameContains": "程序", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "programPastedIndicator": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "NameContains": "粘贴", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "buildButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "编译", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "buildOutputPane": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Pane", "NameContains": "输出", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "buildSucceededIndicator": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "NameContains": "成功", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "global.popupRoot": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "提示", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "global.popupOkButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "确定", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "global.popupCancelButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "取消", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "global.popupNoButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "NameContains": "否", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    },
+    "global.popupWarningText": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "NameContains": "权限", "IgnoreCase": true, "NormalizeWhitespace": true, "Index": 0 }
+      ]
+    }
+  }
+}

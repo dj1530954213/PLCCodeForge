@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "specVersion": "v1",
+  "generatedAtUtc": "2026-01-01T00:00:00Z",
+  "sourceIrPath": "__IGNORED__",
+  "sourceIrDigest": "sha256:56b19090b39d6b72dce665f392414be2c494756e2c7f16b556ac1aa702a70b29",
+  "sources": {
+    "unionXlsxPath": "fixtures/union.xlsx",
+    "resultsSource": "runLatest"
+  },
+  "points": [
+    {
+      "name": "HOLD_U16_OK",
+      "comm": {
+        "channelName": "ch_holding",
+        "addressSpec": {
+          "readArea": "Holding",
+          "absoluteAddress": 100,
+          "unitLength": 1,
+          "profileStartAddress": 100,
+          "profileLength": 10,
+          "offsetFromProfileStart": 0,
+          "jobStartAddress": 100,
+          "jobLength": 1,
+          "addressBase": "zero"
+        },
+        "dataType": "UInt16",
+        "endian": "ABCD",
+        "scale": 1.0,
+        "rw": "R"
+      },
+      "verification": {
+        "quality": "Ok",
+        "valueDisplay": "123",
+        "timestamp": "2026-01-01T00:00:01Z",
+        "message": ""
+      }
+    },
+    {
+      "name": "COIL_BOOL_TIMEOUT",
+      "comm": {
+        "channelName": "ch_coil",
+        "addressSpec": {
+          "readArea": "Coil",
+          "absoluteAddress": 1,
+          "unitLength": 1,
+          "profileStartAddress": 0,
+          "profileLength": 16,
+          "offsetFromProfileStart": 1,
+          "jobStartAddress": 1,
+          "jobLength": 1,
+          "addressBase": "zero"
+        },
+        "dataType": "Bool",
+        "endian": "ABCD",
+        "scale": 1.0,
+        "rw": "R"
+      },
+      "verification": {
+        "quality": "Timeout",
+        "valueDisplay": "",
+        "timestamp": "2026-01-01T00:00:02Z",
+        "message": "timeout"
+      }
+    },
+    {
+      "name": "HOLD_F32_OK",
+      "comm": {
+        "channelName": "ch_holding",
+        "addressSpec": {
+          "readArea": "Holding",
+          "absoluteAddress": 102,
+          "unitLength": 2,
+          "profileStartAddress": 100,
+          "profileLength": 10,
+          "offsetFromProfileStart": 2,
+          "jobStartAddress": 102,
+          "jobLength": 2,
+          "addressBase": "zero"
+        },
+        "dataType": "Float32",
+        "endian": "CDAB",
+        "scale": 1.0,
+        "rw": "R"
+      },
+      "verification": {
+        "quality": "Ok",
+        "valueDisplay": "3.14",
+        "timestamp": "2026-01-01T00:00:03Z",
+        "message": ""
+      }
+    }
+  ],
+  "statistics": {
+    "total": 3,
+    "ok": 2,
+    "timeout": 1,
+    "commError": 0,
+    "decodeError": 0,
+    "configError": 0
+  }
+}

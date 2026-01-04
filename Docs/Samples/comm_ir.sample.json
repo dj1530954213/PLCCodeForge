@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "specVersion": "v1",
+  "generatedAtUtc": "2026-01-03T00:00:00Z",
+  "sources": {
+    "unionXlsxPath": "union.xlsx"
+  },
+  "inputs": {
+    "variablesFilePath": "variables_demo.xlsx",
+    "programTextPath": "program_demo.st",
+    "projectName": "DemoProject"
+  },
+  "outputs": {
+    "outputDir": "C:\\temp\\plc-codeforge-output"
+  }
+}

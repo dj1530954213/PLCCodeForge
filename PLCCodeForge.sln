@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Autothink.UiaAgent", "Autothink.UiaAgent\Autothink.UiaAgent.csproj", "{4189D318-4D39-181B-1BF4-2B10A74DC19C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Autothink.UiaAgent.Tests", "Autothink.UiaAgent.Tests\Autothink.UiaAgent.Tests.csproj", "{BF6EB91A-5D35-F2B7-B045-51BE418085ED}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Autothink.UiaAgent.WinFormsHarness", "Autothink.UiaAgent.WinFormsHarness\Autothink.UiaAgent.WinFormsHarness.csproj", "{F242D07F-CE23-479D-B1FE-F98A5140CFF1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Autothink.UiaAgent.DemoTarget", "Autothink.UiaAgent.DemoTarget\Autothink.UiaAgent.DemoTarget.csproj", "{A0578F2D-82D2-4AB4-8631-2594D239F171}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Autothink.UiaAgent.Stage2Runner", "Autothink.UiaAgent.Stage2Runner\Autothink.UiaAgent.Stage2Runner.csproj", "{DCD7B34C-CEA8-4357-81FC-9214DC1451C6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4189D318-4D39-181B-1BF4-2B10A74DC19C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4189D318-4D39-181B-1BF4-2B10A74DC19C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4189D318-4D39-181B-1BF4-2B10A74DC19C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4189D318-4D39-181B-1BF4-2B10A74DC19C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BF6EB91A-5D35-F2B7-B045-51BE418085ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BF6EB91A-5D35-F2B7-B045-51BE418085ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BF6EB91A-5D35-F2B7-B045-51BE418085ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BF6EB91A-5D35-F2B7-B045-51BE418085ED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F242D07F-CE23-479D-B1FE-F98A5140CFF1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F242D07F-CE23-479D-B1FE-F98A5140CFF1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F242D07F-CE23-479D-B1FE-F98A5140CFF1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F242D07F-CE23-479D-B1FE-F98A5140CFF1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A0578F2D-82D2-4AB4-8631-2594D239F171}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A0578F2D-82D2-4AB4-8631-2594D239F171}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A0578F2D-82D2-4AB4-8631-2594D239F171}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A0578F2D-82D2-4AB4-8631-2594D239F171}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DCD7B34C-CEA8-4357-81FC-9214DC1451C6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DCD7B34C-CEA8-4357-81FC-9214DC1451C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DCD7B34C-CEA8-4357-81FC-9214DC1451C6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DCD7B34C-CEA8-4357-81FC-9214DC1451C6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {0D19C199-E34B-4102-9CA6-8C89374712F2}
+	EndGlobalSection
+EndGlobal

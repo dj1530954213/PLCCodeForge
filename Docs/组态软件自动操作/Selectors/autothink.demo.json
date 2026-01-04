@@ -1,0 +1,33 @@
+{
+  "note": "DemoTarget selectors for Stage2Runner/WinFormsHarness",
+  "editorSelector": {
+    "Path": [
+      { "Search": "Descendants", "ControlType": "Edit", "AutomationId": "programEditor", "Index": 0 }
+    ]
+  },
+  "openImportSelector": {
+    "Path": [
+      { "Search": "Descendants", "ControlType": "Button", "AutomationId": "openImportButton", "Index": 0 }
+    ]
+  },
+  "dialogSelector": {
+    "Path": [
+      { "Search": "Descendants", "ControlType": "Pane", "AutomationId": "importPanel", "Index": 0 }
+    ]
+  },
+  "pathInputSelector": {
+    "Path": [
+      { "Search": "Descendants", "ControlType": "Edit", "AutomationId": "importPathTextBox", "Index": 0 }
+    ]
+  },
+  "confirmSelector": {
+    "Path": [
+      { "Search": "Descendants", "ControlType": "Button", "AutomationId": "confirmImportButton", "Index": 0 }
+    ]
+  },
+  "buildTriggerSelector": {
+    "Path": [
+      { "Search": "Descendants", "ControlType": "Button", "AutomationId": "buildButton", "Index": 0 }
+    ]
+  }
+}
