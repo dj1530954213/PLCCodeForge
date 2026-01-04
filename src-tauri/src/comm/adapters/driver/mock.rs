@@ -35,7 +35,9 @@ impl CommDriver for MockDriver {
 
             match job.read_area {
                 RegisterArea::Coil | RegisterArea::Discrete => {
-                    let bits: Vec<bool> = (0..actual).map(|i| ((job.start_address as usize + i) % 2) == 1).collect();
+                    let bits: Vec<bool> = (0..actual)
+                        .map(|i| ((job.start_address as usize + i) % 2) == 1)
+                        .collect();
                     Ok(RawReadData::Coils(bits))
                 }
                 RegisterArea::Holding | RegisterArea::Input => {
@@ -48,4 +50,3 @@ impl CommDriver for MockDriver {
         })
     }
 }
-

@@ -14,12 +14,12 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::error::{ImportUnionError, ImportUnionErrorDetails, ImportUnionErrorKind};
-use super::model::{
+use crate::comm::core::model::{
     ByteOrder32, CommPoint, CommWarning, ConnectionProfile, DataType, PointsV1, ProfilesV1,
-    RegisterArea, SCHEMA_VERSION_V1, SerialParity,
+    RegisterArea, SerialParity, SCHEMA_VERSION_V1,
 };
-use super::union_spec_v1 as spec_v1;
+use crate::comm::core::union_spec_v1 as spec_v1;
+use crate::comm::error::{ImportUnionError, ImportUnionErrorDetails, ImportUnionErrorKind};
 
 pub use spec_v1::AddressBase;
 
@@ -360,7 +360,10 @@ fn parse_read_area(value: &str) -> Option<RegisterArea> {
 }
 
 fn parse_parity(value: &str) -> Option<SerialParity> {
-    match spec_v1::normalize_token_loose(value).to_uppercase().as_str() {
+    match spec_v1::normalize_token_loose(value)
+        .to_uppercase()
+        .as_str()
+    {
         "NONE" => Some(SerialParity::None),
         "EVEN" => Some(SerialParity::Even),
         "ODD" => Some(SerialParity::Odd),
@@ -397,8 +400,8 @@ pub fn import_union_xlsx_with_options(
         .clone()
         .unwrap_or_else(|| spec_v1::DEFAULT_SHEET_V1.to_string());
 
-    let mut workbook = open_workbook_auto(path)
-        .map_err(|e| ImportUnionXlsxError::OpenWorkbook(e.to_string()))?;
+    let mut workbook =
+        open_workbook_auto(path).map_err(|e| ImportUnionXlsxError::OpenWorkbook(e.to_string()))?;
 
     let detected_sheets = workbook.sheet_names().to_owned();
     if detected_sheets.is_empty() {
@@ -472,7 +475,10 @@ pub fn import_union_xlsx_with_options(
         .map(|c| cell_string(c).unwrap_or_default())
         .collect();
 
-    let headers: Vec<String> = detected_columns.iter().map(|s| s.trim().to_string()).collect();
+    let headers: Vec<String> = detected_columns
+        .iter()
+        .map(|s| s.trim().to_string())
+        .collect();
 
     // 冻结 v1：统一的列名真源（避免散落字符串导致“文档/实现漂移”）。
     let col_hmi = spec_v1::REQUIRED_COLUMNS_V1[0];
@@ -486,87 +492,91 @@ pub fn import_union_xlsx_with_options(
     let col_read_area = spec_v1::OPTIONAL_COLUMNS_V1[3];
 
     // strict=true：必填列逐字匹配（冻结 v1）；strict=false：宽松匹配（兼容历史候选列名）。
-    let (idx_hmi, idx_data_type, idx_byte_order, idx_channel, idx_protocol, idx_device_id) = if strict {
-        let mut map: HashMap<&str, usize> = HashMap::new();
-        for (i, h) in headers.iter().enumerate() {
-            if !h.is_empty() {
-                map.insert(h.as_str(), i);
+    let (idx_hmi, idx_data_type, idx_byte_order, idx_channel, idx_protocol, idx_device_id) =
+        if strict {
+            let mut map: HashMap<&str, usize> = HashMap::new();
+            for (i, h) in headers.iter().enumerate() {
+                if !h.is_empty() {
+                    map.insert(h.as_str(), i);
+                }
             }
-        }
 
-        let mut missing: Vec<String> = Vec::new();
-        for required in spec_v1::REQUIRED_COLUMNS_V1 {
-            if !map.contains_key(required) {
-                missing.push(required.to_string());
+            let mut missing: Vec<String> = Vec::new();
+            for required in spec_v1::REQUIRED_COLUMNS_V1 {
+                if !map.contains_key(required) {
+                    missing.push(required.to_string());
+                }
             }
-        }
 
-        if !missing.is_empty() {
-            return Err(ImportUnionXlsxError::MissingRequiredColumns {
-                missing_columns: missing,
-                detected_columns: headers.clone(),
-                diagnostics: ImportUnionDiagnostics {
-                    detected_sheets,
+            if !missing.is_empty() {
+                return Err(ImportUnionXlsxError::MissingRequiredColumns {
+                    missing_columns: missing,
                     detected_columns: headers.clone(),
-                    used_sheet,
-                    strict,
-                    address_base_used,
-                    rows_scanned: 0,
-                    spec_version: Some(spec_v1::SPEC_VERSION_V1.to_string()),
-                    required_columns: Some(
-                        spec_v1::REQUIRED_COLUMNS_V1
-                            .iter()
-                            .map(|v| v.to_string())
-                            .collect(),
-                    ),
-                    allowed_protocols: Some(
-                        spec_v1::ALLOWED_PROTOCOLS_V1
-                            .iter()
-                            .map(|v| v.to_string())
-                            .collect(),
-                    ),
-                    allowed_datatypes: Some(
-                        spec_v1::ALLOWED_DATATYPES_V1
-                            .iter()
-                            .map(|v| v.to_string())
-                            .collect(),
-                    ),
-                    allowed_byte_orders: Some(
-                        spec_v1::ALLOWED_BYTEORDERS_V1
-                            .iter()
-                            .map(|v| v.to_string())
-                            .collect(),
-                    ),
-                },
-            });
-        }
+                    diagnostics: ImportUnionDiagnostics {
+                        detected_sheets,
+                        detected_columns: headers.clone(),
+                        used_sheet,
+                        strict,
+                        address_base_used,
+                        rows_scanned: 0,
+                        spec_version: Some(spec_v1::SPEC_VERSION_V1.to_string()),
+                        required_columns: Some(
+                            spec_v1::REQUIRED_COLUMNS_V1
+                                .iter()
+                                .map(|v| v.to_string())
+                                .collect(),
+                        ),
+                        allowed_protocols: Some(
+                            spec_v1::ALLOWED_PROTOCOLS_V1
+                                .iter()
+                                .map(|v| v.to_string())
+                                .collect(),
+                        ),
+                        allowed_datatypes: Some(
+                            spec_v1::ALLOWED_DATATYPES_V1
+                                .iter()
+                                .map(|v| v.to_string())
+                                .collect(),
+                        ),
+                        allowed_byte_orders: Some(
+                            spec_v1::ALLOWED_BYTEORDERS_V1
+                                .iter()
+                                .map(|v| v.to_string())
+                                .collect(),
+                        ),
+                    },
+                });
+            }
 
-        (
-            Some(*map.get(col_hmi).unwrap()),
-            Some(*map.get(col_data_type).unwrap()),
-            Some(*map.get(col_byte_order).unwrap()),
-            Some(*map.get(col_channel).unwrap()),
-            Some(*map.get(col_protocol).unwrap()),
-            Some(*map.get(col_device_id).unwrap()),
-        )
-    } else {
-        (
-            header_index(&headers, &["变量名称（HMI）", "hminame", "变量名", "hmi"]),
-            header_index(&headers, &["数据类型", "datatype"]),
-            header_index(&headers, &["字节序", "byteorder"]),
-            header_index(
-                &headers,
-                &[
-                    "通道名称",
-                    "起始TCP通道名称",
-                    "起始485通道名称",
-                    "channelname",
-                ],
-            ),
-            header_index(&headers, &["协议类型", "protocoltype"]),
-            header_index(&headers, &["设备标识", "站号", "deviceid", "unitid", "slaveid"]),
-        )
-    };
+            (
+                Some(*map.get(col_hmi).unwrap()),
+                Some(*map.get(col_data_type).unwrap()),
+                Some(*map.get(col_byte_order).unwrap()),
+                Some(*map.get(col_channel).unwrap()),
+                Some(*map.get(col_protocol).unwrap()),
+                Some(*map.get(col_device_id).unwrap()),
+            )
+        } else {
+            (
+                header_index(&headers, &["变量名称（HMI）", "hminame", "变量名", "hmi"]),
+                header_index(&headers, &["数据类型", "datatype"]),
+                header_index(&headers, &["字节序", "byteorder"]),
+                header_index(
+                    &headers,
+                    &[
+                        "通道名称",
+                        "起始TCP通道名称",
+                        "起始485通道名称",
+                        "channelname",
+                    ],
+                ),
+                header_index(&headers, &["协议类型", "protocoltype"]),
+                header_index(
+                    &headers,
+                    &["设备标识", "站号", "deviceid", "unitid", "slaveid"],
+                ),
+            )
+        };
 
     let idx_scale = header_index(&headers, &["缩放倍数", "scale"]);
     let idx_read_area = header_index(&headers, &["读取区域", "readarea"]);
@@ -581,7 +591,8 @@ pub fn import_union_xlsx_with_options(
     let idx_tcp_port = header_index(&headers, &["TCP:端口"]);
     let idx_rtu_port = header_index(&headers, &["485:串口"]);
     let idx_rtu_baud = header_index(&headers, &["485:波特率"]);
-    let idx_ip_or_serial = header_index(&headers, &["TCP:IP / 485:串口", "ip", "串口", "serialport"]);
+    let idx_ip_or_serial =
+        header_index(&headers, &["TCP:IP / 485:串口", "ip", "串口", "serialport"]);
     let idx_port_or_baud = header_index(&headers, &["TCP:端口 / 485:波特率", "port", "baudrate"]);
 
     let idx_parity = header_index(&headers, &["485:校验", "parity"]);
@@ -725,7 +736,9 @@ pub fn import_union_xlsx_with_options(
                         return Some(ProtocolKind::Tcp);
                     }
 
-                    if serial_guess.to_uppercase().starts_with("COM") || serial_guess.starts_with("/dev/") {
+                    if serial_guess.to_uppercase().starts_with("COM")
+                        || serial_guess.starts_with("/dev/")
+                    {
                         return Some(ProtocolKind::Rtu485);
                     }
 
@@ -747,9 +760,7 @@ pub fn import_union_xlsx_with_options(
             Some(v) => v,
             None => {
                 if strict {
-                    let raw = device_cell
-                        .and_then(cell_string)
-                        .unwrap_or_default();
+                    let raw = device_cell.and_then(cell_string).unwrap_or_default();
                     return Err(ImportUnionXlsxError::InvalidRequiredValue {
                         row_index: row_index as u32,
                         column_name: col_device_id.to_string(),
@@ -926,20 +937,21 @@ pub fn import_union_xlsx_with_options(
                             });
                             None
                         }
-                        Some(v) => match address_base_used {
-                            AddressBase::Zero => Some(v),
-                            AddressBase::One => {
-                                if v == 0 {
-                                    if strict {
-                                        return Err(ImportUnionXlsxError::InvalidRequiredValue {
+                        Some(v) => {
+                            match address_base_used {
+                                AddressBase::Zero => Some(v),
+                                AddressBase::One => {
+                                    if v == 0 {
+                                        if strict {
+                                            return Err(ImportUnionXlsxError::InvalidRequiredValue {
                                             row_index: row_index as u32,
                                             column_name: col_point_start.to_string(),
                                             raw_value: raw.clone(),
                                             allowed_values: vec![spec_v1::ALLOWED_START_ADDRESS_ONE_BASED_MIN.to_string()],
                                             diagnostics: make_diagnostics(rows_scanned),
                                         });
-                                    }
-                                    warnings.push(CommWarning {
+                                        }
+                                        warnings.push(CommWarning {
                                         code: "ROW_START_ADDRESS_ONE_BASED_ZERO".to_string(),
                                         message: format!(
                                             "row {row_index}: startAddress=0 under one-based; treated as 0"
@@ -947,12 +959,13 @@ pub fn import_union_xlsx_with_options(
                                         point_key: None,
                                         hmi_name: Some(hmi_name.clone()),
                                     });
-                                    Some(0)
-                                } else {
-                                    Some(v - 1)
+                                        Some(0)
+                                    } else {
+                                        Some(v - 1)
+                                    }
                                 }
                             }
-                        },
+                        }
                     }
                 }
             }
@@ -965,7 +978,9 @@ pub fn import_union_xlsx_with_options(
                 Some(raw) => {
                     if raw.trim().is_empty() {
                         0
-                    } else if let Some(v) = cell_u16(cell).or_else(|| raw.trim().parse::<u16>().ok()) {
+                    } else if let Some(v) =
+                        cell_u16(cell).or_else(|| raw.trim().parse::<u16>().ok())
+                    {
                         v
                     } else if strict {
                         return Err(ImportUnionXlsxError::InvalidRequiredValue {
@@ -987,9 +1002,18 @@ pub fn import_union_xlsx_with_options(
                 }
             },
         };
-        let timeout_ms = idx_timeout.and_then(|i| row.get(i)).and_then(cell_u32).unwrap_or(1000);
-        let retry_count = idx_retry.and_then(|i| row.get(i)).and_then(cell_u32).unwrap_or(0);
-        let poll_interval_ms = idx_poll.and_then(|i| row.get(i)).and_then(cell_u32).unwrap_or(1000);
+        let timeout_ms = idx_timeout
+            .and_then(|i| row.get(i))
+            .and_then(cell_u32)
+            .unwrap_or(1000);
+        let retry_count = idx_retry
+            .and_then(|i| row.get(i))
+            .and_then(cell_u32)
+            .unwrap_or(0);
+        let poll_interval_ms = idx_poll
+            .and_then(|i| row.get(i))
+            .and_then(cell_u32)
+            .unwrap_or(1000);
 
         let legacy_ip_or_serial = idx_ip_or_serial
             .and_then(|i| row.get(i))
@@ -1070,8 +1094,14 @@ pub fn import_union_xlsx_with_options(
             .and_then(cell_string)
             .and_then(|s| parse_parity(&s))
             .unwrap_or(SerialParity::None);
-        let rtu_data_bits = idx_data_bits.and_then(|i| row.get(i)).and_then(cell_u8).unwrap_or(8);
-        let rtu_stop_bits = idx_stop_bits.and_then(|i| row.get(i)).and_then(cell_u8).unwrap_or(1);
+        let rtu_data_bits = idx_data_bits
+            .and_then(|i| row.get(i))
+            .and_then(cell_u8)
+            .unwrap_or(8);
+        let rtu_stop_bits = idx_stop_bits
+            .and_then(|i| row.get(i))
+            .and_then(cell_u8)
+            .unwrap_or(1);
 
         let record = RowRecord {
             row_index,
@@ -1129,7 +1159,9 @@ pub fn import_union_xlsx_with_options(
         let final_channel_name = if base_channel.trim().is_empty() {
             warnings.push(CommWarning {
                 code: "PROFILE_CHANNEL_NAME_DEFAULTED".to_string(),
-                message: format!("row {row_index}: channelName missing; defaulted to UNNAMED_{device_id}"),
+                message: format!(
+                    "row {row_index}: channelName missing; defaulted to UNNAMED_{device_id}"
+                ),
                 point_key: None,
                 hmi_name: Some(hmi_name.clone()),
             });
@@ -1338,7 +1370,11 @@ pub fn import_union_xlsx_with_options(
     let mut seen_keys: HashSet<Uuid> = HashSet::new();
 
     for record in &records {
-        let point_key = stable_point_key(&record.hmi_name, &record.base_channel_name, record.device_id);
+        let point_key = stable_point_key(
+            &record.hmi_name,
+            &record.base_channel_name,
+            record.device_id,
+        );
         if !seen_keys.insert(point_key) {
             warnings.push(CommWarning {
                 code: "DUPLICATE_POINT_KEY_SKIP".to_string(),
@@ -1419,12 +1455,7 @@ mod tests {
     #[test]
     fn strict_missing_sheet_fails_with_available_sheet_list() {
         let path = temp_xlsx_path("missing_sheet");
-        write_xlsx(
-            &path,
-            "OtherSheet",
-            &spec_v1::REQUIRED_COLUMNS_V1,
-            &[],
-        );
+        write_xlsx(&path, "OtherSheet", &spec_v1::REQUIRED_COLUMNS_V1, &[]);
 
         let err = import_union_xlsx_with_options(
             &path,
@@ -1449,7 +1480,10 @@ mod tests {
         assert!(detected_sheets.iter().any(|s| s == "OtherSheet"));
 
         let import_error = err.to_import_error();
-        assert_eq!(import_error.kind, ImportUnionErrorKind::UnionXlsxInvalidSheet);
+        assert_eq!(
+            import_error.kind,
+            ImportUnionErrorKind::UnionXlsxInvalidSheet
+        );
         assert!(import_error.message.contains("sheet not found"));
         assert!(import_error
             .details
@@ -1492,7 +1526,10 @@ mod tests {
 
         assert!(missing_columns.iter().any(|c| c == "字节序"));
         let import_error = err.to_import_error();
-        assert_eq!(import_error.kind, ImportUnionErrorKind::UnionXlsxMissingColumns);
+        assert_eq!(
+            import_error.kind,
+            ImportUnionErrorKind::UnionXlsxMissingColumns
+        );
         assert!(import_error
             .details
             .as_ref()
@@ -1532,7 +1569,10 @@ mod tests {
         assert_eq!(*row_index, 2);
         assert_eq!(column_name.as_str(), "数据类型");
         let import_error = err.to_import_error();
-        assert_eq!(import_error.kind, ImportUnionErrorKind::UnionXlsxInvalidEnum);
+        assert_eq!(
+            import_error.kind,
+            ImportUnionErrorKind::UnionXlsxInvalidEnum
+        );
         assert_eq!(
             import_error.details.as_ref().and_then(|d| d.row_index),
             Some(2)
@@ -1558,12 +1598,10 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            outcome
-                .warnings
-                .iter()
-                .any(|w| w.code == "ROW_DATATYPE_UNKNOWN_SKIP")
-        );
+        assert!(outcome
+            .warnings
+            .iter()
+            .any(|w| w.code == "ROW_DATATYPE_UNKNOWN_SKIP"));
 
         let _ = std::fs::remove_file(&path);
     }

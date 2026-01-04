@@ -12,10 +12,14 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-use super::codec::{decode_from_bits, decode_from_registers, DecodeError, DecodedValue};
-use super::driver::{CommDriver, DriverError, RawReadData};
-use super::model::{CommPoint, CommWarning, ConnectionProfile, Quality, RunStats, SampleResult};
-use super::plan::{PlannedPointRead, ReadPlan, ReadJob};
+use crate::comm::adapters::driver::{CommDriver, DriverError, RawReadData};
+use crate::comm::core::codec::{
+    decode_from_bits, decode_from_registers, DecodeError, DecodedValue,
+};
+use crate::comm::core::model::{
+    CommPoint, CommWarning, ConnectionProfile, Quality, RunStats, SampleResult,
+};
+use crate::comm::core::plan::{PlannedPointRead, ReadJob, ReadPlan};
 
 pub async fn execute_plan_once(
     driver: &dyn CommDriver,
@@ -51,7 +55,14 @@ pub async fn execute_plan_once(
                     DriverError::Timeout => (Quality::Timeout, "timeout".to_string()),
                     DriverError::Comm { message } => (Quality::CommError, message),
                 };
-                mark_job_failure(&mut results_by_key, job, now, quality, &message, duration_ms);
+                mark_job_failure(
+                    &mut results_by_key,
+                    job,
+                    now,
+                    quality,
+                    &message,
+                    duration_ms,
+                );
             }
         }
     }
@@ -59,14 +70,16 @@ pub async fn execute_plan_once(
     // 输出顺序稳定：按 points 列表顺序输出；缺失则补 ConfigError。
     let mut ordered_results: Vec<SampleResult> = Vec::with_capacity(points.len());
     for point in points {
-        let result = results_by_key.remove(&point.point_key).unwrap_or_else(|| SampleResult {
-            point_key: point.point_key,
-            value_display: "".to_string(),
-            quality: Quality::ConfigError,
-            timestamp: now,
-            duration_ms: 0,
-            error_message: "missing result".to_string(),
-        });
+        let result = results_by_key
+            .remove(&point.point_key)
+            .unwrap_or_else(|| SampleResult {
+                point_key: point.point_key,
+                value_display: "".to_string(),
+                quality: Quality::ConfigError,
+                timestamp: now,
+                duration_ms: 0,
+                error_message: "missing result".to_string(),
+            });
         ordered_results.push(result);
     }
 
@@ -152,7 +165,11 @@ fn decode_job_data(
         RawReadData::Registers(registers) => {
             for point in &job.points {
                 let reg_slice = registers.get(point.offset as usize..).unwrap_or(&[]);
-                let decoded = decode_from_registers(point.data_type.clone(), point.byte_order.clone(), reg_slice);
+                let decoded = decode_from_registers(
+                    point.data_type.clone(),
+                    point.byte_order.clone(),
+                    reg_slice,
+                );
                 insert_decoded_result(results_by_key, point, decoded, timestamp, duration_ms);
             }
         }
@@ -167,7 +184,11 @@ fn insert_decoded_result(
     duration_ms: u32,
 ) {
     let (quality, value_display, error_message) = match decoded {
-        Ok(value) => (Quality::Ok, value.to_value_display(point.scale), "".to_string()),
+        Ok(value) => (
+            Quality::Ok,
+            value.to_value_display(point.scale),
+            "".to_string(),
+        ),
         Err(err) => (Quality::DecodeError, "".to_string(), err.to_string()),
     };
 
@@ -251,25 +272,25 @@ struct RunHandle {
 /// - start 必须 spawn 后台任务，不阻塞调用方
 /// - stop 需在 1 秒内生效（MVP 目标）
 /// - latest 只读缓存，不触发采集
-  pub struct CommRunEngine {
-      runs: Mutex<HashMap<Uuid, RunHandle>>,
-  }
+pub struct CommRunEngine {
+    runs: Mutex<HashMap<Uuid, RunHandle>>,
+}
 
-  impl CommRunEngine {
+impl CommRunEngine {
     pub fn new() -> Self {
         Self {
             runs: Mutex::new(HashMap::new()),
         }
     }
 
-      pub fn start_run(
+    pub fn start_run(
         &self,
         driver: Arc<dyn CommDriver>,
         profiles: Vec<ConnectionProfile>,
         points: Vec<CommPoint>,
         plan: ReadPlan,
         poll_interval_ms: u32,
-      ) -> Uuid {
+    ) -> Uuid {
         let run_id = Uuid::new_v4();
         let (stop_tx, mut stop_rx) = watch::channel(false);
 
@@ -286,12 +307,12 @@ struct RunHandle {
             })
             .collect();
         let initial_stats = calc_stats(&initial_results);
-          let latest = Arc::new(Mutex::new(LatestSnapshot {
-              results: initial_results,
-              stats: initial_stats,
-              updated_at_utc: now,
-              run_warnings: Vec::new(),
-          }));
+        let latest = Arc::new(Mutex::new(LatestSnapshot {
+            results: initial_results,
+            stats: initial_stats,
+            updated_at_utc: now,
+            run_warnings: Vec::new(),
+        }));
 
         let latest_for_task = Arc::clone(&latest);
         let interval = Duration::from_millis(poll_interval_ms as u64);
@@ -303,20 +324,20 @@ struct RunHandle {
                 }
 
                 tokio::select! {
-                    _ = stop_rx.changed() => {
-                        continue;
-                    }
-                      output = execute_plan_once(driver.as_ref(), &profiles, &points, &plan) => {
-                          let (results, stats) = output;
-                          let updated_at_utc = results.first().map(|r| r.timestamp).unwrap_or_else(Utc::now);
-                          let run_warnings = build_run_warnings(&results, &stats);
-                          let mut guard = latest_for_task.lock();
-                          guard.results = results;
-                          guard.stats = stats;
-                          guard.updated_at_utc = updated_at_utc;
-                          guard.run_warnings = run_warnings;
-                      }
+                  _ = stop_rx.changed() => {
+                      continue;
                   }
+                    output = execute_plan_once(driver.as_ref(), &profiles, &points, &plan) => {
+                        let (results, stats) = output;
+                        let updated_at_utc = results.first().map(|r| r.timestamp).unwrap_or_else(Utc::now);
+                        let run_warnings = build_run_warnings(&results, &stats);
+                        let mut guard = latest_for_task.lock();
+                        guard.results = results;
+                        guard.stats = stats;
+                        guard.updated_at_utc = updated_at_utc;
+                        guard.run_warnings = run_warnings;
+                    }
+                }
 
                 tokio::select! {
                     _ = stop_rx.changed() => {
@@ -339,25 +360,25 @@ struct RunHandle {
         );
 
         run_id
-      }
+    }
 
-      pub fn latest(
-          &self,
-          run_id: Uuid,
-      ) -> Option<(Vec<SampleResult>, RunStats, DateTime<Utc>, Vec<CommWarning>)> {
-          let latest = {
-              let guard = self.runs.lock();
-              guard.get(&run_id).map(|h| Arc::clone(&h.latest))
-          }?;
+    pub fn latest(
+        &self,
+        run_id: Uuid,
+    ) -> Option<(Vec<SampleResult>, RunStats, DateTime<Utc>, Vec<CommWarning>)> {
+        let latest = {
+            let guard = self.runs.lock();
+            guard.get(&run_id).map(|h| Arc::clone(&h.latest))
+        }?;
 
-          let snapshot = latest.lock().clone();
-          Some((
-              snapshot.results,
-              snapshot.stats,
-              snapshot.updated_at_utc,
-              snapshot.run_warnings,
-          ))
-      }
+        let snapshot = latest.lock().clone();
+        Some((
+            snapshot.results,
+            snapshot.stats,
+            snapshot.updated_at_utc,
+            snapshot.run_warnings,
+        ))
+    }
 
     pub async fn stop_run(&self, run_id: Uuid) -> bool {
         let handle = self.runs.lock().remove(&run_id);
@@ -374,7 +395,7 @@ struct RunHandle {
 }
 
 #[cfg(test)]
-  mod tests {
+mod tests {
     use super::*;
 
     use crate::comm::driver::mock::MockDriver;
@@ -454,19 +475,20 @@ struct RunHandle {
         let run_id = engine.start_run(driver, profiles, points.clone(), plan, 50);
 
         // 等待至少一次采集写入缓存（最多 1s）。
-          let mut latest: Option<(Vec<SampleResult>, RunStats, DateTime<Utc>)> = None;
-          for _ in 0..20 {
-              if let Some((results, stats, updated_at_utc, _run_warnings)) = engine.latest(run_id) {
-                  if results.len() == points.len() && stats.total == points.len() as u32 {
-                      latest = Some((results, stats, updated_at_utc));
-                      break;
-                  }
-              }
+        let mut latest: Option<(Vec<SampleResult>, RunStats, DateTime<Utc>)> = None;
+        for _ in 0..20 {
+            if let Some((results, stats, updated_at_utc, _run_warnings)) = engine.latest(run_id) {
+                if results.len() == points.len() && stats.total == points.len() as u32 {
+                    latest = Some((results, stats, updated_at_utc));
+                    break;
+                }
+            }
 
-              tokio::time::sleep(Duration::from_millis(50)).await;
-          }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
 
-          let (results, stats, _updated_at_utc) = latest.expect("run should produce at least one tick");
+        let (results, stats, _updated_at_utc) =
+            latest.expect("run should produce at least one tick");
         assert_eq!(stats.total, 3);
         assert_eq!(results.len(), 3);
         assert_eq!(results[0].point_key, points[0].point_key);
@@ -555,7 +577,8 @@ struct RunHandle {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
 
-        let (results, stats, updated_at_utc) = snapshot.expect("run should produce at least one tick");
+        let (results, stats, updated_at_utc) =
+            snapshot.expect("run should produce at least one tick");
 
         // 用于 TASK-12 文档验收的可读日志（默认被 cargo test 捕获；可用 -- --nocapture 查看）。
         println!("runId={run_id} updatedAtUtc={updated_at_utc} stats={stats:?}");

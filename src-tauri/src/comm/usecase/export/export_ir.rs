@@ -11,8 +11,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 
-use super::model::{ConnectionProfile, DataType, PointsV1, ProfilesV1, Quality, RegisterArea, RunStats, SampleResult, SCHEMA_VERSION_V1};
-use super::plan::{build_read_plan, PlanOptions, ReadPlan};
+use crate::comm::core::model::{
+    ByteOrder32, ConnectionProfile, DataType, PointsV1, ProfilesV1, Quality, RegisterArea,
+    RunStats, SampleResult, SCHEMA_VERSION_V1,
+};
+use crate::comm::core::plan::{build_read_plan, PlanOptions, PlannedPointRead, ReadJob, ReadPlan};
 
 pub const COMM_IR_SPEC_VERSION_V1: &str = "v1";
 
@@ -64,7 +67,7 @@ pub struct CommIrV1Point {
     pub channel_name: String,
     pub data_type: DataType,
     /// 32-bit 的字节序（对 Bool/16-bit 可忽略，但字段仍保留以便统一消费）。
-    pub endian: super::model::ByteOrder32,
+    pub endian: ByteOrder32,
     pub scale: f64,
     /// R/W 语义（MVP 目前仅采集读取）。
     pub rw: String,
@@ -162,7 +165,9 @@ fn write_text_atomic(path: &Path, text: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn plan_lookup(plan: &ReadPlan) -> std::collections::HashMap<uuid::Uuid, (super::plan::ReadJob, super::plan::PlannedPointRead)> {
+fn plan_lookup(
+    plan: &ReadPlan,
+) -> std::collections::HashMap<uuid::Uuid, (ReadJob, PlannedPointRead)> {
     let mut out = std::collections::HashMap::new();
     for job in &plan.jobs {
         for p in &job.points {
@@ -203,13 +208,21 @@ fn profile_total_length(profile: &ConnectionProfile) -> u16 {
 fn unit_length_for_point(profile_area: RegisterArea, data_type: &DataType) -> Option<u16> {
     match (profile_area, data_type) {
         (RegisterArea::Coil | RegisterArea::Discrete, DataType::Bool) => Some(1),
-        (RegisterArea::Holding | RegisterArea::Input, DataType::Int16 | DataType::UInt16) => Some(1),
-        (RegisterArea::Holding | RegisterArea::Input, DataType::Int32 | DataType::UInt32 | DataType::Float32) => Some(2),
+        (RegisterArea::Holding | RegisterArea::Input, DataType::Int16 | DataType::UInt16) => {
+            Some(1)
+        }
+        (
+            RegisterArea::Holding | RegisterArea::Input,
+            DataType::Int32 | DataType::UInt32 | DataType::Float32,
+        ) => Some(2),
         _ => None,
     }
 }
 
-fn build_decisions_summary(decisions: Option<&JsonValue>, conflict_report: Option<&JsonValue>) -> CommIrDecisionsSummary {
+fn build_decisions_summary(
+    decisions: Option<&JsonValue>,
+    conflict_report: Option<&JsonValue>,
+) -> CommIrDecisionsSummary {
     let mut out = CommIrDecisionsSummary::default();
     if let Some(JsonValue::Array(items)) = decisions {
         for item in items {
@@ -270,10 +283,16 @@ pub fn export_comm_ir_v1(
     conflict_report: Option<&JsonValue>,
 ) -> Result<CommIrExportOutcome, String> {
     if points.schema_version != SCHEMA_VERSION_V1 {
-        return Err(format!("unsupported schemaVersion: {}", points.schema_version));
+        return Err(format!(
+            "unsupported schemaVersion: {}",
+            points.schema_version
+        ));
     }
     if profiles.schema_version != SCHEMA_VERSION_V1 {
-        return Err(format!("unsupported schemaVersion: {}", profiles.schema_version));
+        return Err(format!(
+            "unsupported schemaVersion: {}",
+            profiles.schema_version
+        ));
     }
 
     let now = Utc::now();
@@ -281,7 +300,8 @@ pub fn export_comm_ir_v1(
     let plan = build_read_plan(&profiles.profiles, &points.points, PlanOptions::default()).ok();
     let plan_index = plan.as_ref().map(plan_lookup);
 
-    let mut profile_index: std::collections::HashMap<&str, &ConnectionProfile> = std::collections::HashMap::new();
+    let mut profile_index: std::collections::HashMap<&str, &ConnectionProfile> =
+        std::collections::HashMap::new();
     for p in &profiles.profiles {
         profile_index.insert(profile_channel_name(p), p);
     }
@@ -389,7 +409,11 @@ pub fn export_comm_ir_v1(
     let json_text = serde_json::to_string_pretty(&ir).map_err(|e| e.to_string())?;
     let digest = sha256_digest_prefixed(&json_text);
 
-    let ts = format!("{}-{}", now.format("%Y%m%dT%H%M%SZ"), now.timestamp_millis());
+    let ts = format!(
+        "{}-{}",
+        now.format("%Y%m%dT%H%M%SZ"),
+        now.timestamp_millis()
+    );
     let file_name = format!("comm_ir.v1.{ts}.json");
     let ir_path = out_dir.join(file_name);
     write_text_atomic(&ir_path, &json_text)?;

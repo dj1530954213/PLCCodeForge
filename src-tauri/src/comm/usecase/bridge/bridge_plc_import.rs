@@ -11,12 +11,17 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::error::{
+use crate::comm::core::model::{
+    ByteOrder32, DataType, Quality, RegisterArea, RunStats, SCHEMA_VERSION_V1,
+};
+use crate::comm::error::{
     BridgeCheckError, BridgeCheckErrorDetails, BridgeCheckErrorKind, PlcBridgeError,
     PlcBridgeErrorDetails, PlcBridgeErrorKind,
 };
-use super::export_ir::{CommIrV1, CommIrV1Point, CommIrV1Result, CommIrResultsSource, COMM_IR_SPEC_VERSION_V1};
-use super::model::{ByteOrder32, DataType, Quality, RegisterArea, RunStats, SCHEMA_VERSION_V1};
+use crate::comm::usecase::export::export_ir::{
+    CommIrResultsSource, CommIrV1, CommIrV1AddressSpec, CommIrV1Point, CommIrV1Result,
+    COMM_IR_SPEC_VERSION_V1,
+};
 
 pub const PLC_IMPORT_BRIDGE_SPEC_VERSION_V1: &str = "v1";
 
@@ -24,7 +29,7 @@ pub const PLC_IMPORT_BRIDGE_SPEC_VERSION_V1: &str = "v1";
 #[serde(rename_all = "camelCase")]
 pub struct PlcImportBridgeV1PointComm {
     pub channel_name: String,
-    pub address_spec: super::export_ir::CommIrV1AddressSpec,
+    pub address_spec: CommIrV1AddressSpec,
     pub data_type: DataType,
     pub endian: ByteOrder32,
     pub scale: f64,
@@ -303,7 +308,9 @@ fn validate_ir_points(ir_path: &Path, ir: &CommIrV1) -> Result<(), PlcBridgeErro
     Ok(())
 }
 
-fn build_verification_index(ir: &CommIrV1) -> Result<HashMap<uuid::Uuid, CommIrV1Result>, PlcBridgeError> {
+fn build_verification_index(
+    ir: &CommIrV1,
+) -> Result<HashMap<uuid::Uuid, CommIrV1Result>, PlcBridgeError> {
     let mut out = HashMap::new();
     for r in &ir.verification.results {
         if out.insert(r.point_key, r.clone()).is_some() {
@@ -321,7 +328,11 @@ fn build_verification_index(ir: &CommIrV1) -> Result<HashMap<uuid::Uuid, CommIrV
     Ok(out)
 }
 
-fn map_point(ir_point: &CommIrV1Point, result: Option<&CommIrV1Result>, fallback_ts: DateTime<Utc>) -> PlcImportBridgeV1Point {
+fn map_point(
+    ir_point: &CommIrV1Point,
+    result: Option<&CommIrV1Result>,
+    fallback_ts: DateTime<Utc>,
+) -> PlcImportBridgeV1Point {
     let verification = if let Some(r) = result {
         PlcImportBridgeV1PointVerification {
             quality: r.quality.clone(),
@@ -352,7 +363,10 @@ fn map_point(ir_point: &CommIrV1Point, result: Option<&CommIrV1Result>, fallback
     }
 }
 
-pub fn export_plc_import_bridge_v1(ir_path: &Path, out_path: &Path) -> Result<PlcImportBridgeExportOutcome, PlcBridgeError> {
+pub fn export_plc_import_bridge_v1(
+    ir_path: &Path,
+    out_path: &Path,
+) -> Result<PlcImportBridgeExportOutcome, PlcBridgeError> {
     let ir_text = std::fs::read_to_string(ir_path).map_err(|e| PlcBridgeError {
         kind: PlcBridgeErrorKind::CommIrReadError,
         message: e.to_string(),
@@ -451,7 +465,10 @@ pub fn consume_bridge_and_write_summary(
     if bridge.schema_version != SCHEMA_VERSION_V1 {
         return Err(BridgeCheckError {
             kind: BridgeCheckErrorKind::PlcBridgeUnsupportedSchemaVersion,
-            message: format!("unsupported PlcImportBridge schemaVersion: {}", bridge.schema_version),
+            message: format!(
+                "unsupported PlcImportBridge schemaVersion: {}",
+                bridge.schema_version
+            ),
             details: Some(BridgeCheckErrorDetails {
                 bridge_path: Some(bridge_path.to_string_lossy().to_string()),
                 schema_version: Some(bridge.schema_version),
@@ -463,7 +480,10 @@ pub fn consume_bridge_and_write_summary(
     if bridge.spec_version != PLC_IMPORT_BRIDGE_SPEC_VERSION_V1 {
         return Err(BridgeCheckError {
             kind: BridgeCheckErrorKind::PlcBridgeUnsupportedSpecVersion,
-            message: format!("unsupported PlcImportBridge specVersion: {}", bridge.spec_version),
+            message: format!(
+                "unsupported PlcImportBridge specVersion: {}",
+                bridge.spec_version
+            ),
             details: Some(BridgeCheckErrorDetails {
                 bridge_path: Some(bridge_path.to_string_lossy().to_string()),
                 schema_version: Some(bridge.schema_version),
@@ -488,7 +508,9 @@ pub fn consume_bridge_and_write_summary(
             });
         }
         *by_channel.entry(p.comm.channel_name.clone()).or_insert(0) += 1;
-        *by_quality.entry(format!("{:?}", p.verification.quality)).or_insert(0) += 1;
+        *by_quality
+            .entry(format!("{:?}", p.verification.quality))
+            .or_insert(0) += 1;
     }
 
     let mut first10: Vec<BridgeConsumerSummaryPoint> = Vec::new();
@@ -547,7 +569,9 @@ pub fn consume_bridge_and_write_summary(
 mod tests {
     use super::*;
     use crate::comm::export_ir;
-    use crate::comm::model::{ByteOrder32, CommPoint, ConnectionProfile, PointsV1, ProfilesV1, RegisterArea, SampleResult};
+    use crate::comm::model::{
+        ByteOrder32, CommPoint, ConnectionProfile, PointsV1, ProfilesV1, RegisterArea, SampleResult,
+    };
 
     fn make_valid_ir(tmp_dir: &Path) -> PathBuf {
         let profiles = ProfilesV1 {
@@ -604,7 +628,8 @@ mod tests {
 
     #[test]
     fn bridge_export_writes_file_and_contains_points_and_stats() {
-        let base = std::env::temp_dir().join(format!("plc-codeforge-bridge-{}", uuid::Uuid::new_v4()));
+        let base =
+            std::env::temp_dir().join(format!("plc-codeforge-bridge-{}", uuid::Uuid::new_v4()));
         let ir_path = make_valid_ir(&base);
         let out_path = base.join("bridge").join("plc_import_bridge.v1.test.json");
         let outcome = export_plc_import_bridge_v1(&ir_path, &out_path).unwrap();
@@ -617,13 +642,17 @@ mod tests {
         let json: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert_eq!(json.get("schemaVersion").and_then(|v| v.as_u64()), Some(1));
         assert_eq!(json.get("specVersion").and_then(|v| v.as_str()), Some("v1"));
-        assert_eq!(json.pointer("/points/0/name").and_then(|v| v.as_str()), Some("P1"));
+        assert_eq!(
+            json.pointer("/points/0/name").and_then(|v| v.as_str()),
+            Some("P1")
+        );
         assert!(json.pointer("/statistics/ok").is_some());
     }
 
     #[test]
     fn bridge_export_fails_on_duplicate_point_key() {
-        let base = std::env::temp_dir().join(format!("plc-codeforge-bridge-dup-{}", uuid::Uuid::new_v4()));
+        let base =
+            std::env::temp_dir().join(format!("plc-codeforge-bridge-dup-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&base).unwrap();
 
         let dup = uuid::Uuid::from_u128(42);
@@ -715,7 +744,10 @@ mod tests {
 
     #[test]
     fn consume_bridge_writes_summary_json() {
-        let base = std::env::temp_dir().join(format!("plc-codeforge-bridge-consume-{}", uuid::Uuid::new_v4()));
+        let base = std::env::temp_dir().join(format!(
+            "plc-codeforge-bridge-consume-{}",
+            uuid::Uuid::new_v4()
+        ));
         let ir_path = make_valid_ir(&base);
         let bridge_path = base.join("bridge").join("plc_import_bridge.v1.test.json");
         export_plc_import_bridge_v1(&ir_path, &bridge_path).unwrap();
@@ -734,10 +766,19 @@ mod tests {
 
     #[test]
     fn bridge_export_matches_golden_fixture_ignoring_generated_at_and_source_path() {
-        let ir_text = include_str!("fixtures/comm_ir.sample.v1.json");
-        let expected_text = include_str!("fixtures/plc_import_bridge.expected.v1.json");
+        let ir_text = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/comm/testdata/comm_ir.sample.v1.json"
+        ));
+        let expected_text = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/comm/testdata/plc_import_bridge.expected.v1.json"
+        ));
 
-        let base = std::env::temp_dir().join(format!("plc-codeforge-bridge-golden-{}", uuid::Uuid::new_v4()));
+        let base = std::env::temp_dir().join(format!(
+            "plc-codeforge-bridge-golden-{}",
+            uuid::Uuid::new_v4()
+        ));
         std::fs::create_dir_all(&base).unwrap();
         let ir_path = base.join("comm_ir.sample.v1.json");
         std::fs::write(&ir_path, ir_text).unwrap();
@@ -745,7 +786,8 @@ mod tests {
 
         let _ = export_plc_import_bridge_v1(&ir_path, &out_path).unwrap();
 
-        let actual_json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&out_path).unwrap()).unwrap();
+        let actual_json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&out_path).unwrap()).unwrap();
         let mut expected_json: serde_json::Value = serde_json::from_str(expected_text).unwrap();
 
         fn normalize(mut v: serde_json::Value) -> serde_json::Value {
@@ -758,7 +800,10 @@ mod tests {
 
         let actual_norm = normalize(actual_json);
         if let Some(obj) = expected_json.as_object_mut() {
-            obj.insert("sourceIrPath".to_string(), serde_json::Value::String(ir_path.to_string_lossy().to_string()));
+            obj.insert(
+                "sourceIrPath".to_string(),
+                serde_json::Value::String(ir_path.to_string_lossy().to_string()),
+            );
         }
         let expected_norm = normalize(expected_json);
 

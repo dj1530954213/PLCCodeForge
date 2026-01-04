@@ -1,3 +1,5 @@
+
+using System.Linq;
 using System.Text.Json;
 using Autothink.UiaAgent.Rpc.Contracts;
 using StreamJsonRpc;
@@ -6,53 +8,84 @@ namespace Autothink.UiaAgent.WinFormsHarness;
 
 internal sealed class MainForm : Form
 {
-    private static readonly Font UiFont = new("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point);
-    private const int WideTextWidth = 980;
-    private const int MediumTextWidth = 520;
-    private const int ButtonWidth = 160;
-    private const int ButtonHeight = 44;
+    private sealed class ComboItem
+    {
+        public ComboItem(string display, string value)
+        {
+            this.Display = display;
+            this.Value = value;
+        }
+
+        public string Display { get; }
+
+        public string Value { get; }
+
+        public override string ToString() => this.Display;
+    }
+
+    private static readonly Font UiFont = new("Microsoft YaHei UI", 11F, FontStyle.Regular, GraphicsUnit.Point);
+    private static readonly Font MonoFont = new("Consolas", 10F, FontStyle.Regular, GraphicsUnit.Point);
+    private const int ButtonWidth = 180;
+    private const int ButtonHeight = 48;
+    private const int MinWideTextWidth = 720;
+    private const int MinMediumTextWidth = 420;
 
     private readonly AgentRpcClient client = new();
+    private readonly TextBox agentExePathTextBox = new() { Width = MinWideTextWidth };
+    private readonly Button browseAgentButton = new() { Text = "浏览..." };
+    private readonly Button startAgentButton = new() { Text = "启动Agent" };
+    private readonly Button stopAgentButton = new() { Text = "停止Agent", Enabled = false };
+    private readonly Button pingButton = new() { Text = "连通测试", Enabled = false };
 
-    private readonly TextBox agentExePathTextBox = new() { Width = WideTextWidth };
-    private readonly Button browseAgentButton = new() { Text = "Browse..." };
-    private readonly Button startAgentButton = new() { Text = "Start Agent" };
-    private readonly Button stopAgentButton = new() { Text = "Stop Agent", Enabled = false };
-    private readonly Button pingButton = new() { Text = "Ping", Enabled = false };
-
-    private readonly TextBox processNameTextBox = new() { Text = "Autothink", Width = 240 };
+    private readonly TextBox processNameTextBox = new() { Text = "Autothink", Width = 220 };
     private readonly TextBox mainTitleContainsTextBox = new() { Text = "AUTOTHINK", Width = 320 };
     private readonly NumericUpDown sessionTimeoutMs = new() { Minimum = 100, Maximum = 600_000, Value = 10_000, Width = 140 };
-    private readonly CheckBox bringToForegroundCheckBox = new() { Text = "BringToForeground", Checked = true, AutoSize = true };
-    private readonly Button openSessionButton = new() { Text = "OpenSession", Enabled = false };
-    private readonly Button closeSessionButton = new() { Text = "CloseSession", Enabled = false };
+    private readonly CheckBox bringToForegroundCheckBox = new() { Text = "置前窗口", Checked = true, AutoSize = true };
+    private readonly Button openSessionButton = new() { Text = "打开会话", Enabled = false };
+    private readonly Button closeSessionButton = new() { Text = "关闭会话", Enabled = false };
     private readonly TextBox sessionIdTextBox = new() { Width = 520 };
 
-    private readonly TextBox selectorJsonTextBox = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, Height = 200, Width = WideTextWidth };
-    private readonly Button findElementButton = new() { Text = "FindElement", Enabled = false };
-    private readonly Button clickButton = new() { Text = "Click", Enabled = false };
-    private readonly Button doubleClickButton = new() { Text = "DoubleClick", Enabled = false };
-    private readonly Button rightClickButton = new() { Text = "RightClick", Enabled = false };
-    private readonly Button setTextButton = new() { Text = "SetText", Enabled = false };
-    private readonly TextBox setTextValueTextBox = new() { Width = MediumTextWidth };
-    private readonly ComboBox setTextModeComboBox = new() { Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly TextBox selectorJsonTextBox = new()
+    {
+        Multiline = true,
+        ScrollBars = ScrollBars.Vertical,
+        WordWrap = false,
+        Height = 240,
+        Width = MinWideTextWidth,
+        Font = MonoFont,
+    };
+    private readonly Button findElementButton = new() { Text = "查找元素", Enabled = false };
+    private readonly Button clickButton = new() { Text = "单击", Enabled = false };
+    private readonly Button doubleClickButton = new() { Text = "双击", Enabled = false };
+    private readonly Button rightClickButton = new() { Text = "右击", Enabled = false };
+    private readonly Button setTextButton = new() { Text = "设置文本", Enabled = false };
+    private readonly TextBox setTextValueTextBox = new() { Width = MinMediumTextWidth };
+    private readonly ComboBox setTextModeComboBox = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
 
-    private readonly Button sendKeysButton = new() { Text = "SendKeys", Enabled = false };
+    private readonly Button sendKeysButton = new() { Text = "发送按键", Enabled = false };
     private readonly TextBox sendKeysTextBox = new() { Text = "CTRL+V", Width = 240 };
 
     private readonly ComboBox waitKindComboBox = new() { Width = 240, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NumericUpDown waitTimeoutMs = new() { Minimum = 100, Maximum = 600_000, Value = 5_000, Width = 140 };
-    private readonly Button waitUntilButton = new() { Text = "WaitUntil", Enabled = false };
-
-    private readonly Button runFlowButton = new() { Text = "RunFlow", Enabled = false };
+    private readonly Button waitUntilButton = new() { Text = "等待条件", Enabled = false };
+    private readonly Button runFlowButton = new() { Text = "执行流程", Enabled = false };
     private readonly ComboBox flowNameComboBox = new() { Width = 360, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly TextBox flowArgsJsonTextBox = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, Height = 180, Width = WideTextWidth, Text = "{}" };
+    private readonly TextBox flowArgsJsonTextBox = new()
+    {
+        Multiline = true,
+        ScrollBars = ScrollBars.Vertical,
+        WordWrap = false,
+        Height = 200,
+        Width = MinWideTextWidth,
+        Text = "{}",
+        Font = MonoFont,
+    };
 
-    private readonly TextBox selectorsFileTextBox = new() { Width = WideTextWidth };
-    private readonly Button browseSelectorsButton = new() { Text = "Browse..." };
-    private readonly Button loadSelectorsButton = new() { Text = "Load" };
+    private readonly TextBox selectorsFileTextBox = new() { Width = MinWideTextWidth };
+    private readonly Button browseSelectorsButton = new() { Text = "浏览..." };
+    private readonly Button loadSelectorsButton = new() { Text = "加载" };
     private readonly ComboBox selectorKeyComboBox = new() { Width = 320, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Button applySelectorButton = new() { Text = "Use Selector" };
+    private readonly Button applySelectorButton = new() { Text = "应用选择器" };
 
     private readonly TextBox logTextBox = new()
     {
@@ -61,34 +94,61 @@ internal sealed class MainForm : Form
         WordWrap = false,
         Dock = DockStyle.Fill,
         ReadOnly = true,
+        Font = MonoFont,
     };
+
+    private readonly Panel controlsPanel = new() { Dock = DockStyle.Fill, AutoScroll = true };
+    private readonly TableLayoutPanel controlsLayout = new()
+    {
+        ColumnCount = 1,
+        Dock = DockStyle.Top,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        Padding = new Padding(12, 8, 12, 16),
+        GrowStyle = TableLayoutPanelGrowStyle.AddRows,
+    };
+
+    private GroupBox? agentGroup;
+    private GroupBox? sessionGroup;
+    private GroupBox? selectorGroup;
+    private GroupBox? atomicGroup;
+    private GroupBox? flowGroup;
 
     private ElementRef? lastElement;
     private readonly Dictionary<string, ElementSelector> selectorCache = new(StringComparer.Ordinal);
 
     public MainForm()
     {
-        this.Text = "Autothink.UiaAgent WinForms Harness";
-        this.Width = 1600;
-        this.Height = 1050;
+        this.Text = "Autothink.UiaAgent WinForms 测试台";
+        this.Width = 1700;
+        this.Height = 1100;
         this.MinimumSize = new Size(1400, 900);
         this.Font = UiFont;
         this.AutoScaleMode = AutoScaleMode.Font;
 
         this.client.StderrLine += line => this.AppendLog($"[stderr] {line}");
-
-        this.setTextModeComboBox.Items.AddRange([SetTextModes.Replace, SetTextModes.Append, SetTextModes.CtrlAReplace]);
+        this.setTextModeComboBox.Items.AddRange(
+        [
+            new ComboItem("替换", SetTextModes.Replace),
+            new ComboItem("追加", SetTextModes.Append),
+            new ComboItem("Ctrl+A 替换", SetTextModes.CtrlAReplace),
+        ]);
         this.setTextModeComboBox.SelectedIndex = 0;
 
-        this.waitKindComboBox.Items.AddRange([WaitConditionKinds.ElementExists, WaitConditionKinds.ElementNotExists, WaitConditionKinds.ElementEnabled]);
+        this.waitKindComboBox.Items.AddRange(
+        [
+            new ComboItem("元素存在", WaitConditionKinds.ElementExists),
+            new ComboItem("元素消失", WaitConditionKinds.ElementNotExists),
+            new ComboItem("元素可用", WaitConditionKinds.ElementEnabled),
+        ]);
         this.waitKindComboBox.SelectedIndex = 0;
 
         this.flowNameComboBox.Items.AddRange(
         [
-            "autothink.attach",
-            "autothink.importVariables",
-            "autothink.importProgram.textPaste",
-            "autothink.build",
+            new ComboItem("autothink.attach", "autothink.attach"),
+            new ComboItem("autothink.importVariables", "autothink.importVariables"),
+            new ComboItem("autothink.importProgram.textPaste", "autothink.importProgram.textPaste"),
+            new ComboItem("autothink.build", "autothink.build"),
         ]);
         this.flowNameComboBox.SelectedIndex = 0;
 
@@ -140,220 +200,251 @@ internal sealed class MainForm : Form
             this.loadSelectorsButton,
             this.applySelectorButton);
 
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-        };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 780));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        this.Controls.Add(root);
+        ApplyInputStyle(
+            this.agentExePathTextBox,
+            this.processNameTextBox,
+            this.mainTitleContainsTextBox,
+            this.sessionIdTextBox,
+            this.selectorsFileTextBox,
+            this.selectorJsonTextBox,
+            this.setTextValueTextBox,
+            this.sendKeysTextBox,
+            this.flowArgsJsonTextBox);
 
-        var controlsPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-        root.Controls.Add(controlsPanel, 0, 0);
-        root.Controls.Add(this.logTextBox, 0, 1);
+        ApplyComboStyle(this.setTextModeComboBox, this.waitKindComboBox, this.flowNameComboBox, this.selectorKeyComboBox);
+        ApplyNumericStyle(this.sessionTimeoutMs, this.waitTimeoutMs);
 
-        int y = 10;
-        controlsPanel.Controls.Add(this.BuildAgentPanel(ref y));
-        controlsPanel.Controls.Add(this.BuildSessionPanel(ref y));
-        controlsPanel.Controls.Add(this.BuildSelectorPanel(ref y));
-        controlsPanel.Controls.Add(this.BuildAtomicPanel(ref y));
-        controlsPanel.Controls.Add(this.BuildFlowPanel(ref y));
+        BuildLayout();
 
         this.agentExePathTextBox.Text = TryGuessAgentExePath() ?? string.Empty;
         this.selectorsFileTextBox.Text = TryGuessSelectorsPath() ?? string.Empty;
     }
-
-    private Control BuildAgentPanel(ref int y)
+    private void BuildLayout()
     {
-        var group = new GroupBox
-        {
-            Text = "Agent Process",
-            Left = 10,
-            Top = y,
-            Width = 1040,
-            Height = 110,
-        };
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+        var controlTab = new TabPage("控制台");
+        var logTab = new TabPage("日志");
 
-        var flow = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            WrapContents = true,
-            AutoScroll = true,
-            Padding = new Padding(6, 4, 6, 4),
-        };
+        controlTab.Controls.Add(this.controlsPanel);
+        logTab.Controls.Add(this.logTextBox);
 
-        flow.Controls.Add(new Label { Text = "AgentExe", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        flow.Controls.Add(this.agentExePathTextBox);
-        flow.Controls.Add(this.browseAgentButton);
-        flow.Controls.Add(this.startAgentButton);
-        flow.Controls.Add(this.stopAgentButton);
-        flow.Controls.Add(this.pingButton);
+        tabs.TabPages.Add(controlTab);
+        tabs.TabPages.Add(logTab);
+        this.Controls.Add(tabs);
 
-        group.Controls.Add(flow);
-        y += group.Height + 10;
-        return group;
+        this.controlsPanel.Controls.Add(this.controlsLayout);
+
+        this.agentGroup = this.BuildAgentPanel();
+        this.sessionGroup = this.BuildSessionPanel();
+        this.selectorGroup = this.BuildSelectorPanel();
+        this.atomicGroup = this.BuildAtomicPanel();
+        this.flowGroup = this.BuildFlowPanel();
+
+        AddGroup(this.agentGroup);
+        AddGroup(this.sessionGroup);
+        AddGroup(this.selectorGroup);
+        AddGroup(this.atomicGroup);
+        AddGroup(this.flowGroup);
+
+        this.controlsPanel.SizeChanged += (_, _) => this.AdjustWideLayout();
+        this.Shown += (_, _) => this.AdjustWideLayout();
     }
 
-    private Control BuildSessionPanel(ref int y)
+    private void AddGroup(Control group)
     {
-        var group = new GroupBox
-        {
-            Text = "Session",
-            Left = 10,
-            Top = y,
-            Width = 1040,
-            Height = 130,
-        };
-
-        var flow = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            WrapContents = true,
-            AutoScroll = true,
-            Padding = new Padding(6, 4, 6, 4),
-        };
-
-        flow.Controls.Add(new Label { Text = "ProcessName", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        flow.Controls.Add(this.processNameTextBox);
-        flow.Controls.Add(new Label { Text = "TitleContains", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        flow.Controls.Add(this.mainTitleContainsTextBox);
-        flow.Controls.Add(new Label { Text = "TimeoutMs", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        flow.Controls.Add(this.sessionTimeoutMs);
-        flow.Controls.Add(this.bringToForegroundCheckBox);
-        flow.Controls.Add(this.openSessionButton);
-        flow.Controls.Add(this.closeSessionButton);
-        flow.Controls.Add(new Label { Text = "SessionId", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        flow.Controls.Add(this.sessionIdTextBox);
-
-        group.Controls.Add(flow);
-        y += group.Height + 10;
-        return group;
+        int row = this.controlsLayout.RowCount++;
+        this.controlsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        group.Margin = new Padding(0, 0, 0, 14);
+        this.controlsLayout.Controls.Add(group, 0, row);
     }
 
-    private Control BuildSelectorPanel(ref int y)
+    private GroupBox BuildAgentPanel()
     {
-        var group = new GroupBox
-        {
-            Text = "Selector Profile",
-            Left = 10,
-            Top = y,
-            Width = 1040,
-            Height = 120,
-        };
+        var group = CreateGroupBox("Agent 进程");
+        var layout = CreateThreeColumnLayout();
 
-        var flow = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            WrapContents = true,
-            AutoScroll = true,
-            Padding = new Padding(6, 4, 6, 4),
-        };
+        layout.RowCount = 2;
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        flow.Controls.Add(new Label { Text = "SelectorsFile", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        flow.Controls.Add(this.selectorsFileTextBox);
-        flow.Controls.Add(this.browseSelectorsButton);
-        flow.Controls.Add(this.loadSelectorsButton);
-        flow.Controls.Add(new Label { Text = "Key", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        flow.Controls.Add(this.selectorKeyComboBox);
-        flow.Controls.Add(this.applySelectorButton);
+        layout.Controls.Add(CreateLabel("Agent路径"), 0, 0);
+        layout.Controls.Add(this.agentExePathTextBox, 1, 0);
+        layout.Controls.Add(this.browseAgentButton, 2, 0);
 
-        group.Controls.Add(flow);
-        y += group.Height + 10;
+        var rowButtons = CreateFlowRow();
+        rowButtons.Controls.Add(this.startAgentButton);
+        rowButtons.Controls.Add(this.stopAgentButton);
+        rowButtons.Controls.Add(this.pingButton);
+        layout.Controls.Add(rowButtons, 0, 1);
+        layout.SetColumnSpan(rowButtons, 3);
+
+        group.Controls.Add(layout);
         return group;
     }
-
-    private Control BuildAtomicPanel(ref int y)
+    private GroupBox BuildSessionPanel()
     {
-        var group = new GroupBox
-        {
-            Text = "Atomic Actions (core)",
-            Left = 10,
-            Top = y,
-            Width = 1040,
-            Height = 320,
-        };
+        var group = CreateGroupBox("会话");
+        var layout = CreateSingleColumnLayout();
 
-        var panel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            WrapContents = true,
-            AutoScroll = true,
-            Padding = new Padding(6, 4, 6, 4),
-        };
+        var row1 = CreateFlowRow();
+        row1.Controls.Add(CreateLabel("进程名"));
+        row1.Controls.Add(this.processNameTextBox);
+        row1.Controls.Add(CreateLabel("标题包含"));
+        row1.Controls.Add(this.mainTitleContainsTextBox);
+        row1.Controls.Add(CreateLabel("超时(ms)"));
+        row1.Controls.Add(this.sessionTimeoutMs);
+        row1.Controls.Add(this.bringToForegroundCheckBox);
 
-        panel.Controls.Add(new Label { Text = "Selector JSON (ElementSelector)", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
-        panel.SetFlowBreak(panel.Controls[panel.Controls.Count - 1], true);
-        panel.Controls.Add(this.selectorJsonTextBox);
-        panel.SetFlowBreak(this.selectorJsonTextBox, true);
+        var row2 = CreateFlowRow();
+        row2.Controls.Add(this.openSessionButton);
+        row2.Controls.Add(this.closeSessionButton);
+        row2.Controls.Add(CreateLabel("会话ID"));
+        row2.Controls.Add(this.sessionIdTextBox);
 
-        panel.Controls.Add(this.findElementButton);
-        panel.Controls.Add(this.clickButton);
-        panel.Controls.Add(this.doubleClickButton);
-        panel.Controls.Add(this.rightClickButton);
+        layout.Controls.Add(row1, 0, 0);
+        layout.Controls.Add(row2, 0, 1);
 
-        panel.Controls.Add(new Label { Text = "Text", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        panel.Controls.Add(this.setTextValueTextBox);
-        panel.Controls.Add(new Label { Text = "Mode", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        panel.Controls.Add(this.setTextModeComboBox);
-        panel.Controls.Add(this.setTextButton);
-
-        panel.Controls.Add(new Label { Text = "Keys", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        panel.Controls.Add(this.sendKeysTextBox);
-        panel.Controls.Add(this.sendKeysButton);
-
-        panel.Controls.Add(new Label { Text = "WaitKind", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        panel.Controls.Add(this.waitKindComboBox);
-        panel.Controls.Add(new Label { Text = "TimeoutMs", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        panel.Controls.Add(this.waitTimeoutMs);
-        panel.Controls.Add(this.waitUntilButton);
-
-        group.Controls.Add(panel);
-        y += group.Height + 10;
+        group.Controls.Add(layout);
         return group;
     }
-
-    private Control BuildFlowPanel(ref int y)
+    private GroupBox BuildSelectorPanel()
     {
-        var group = new GroupBox
-        {
-            Text = "RunFlow (Stage 2)",
-            Left = 10,
-            Top = y,
-            Width = 1040,
-            Height = 240,
-        };
+        var group = CreateGroupBox("选择器配置");
+        var layout = CreateThreeColumnLayout();
 
-        var panel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            WrapContents = true,
-            AutoScroll = true,
-            Padding = new Padding(6, 4, 6, 4),
-        };
+        layout.RowCount = 2;
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        panel.Controls.Add(new Label { Text = "FlowName", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        panel.Controls.Add(this.flowNameComboBox);
-        panel.Controls.Add(this.runFlowButton);
-        panel.SetFlowBreak(this.runFlowButton, true);
+        layout.Controls.Add(CreateLabel("选择器文件"), 0, 0);
+        layout.Controls.Add(this.selectorsFileTextBox, 1, 0);
+        layout.Controls.Add(this.browseSelectorsButton, 2, 0);
 
-        panel.Controls.Add(new Label { Text = "Args JSON (optional)", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
-        panel.SetFlowBreak(panel.Controls[panel.Controls.Count - 1], true);
-        panel.Controls.Add(this.flowArgsJsonTextBox);
+        var row2 = CreateFlowRow();
+        row2.Controls.Add(this.loadSelectorsButton);
+        row2.Controls.Add(CreateLabel("选择器Key"));
+        row2.Controls.Add(this.selectorKeyComboBox);
+        row2.Controls.Add(this.applySelectorButton);
 
-        group.Controls.Add(panel);
-        y += group.Height + 10;
+        layout.Controls.Add(row2, 0, 1);
+        layout.SetColumnSpan(row2, 3);
+
+        group.Controls.Add(layout);
         return group;
+    }
+    private GroupBox BuildAtomicPanel()
+    {
+        var group = CreateGroupBox("原子操作");
+        var layout = CreateSingleColumnLayout();
+
+        var selectorLabel = CreateLabel("选择器JSON（ElementSelector）");
+        selectorLabel.Margin = new Padding(6, 4, 6, 2);
+
+        layout.RowCount = 6;
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        layout.Controls.Add(selectorLabel, 0, 0);
+        layout.Controls.Add(this.selectorJsonTextBox, 0, 1);
+
+        var rowButtons = CreateFlowRow();
+        rowButtons.Controls.Add(this.findElementButton);
+        rowButtons.Controls.Add(this.clickButton);
+        rowButtons.Controls.Add(this.doubleClickButton);
+        rowButtons.Controls.Add(this.rightClickButton);
+        layout.Controls.Add(rowButtons, 0, 2);
+
+        var rowSetText = CreateFlowRow();
+        rowSetText.Controls.Add(CreateLabel("文本"));
+        rowSetText.Controls.Add(this.setTextValueTextBox);
+        rowSetText.Controls.Add(CreateLabel("模式"));
+        rowSetText.Controls.Add(this.setTextModeComboBox);
+        rowSetText.Controls.Add(this.setTextButton);
+        layout.Controls.Add(rowSetText, 0, 3);
+
+        var rowSendKeys = CreateFlowRow();
+        rowSendKeys.Controls.Add(CreateLabel("按键"));
+        rowSendKeys.Controls.Add(this.sendKeysTextBox);
+        rowSendKeys.Controls.Add(this.sendKeysButton);
+        layout.Controls.Add(rowSendKeys, 0, 4);
+
+        var rowWait = CreateFlowRow();
+        rowWait.Controls.Add(CreateLabel("等待类型"));
+        rowWait.Controls.Add(this.waitKindComboBox);
+        rowWait.Controls.Add(CreateLabel("超时(ms)"));
+        rowWait.Controls.Add(this.waitTimeoutMs);
+        rowWait.Controls.Add(this.waitUntilButton);
+        layout.Controls.Add(rowWait, 0, 5);
+
+        group.Controls.Add(layout);
+        return group;
+    }
+    private GroupBox BuildFlowPanel()
+    {
+        var group = CreateGroupBox("流程执行");
+        var layout = CreateSingleColumnLayout();
+
+        var row1 = CreateFlowRow();
+        row1.Controls.Add(CreateLabel("流程名"));
+        row1.Controls.Add(this.flowNameComboBox);
+        row1.Controls.Add(this.runFlowButton);
+
+        var argsLabel = CreateLabel("参数JSON（可选）");
+        argsLabel.Margin = new Padding(6, 4, 6, 2);
+
+        layout.RowCount = 3;
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        layout.Controls.Add(row1, 0, 0);
+        layout.Controls.Add(argsLabel, 0, 1);
+        layout.Controls.Add(this.flowArgsJsonTextBox, 0, 2);
+
+        group.Controls.Add(layout);
+        return group;
+    }
+    private void AdjustWideLayout()
+    {
+        if (this.agentGroup is null || this.sessionGroup is null || this.selectorGroup is null || this.atomicGroup is null || this.flowGroup is null)
+        {
+            return;
+        }
+
+        int width = Math.Max(this.controlsPanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 24, 900);
+
+        SetGroupWidth(this.agentGroup, width);
+        SetGroupWidth(this.sessionGroup, width);
+        SetGroupWidth(this.selectorGroup, width);
+        SetGroupWidth(this.atomicGroup, width);
+        SetGroupWidth(this.flowGroup, width);
+
+        int wideWidth = Math.Max(width - 260, MinWideTextWidth);
+        int jsonWidth = Math.Max(width - 80, MinWideTextWidth);
+        int mediumWidth = Math.Max(width - 520, MinMediumTextWidth);
+
+        this.agentExePathTextBox.Width = wideWidth;
+        this.selectorsFileTextBox.Width = wideWidth;
+        this.sessionIdTextBox.Width = Math.Max(width - 320, 520);
+        this.selectorJsonTextBox.Width = jsonWidth;
+        this.flowArgsJsonTextBox.Width = jsonWidth;
+        this.setTextValueTextBox.Width = mediumWidth;
+
+        int flowNameWidth = Math.Max(width - 360, 360);
+        this.flowNameComboBox.Width = flowNameWidth;
     }
 
     private async Task StartAgentAsync()
     {
         try
         {
-            this.AppendLog($"Starting agent: {this.agentExePathTextBox.Text}");
+            this.AppendLog($"启动Agent: {this.agentExePathTextBox.Text}");
             await this.client.StartAsync(this.agentExePathTextBox.Text, CancellationToken.None);
-            this.AppendLog("Agent READY + JSON-RPC connected.");
+            this.AppendLog("Agent READY + JSON-RPC 已连接。");
 
             this.startAgentButton.Enabled = false;
             this.stopAgentButton.Enabled = true;
@@ -363,7 +454,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"StartAgent failed: {ex}");
+            this.AppendLog($"启动失败: {ex}");
         }
     }
 
@@ -371,13 +462,13 @@ internal sealed class MainForm : Form
     {
         try
         {
-            this.AppendLog("Stopping agent...");
+            this.AppendLog("停止Agent...");
             await this.client.StopAsync(CancellationToken.None);
-            this.AppendLog("Agent stopped.");
+            this.AppendLog("Agent 已停止。");
         }
         catch (Exception ex)
         {
-            this.AppendLog($"StopAgent failed: {ex}");
+            this.AppendLog($"停止失败: {ex}");
         }
         finally
         {
@@ -409,10 +500,9 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"Ping failed: {ex}");
+            this.AppendLog($"Ping 失败: {ex}");
         }
     }
-
     private async Task OpenSessionAsync()
     {
         try
@@ -439,7 +529,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"OpenSession failed: {ex}");
+            this.AppendLog($"打开会话失败: {ex}");
         }
     }
 
@@ -468,7 +558,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"CloseSession failed: {ex}");
+            this.AppendLog($"关闭会话失败: {ex}");
         }
     }
 
@@ -496,15 +586,14 @@ internal sealed class MainForm : Form
                 this.doubleClickButton.Enabled = true;
                 this.rightClickButton.Enabled = true;
                 this.setTextButton.Enabled = true;
-                this.AppendLog("ElementRef captured for Click/SetText.");
+                this.AppendLog("元素引用已捕获，可继续点击/设置文本。");
             }
         }
         catch (Exception ex)
         {
-            this.AppendLog($"FindElement failed: {ex}");
+            this.AppendLog($"查找元素失败: {ex}");
         }
     }
-
     private async Task ClickAsync()
     {
         try
@@ -516,7 +605,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"Click failed: {ex}");
+            this.AppendLog($"单击失败: {ex}");
         }
     }
 
@@ -531,7 +620,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"DoubleClick failed: {ex}");
+            this.AppendLog($"双击失败: {ex}");
         }
     }
 
@@ -546,7 +635,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"RightClick failed: {ex}");
+            this.AppendLog($"右击失败: {ex}");
         }
     }
 
@@ -556,7 +645,7 @@ internal sealed class MainForm : Form
         {
             JsonRpc rpc = this.RequireRpc();
             ElementRef element = this.RequireLastElement();
-            string mode = this.setTextModeComboBox.SelectedItem?.ToString() ?? SetTextModes.Replace;
+            string mode = this.setTextModeComboBox.SelectedItem is ComboItem item ? item.Value : SetTextModes.Replace;
             RpcResult result = await rpc.InvokeAsync<RpcResult>("SetText", new SetTextRequest
             {
                 Element = element,
@@ -567,10 +656,9 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"SetText failed: {ex}");
+            this.AppendLog($"设置文本失败: {ex}");
         }
     }
-
     private async Task SendKeysAsync()
     {
         try
@@ -586,7 +674,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"SendKeys failed: {ex}");
+            this.AppendLog($"发送按键失败: {ex}");
         }
     }
 
@@ -596,7 +684,7 @@ internal sealed class MainForm : Form
         {
             JsonRpc rpc = this.RequireRpc();
             string sessionId = this.RequireSessionId();
-            string kind = this.waitKindComboBox.SelectedItem?.ToString() ?? WaitConditionKinds.ElementExists;
+            string kind = this.waitKindComboBox.SelectedItem is ComboItem item ? item.Value : WaitConditionKinds.ElementExists;
 
             ElementSelector? selector = null;
             if (!string.IsNullOrWhiteSpace(this.selectorJsonTextBox.Text))
@@ -615,7 +703,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"WaitUntil failed: {ex}");
+            this.AppendLog($"等待条件失败: {ex}");
         }
     }
 
@@ -631,7 +719,7 @@ internal sealed class MainForm : Form
             RpcResult<RunFlowResponse> result = await rpc.InvokeAsync<RpcResult<RunFlowResponse>>("RunFlow", new RunFlowRequest
             {
                 SessionId = sessionId,
-                FlowName = this.flowNameComboBox.SelectedItem?.ToString() ?? string.Empty,
+                FlowName = this.flowNameComboBox.SelectedItem is ComboItem item ? item.Value : string.Empty,
                 TimeoutMs = 30_000,
                 Args = args,
                 ArgsJson = string.IsNullOrWhiteSpace(rawArgs) ? null : rawArgs,
@@ -641,15 +729,14 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            this.AppendLog($"RunFlow failed: {ex}");
+            this.AppendLog($"执行流程失败: {ex}");
         }
     }
-
     private JsonRpc RequireRpc()
     {
         if (this.client.Rpc is null)
         {
-            throw new InvalidOperationException("RPC is not connected. Start agent first.");
+            throw new InvalidOperationException("RPC 未连接，请先启动 Agent。");
         }
 
         return this.client.Rpc;
@@ -660,7 +747,7 @@ internal sealed class MainForm : Form
         string sessionId = this.sessionIdTextBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            throw new InvalidOperationException("SessionId is empty. Call OpenSession first.");
+            throw new InvalidOperationException("会话ID为空，请先打开会话。");
         }
 
         return sessionId;
@@ -670,7 +757,7 @@ internal sealed class MainForm : Form
     {
         if (this.lastElement is null)
         {
-            throw new InvalidOperationException("No ElementRef captured. Run FindElement first.");
+            throw new InvalidOperationException("尚未捕获元素引用，请先执行查找元素。");
         }
 
         return this.lastElement;
@@ -703,7 +790,6 @@ internal sealed class MainForm : Form
             return default;
         }
     }
-
     private void BrowseAgentExe()
     {
         using var dlg = new OpenFileDialog
@@ -737,13 +823,13 @@ internal sealed class MainForm : Form
         string path = this.selectorsFileTextBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(path))
         {
-            this.AppendLog("Selectors file path is empty.");
+            this.AppendLog("选择器文件路径为空。");
             return;
         }
 
         if (!File.Exists(path))
         {
-            this.AppendLog($"Selectors file not found: {path}");
+            this.AppendLog($"选择器文件不存在: {path}");
             return;
         }
 
@@ -769,11 +855,11 @@ internal sealed class MainForm : Form
                 this.selectorKeyComboBox.SelectedIndex = 0;
             }
 
-            this.AppendLog($"Loaded selectors: {this.selectorCache.Count} (from {path})");
+            this.AppendLog($"已加载选择器: {this.selectorCache.Count} (来自 {path})");
         }
         catch (Exception ex)
         {
-            this.AppendLog($"Load selectors failed: {ex}");
+            this.AppendLog($"加载选择器失败: {ex}");
         }
     }
 
@@ -782,20 +868,19 @@ internal sealed class MainForm : Form
         string? key = this.selectorKeyComboBox.SelectedItem?.ToString();
         if (string.IsNullOrWhiteSpace(key))
         {
-            this.AppendLog("Selector key is empty.");
+            this.AppendLog("请选择选择器Key。");
             return;
         }
 
         if (!this.selectorCache.TryGetValue(key, out ElementSelector? selector))
         {
-            this.AppendLog($"Selector key not found: {key}");
+            this.AppendLog($"选择器Key不存在: {key}");
             return;
         }
 
         this.selectorJsonTextBox.Text = JsonSerializer.Serialize(selector, new JsonSerializerOptions { WriteIndented = true });
-        this.AppendLog($"Applied selector: {key}");
+        this.AppendLog($"已应用选择器: {key}");
     }
-
     private void AppendRpcResult(string title, RpcResult result)
     {
         this.AppendLog($"--- {title} ---");
@@ -851,6 +936,74 @@ internal sealed class MainForm : Form
 
         this.logTextBox.AppendText(text + Environment.NewLine);
     }
+    private static GroupBox CreateGroupBox(string title)
+    {
+        return new GroupBox
+        {
+            Text = title,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(10, 20, 10, 12),
+        };
+    }
+
+    private static TableLayoutPanel CreateThreeColumnLayout()
+    {
+        var layout = new TableLayoutPanel
+        {
+            ColumnCount = 3,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        };
+
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        return layout;
+    }
+
+    private static TableLayoutPanel CreateSingleColumnLayout()
+    {
+        var layout = new TableLayoutPanel
+        {
+            ColumnCount = 1,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        };
+
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        return layout;
+    }
+
+    private static FlowLayoutPanel CreateFlowRow()
+    {
+        return new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = new Padding(0, 0, 0, 6),
+        };
+    }
+
+    private static Label CreateLabel(string text)
+    {
+        return new Label { Text = text, AutoSize = true, Padding = new Padding(0, 8, 0, 0), Margin = new Padding(6, 2, 6, 2) };
+    }
+
+    private static void SetGroupWidth(Control group, int width)
+    {
+        group.Width = width;
+        foreach (Control child in group.Controls)
+        {
+            child.Width = width - 20;
+        }
+    }
 
     private static void ApplyButtonStyle(params Button[] buttons)
     {
@@ -862,6 +1015,31 @@ internal sealed class MainForm : Form
         }
     }
 
+    private static void ApplyInputStyle(params TextBox[] textBoxes)
+    {
+        foreach (TextBox box in textBoxes)
+        {
+            box.Margin = new Padding(6, 4, 6, 4);
+            box.MinimumSize = new Size(160, 32);
+        }
+    }
+
+    private static void ApplyComboStyle(params ComboBox[] comboBoxes)
+    {
+        foreach (ComboBox combo in comboBoxes)
+        {
+            combo.Margin = new Padding(6, 4, 6, 4);
+            combo.MinimumSize = new Size(160, 32);
+        }
+    }
+
+    private static void ApplyNumericStyle(params NumericUpDown[] numericUpDowns)
+    {
+        foreach (NumericUpDown numeric in numericUpDowns)
+        {
+            numeric.Margin = new Padding(6, 6, 6, 6);
+        }
+    }
     private static string? TryGuessAgentExePath()
     {
         try

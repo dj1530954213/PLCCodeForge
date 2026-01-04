@@ -3,8 +3,10 @@ use std::path::{Path, PathBuf};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 
-use super::model::{CommConfigV1, PointsV1, ProfilesV1, RunStats, SampleResult, SCHEMA_VERSION_V1};
-use super::plan::ReadPlan;
+use crate::comm::core::model::{
+    CommConfigV1, PointsV1, ProfilesV1, RunStats, SampleResult, SCHEMA_VERSION_V1,
+};
+use crate::comm::core::plan::ReadPlan;
 
 pub const STORAGE_DIR_NAME: &str = "comm";
 pub const PROFILES_FILE_NAME: &str = "profiles.v1.json";
@@ -50,7 +52,9 @@ pub fn default_output_dir(base_dir: &Path) -> PathBuf {
 
 pub fn save_config(base_dir: &Path, payload: &CommConfigV1) -> Result<(), StorageError> {
     if payload.schema_version != SCHEMA_VERSION_V1 {
-        return Err(StorageError::UnsupportedSchemaVersion(payload.schema_version));
+        return Err(StorageError::UnsupportedSchemaVersion(
+            payload.schema_version,
+        ));
     }
     write_json_atomic(base_dir.join(CONFIG_FILE_NAME), payload)
 }
@@ -68,7 +72,9 @@ pub fn load_config(base_dir: &Path) -> Result<Option<CommConfigV1>, StorageError
 
 pub fn save_profiles(base_dir: &Path, payload: &ProfilesV1) -> Result<(), StorageError> {
     if payload.schema_version != SCHEMA_VERSION_V1 {
-        return Err(StorageError::UnsupportedSchemaVersion(payload.schema_version));
+        return Err(StorageError::UnsupportedSchemaVersion(
+            payload.schema_version,
+        ));
     }
     write_json_atomic(base_dir.join(PROFILES_FILE_NAME), payload)
 }
@@ -86,7 +92,9 @@ pub fn load_profiles(base_dir: &Path) -> Result<Option<ProfilesV1>, StorageError
 
 pub fn save_points(base_dir: &Path, payload: &PointsV1) -> Result<(), StorageError> {
     if payload.schema_version != SCHEMA_VERSION_V1 {
-        return Err(StorageError::UnsupportedSchemaVersion(payload.schema_version));
+        return Err(StorageError::UnsupportedSchemaVersion(
+            payload.schema_version,
+        ));
     }
     write_json_atomic(base_dir.join(POINTS_FILE_NAME), payload)
 }
@@ -196,7 +204,7 @@ mod tests {
                 port: 502,
                 timeout_ms: 1000,
                 retry_count: 0,
-              poll_interval_ms: 500,
+                poll_interval_ms: 500,
             }],
         };
         save_profiles(&base_dir, &profiles).unwrap();

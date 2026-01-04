@@ -11,8 +11,8 @@ use std::time::Instant;
 use rust_xlsxwriter::{Format, Workbook, XlsxError};
 use uuid::Uuid;
 
-use super::model::{
-    ByteOrder32, CommPoint, CommExportDiagnostics, CommWarning, ConnectionProfile, DataType,
+use crate::comm::core::model::{
+    ByteOrder32, CommExportDiagnostics, CommPoint, CommWarning, ConnectionProfile, DataType,
     ExportedRows, Quality, RegisterArea, RunStats, SampleResult, SerialParity,
 };
 
@@ -135,8 +135,16 @@ pub fn export_delivery_xlsx(
     }
 
     // 确定性排序：按 points 原始顺序；tie-break 用 pointKey。
-    tcp_rows.sort_by(|a, b| a.index.cmp(&b.index).then_with(|| a.point_key.cmp(&b.point_key)));
-    rtu_rows.sort_by(|a, b| a.index.cmp(&b.index).then_with(|| a.point_key.cmp(&b.point_key)));
+    tcp_rows.sort_by(|a, b| {
+        a.index
+            .cmp(&b.index)
+            .then_with(|| a.point_key.cmp(&b.point_key))
+    });
+    rtu_rows.sort_by(|a, b| {
+        a.index
+            .cmp(&b.index)
+            .then_with(|| a.point_key.cmp(&b.point_key))
+    });
 
     let mut workbook = Workbook::new();
     let header_format = Format::new().set_bold();
@@ -152,7 +160,11 @@ pub fn export_delivery_xlsx(
             tcp_sheet.write_string(row, 1, &seed.data_type)?;
             tcp_sheet.write_string(row, 2, &seed.byte_order)?;
             tcp_sheet.write_string(row, 3, &seed.channel_name)?;
-            let scale = if seed.scale.is_finite() { seed.scale } else { 0.0 };
+            let scale = if seed.scale.is_finite() {
+                seed.scale
+            } else {
+                0.0
+            };
             tcp_sheet.write_number(row, 4, scale)?;
             row += 1;
         }
@@ -169,7 +181,11 @@ pub fn export_delivery_xlsx(
             rtu_sheet.write_string(row, 1, &seed.data_type)?;
             rtu_sheet.write_string(row, 2, &seed.byte_order)?;
             rtu_sheet.write_string(row, 3, &seed.channel_name)?;
-            let scale = if seed.scale.is_finite() { seed.scale } else { 0.0 };
+            let scale = if seed.scale.is_finite() {
+                seed.scale
+            } else {
+                0.0
+            };
             rtu_sheet.write_number(row, 4, scale)?;
             row += 1;
         }
@@ -286,7 +302,8 @@ pub fn export_delivery_xlsx(
         } else {
             warnings.push(CommWarning {
                 code: "DELIVERY_RESULTS_MISSING".to_string(),
-                message: "includeResults=true but no last_results available; results sheet skipped".to_string(),
+                message: "includeResults=true but no last_results available; results sheet skipped"
+                    .to_string(),
                 point_key: None,
                 hmi_name: None,
             });
@@ -386,4 +403,3 @@ fn quality_to_str(quality: &Quality) -> &'static str {
         Quality::ConfigError => "ConfigError",
     }
 }
-

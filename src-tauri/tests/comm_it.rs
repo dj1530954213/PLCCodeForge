@@ -1,8 +1,8 @@
 use std::env;
 
-use tauri_app_lib::comm::driver::CommDriver;
 use tauri_app_lib::comm::driver::modbus_rtu::ModbusRtuDriver;
 use tauri_app_lib::comm::driver::modbus_tcp::ModbusTcpDriver;
+use tauri_app_lib::comm::driver::CommDriver;
 use tauri_app_lib::comm::engine::execute_plan_once;
 use tauri_app_lib::comm::model::{
     ByteOrder32, CommPoint, ConnectionProfile, DataType, Quality, RegisterArea, SerialParity,

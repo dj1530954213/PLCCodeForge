@@ -92,7 +92,8 @@ pub fn build_read_plan(
 ) -> Result<ReadPlan, PlanError> {
     let profile_index = build_profile_index(profiles)?;
 
-    let mut grouped: std::collections::HashMap<String, ChannelPoints> = std::collections::HashMap::new();
+    let mut grouped: std::collections::HashMap<String, ChannelPoints> =
+        std::collections::HashMap::new();
 
     for (index, point) in points.iter().enumerate() {
         let profile = profile_index
@@ -116,7 +117,11 @@ pub fn build_read_plan(
             byte_order: point.byte_order.clone(),
             scale: point.scale,
             address_offset: point.address_offset,
-            unit_length: point_unit_length(&point.channel_name, profile.read_area.clone(), &point.data_type)?,
+            unit_length: point_unit_length(
+                &point.channel_name,
+                profile.read_area.clone(),
+                &point.data_type,
+            )?,
         });
     }
 
@@ -129,11 +134,12 @@ pub fn build_read_plan(
 
     let mut jobs: Vec<ReadJob> = Vec::new();
     for (channel_name, mut channel_points) in channels {
-        let profile = profile_index
-            .get(channel_name.as_str())
-            .ok_or_else(|| PlanError::MissingProfile {
-                channel_name: channel_name.clone(),
-            })?;
+        let profile =
+            profile_index
+                .get(channel_name.as_str())
+                .ok_or_else(|| PlanError::MissingProfile {
+                    channel_name: channel_name.clone(),
+                })?;
 
         channel_points.sort_points();
         jobs.extend(build_jobs_for_channel(
@@ -155,7 +161,11 @@ struct ChannelPoints {
 
 impl ChannelPoints {
     fn sort_points(&mut self) {
-        self.points.sort_by(|a, b| a.index.cmp(&b.index).then_with(|| a.point_key.cmp(&b.point_key)));
+        self.points.sort_by(|a, b| {
+            a.index
+                .cmp(&b.index)
+                .then_with(|| a.point_key.cmp(&b.point_key))
+        });
     }
 }
 
@@ -211,7 +221,8 @@ impl ConnectionProfile {
 fn build_profile_index<'a>(
     profiles: &'a [ConnectionProfile],
 ) -> Result<std::collections::HashMap<&'a str, ProfileInfo>, PlanError> {
-    let mut index: std::collections::HashMap<&'a str, ProfileInfo> = std::collections::HashMap::new();
+    let mut index: std::collections::HashMap<&'a str, ProfileInfo> =
+        std::collections::HashMap::new();
 
     for profile in profiles {
         let name = profile.channel_name();
@@ -243,7 +254,10 @@ fn point_unit_length(
     let length = match (read_area, data_type) {
         (RegisterArea::Coil | RegisterArea::Discrete, DataType::Bool) => 1,
         (RegisterArea::Holding | RegisterArea::Input, DataType::Int16 | DataType::UInt16) => 1,
-        (RegisterArea::Holding | RegisterArea::Input, DataType::Int32 | DataType::UInt32 | DataType::Float32) => 2,
+        (
+            RegisterArea::Holding | RegisterArea::Input,
+            DataType::Int32 | DataType::UInt32 | DataType::Float32,
+        ) => 2,
         (area, dt) => {
             return Err(PlanError::AreaDataTypeMismatch {
                 channel_name: channel_name.to_string(),
@@ -353,7 +367,8 @@ fn build_jobs_for_channel(
                         });
                     }
 
-                    if let Some(overlap) = occupied.iter().copied().find(|other| overlaps(seg, *other))
+                    if let Some(overlap) =
+                        occupied.iter().copied().find(|other| overlaps(seg, *other))
                     {
                         candidate = overlap.end;
                         continue;
@@ -457,8 +472,8 @@ fn finalize_job(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::model::{ByteOrder32, ConnectionProfile, DataType, RegisterArea};
+    use super::*;
 
     fn tcp_profile(channel_name: &str) -> ConnectionProfile {
         ConnectionProfile::Tcp {
@@ -475,7 +490,11 @@ mod tests {
         }
     }
 
-    fn tcp_profile_with_base_start(channel_name: &str, start_address: u16, length: u16) -> ConnectionProfile {
+    fn tcp_profile_with_base_start(
+        channel_name: &str,
+        start_address: u16,
+        length: u16,
+    ) -> ConnectionProfile {
         ConnectionProfile::Tcp {
             channel_name: channel_name.to_string(),
             device_id: 1,
@@ -502,7 +521,12 @@ mod tests {
         }
     }
 
-    fn point_with_offset(channel_name: &str, data_type: DataType, point_key: Uuid, offset: u16) -> CommPoint {
+    fn point_with_offset(
+        channel_name: &str,
+        data_type: DataType,
+        point_key: Uuid,
+        offset: u16,
+    ) -> CommPoint {
         CommPoint {
             point_key,
             hmi_name: "X".to_string(),
@@ -598,4 +622,3 @@ mod tests {
         assert_eq!(plan.jobs[0].points[1].offset, 1);
     }
 }
-

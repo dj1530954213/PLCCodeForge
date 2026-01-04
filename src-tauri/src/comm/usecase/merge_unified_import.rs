@@ -14,12 +14,20 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 
-use super::bridge_importresult_stub::{ImportResultStubV1, IMPORT_RESULT_STUB_SPEC_VERSION_V1};
-use super::bridge_plc_import::{PlcImportBridgeV1PointComm, PlcImportBridgeV1PointVerification};
-use super::error::{MergeImportSourcesError, MergeImportSourcesErrorDetails, MergeImportSourcesErrorKind};
 use super::import_union_xlsx;
-use super::model::{ByteOrder32, CommWarning, ConnectionProfile, DataType, RegisterArea, SCHEMA_VERSION_V1};
-use super::union_xlsx_parser;
+use crate::comm::adapters::union_xlsx_parser;
+use crate::comm::core::model::{
+    ByteOrder32, CommWarning, ConnectionProfile, DataType, RegisterArea, SCHEMA_VERSION_V1,
+};
+use crate::comm::error::{
+    MergeImportSourcesError, MergeImportSourcesErrorDetails, MergeImportSourcesErrorKind,
+};
+use crate::comm::usecase::bridge::bridge_importresult_stub::{
+    ImportResultStubV1, IMPORT_RESULT_STUB_SPEC_VERSION_V1,
+};
+use crate::comm::usecase::bridge::bridge_plc_import::{
+    PlcImportBridgeV1PointComm, PlcImportBridgeV1PointVerification,
+};
 
 pub const UNIFIED_IMPORT_SPEC_VERSION_V1: &str = "v1";
 pub const MERGE_REPORT_SPEC_VERSION_V1: &str = "v1";
@@ -226,11 +234,17 @@ fn profile_snapshot(profile: &ConnectionProfile) -> (String, u8, RegisterArea, u
     }
 }
 
-fn validate_stub(stub_path: &Path, stub: &ImportResultStubV1) -> Result<(), MergeImportSourcesError> {
+fn validate_stub(
+    stub_path: &Path,
+    stub: &ImportResultStubV1,
+) -> Result<(), MergeImportSourcesError> {
     if stub.schema_version != SCHEMA_VERSION_V1 {
         return Err(MergeImportSourcesError {
             kind: MergeImportSourcesErrorKind::ImportResultStubUnsupportedSchemaVersion,
-            message: format!("unsupported ImportResultStub schemaVersion: {}", stub.schema_version),
+            message: format!(
+                "unsupported ImportResultStub schemaVersion: {}",
+                stub.schema_version
+            ),
             details: Some(MergeImportSourcesErrorDetails {
                 import_result_stub_path: Some(stub_path.to_string_lossy().to_string()),
                 ..Default::default()
@@ -240,7 +254,10 @@ fn validate_stub(stub_path: &Path, stub: &ImportResultStubV1) -> Result<(), Merg
     if stub.spec_version != IMPORT_RESULT_STUB_SPEC_VERSION_V1 {
         return Err(MergeImportSourcesError {
             kind: MergeImportSourcesErrorKind::ImportResultStubUnsupportedSpecVersion,
-            message: format!("unsupported ImportResultStub specVersion: {}", stub.spec_version),
+            message: format!(
+                "unsupported ImportResultStub specVersion: {}",
+                stub.spec_version
+            ),
             details: Some(MergeImportSourcesErrorDetails {
                 import_result_stub_path: Some(stub_path.to_string_lossy().to_string()),
                 ..Default::default()
@@ -340,7 +357,8 @@ pub fn merge_import_sources_v1(
         }),
     })?;
 
-    let columns_info = union_xlsx_parser::columns_info_from_detected(&union_out.diagnostics.detected_columns);
+    let columns_info =
+        union_xlsx_parser::columns_info_from_detected(&union_out.diagnostics.detected_columns);
     let mut warnings: Vec<CommWarning> = union_out.warnings.clone();
     warnings.extend(union_xlsx_parser::missing_columns_warnings(&columns_info));
 
@@ -354,7 +372,8 @@ pub fn merge_import_sources_v1(
     }
 
     let mut seen_names: HashSet<String> = HashSet::new();
-    let mut union_points: Vec<UnifiedImportV1Point> = Vec::with_capacity(union_out.points.points.len());
+    let mut union_points: Vec<UnifiedImportV1Point> =
+        Vec::with_capacity(union_out.points.points.len());
     for p in &union_out.points.points {
         let name = p.hmi_name.trim().to_string();
         if name.is_empty() {
@@ -482,27 +501,38 @@ pub fn merge_import_sources_v1(
         });
     }
 
-    let stub_text = std::fs::read_to_string(import_result_stub_path).map_err(|e| MergeImportSourcesError {
-        kind: MergeImportSourcesErrorKind::ImportResultStubReadError,
-        message: e.to_string(),
-        details: Some(MergeImportSourcesErrorDetails {
-            import_result_stub_path: Some(import_result_stub_path.to_string_lossy().to_string()),
-            ..Default::default()
-        }),
-    })?;
+    let stub_text =
+        std::fs::read_to_string(import_result_stub_path).map_err(|e| MergeImportSourcesError {
+            kind: MergeImportSourcesErrorKind::ImportResultStubReadError,
+            message: e.to_string(),
+            details: Some(MergeImportSourcesErrorDetails {
+                import_result_stub_path: Some(
+                    import_result_stub_path.to_string_lossy().to_string(),
+                ),
+                ..Default::default()
+            }),
+        })?;
     let stub_digest = sha256_prefixed_bytes(stub_text.as_bytes());
-    let stub: ImportResultStubV1 = serde_json::from_str(&stub_text).map_err(|e| MergeImportSourcesError {
-        kind: MergeImportSourcesErrorKind::ImportResultStubDeserializeError,
-        message: e.to_string(),
-        details: Some(MergeImportSourcesErrorDetails {
-            import_result_stub_path: Some(import_result_stub_path.to_string_lossy().to_string()),
-            ..Default::default()
-        }),
-    })?;
+    let stub: ImportResultStubV1 =
+        serde_json::from_str(&stub_text).map_err(|e| MergeImportSourcesError {
+            kind: MergeImportSourcesErrorKind::ImportResultStubDeserializeError,
+            message: e.to_string(),
+            details: Some(MergeImportSourcesErrorDetails {
+                import_result_stub_path: Some(
+                    import_result_stub_path.to_string_lossy().to_string(),
+                ),
+                ..Default::default()
+            }),
+        })?;
     validate_stub(import_result_stub_path, &stub)?;
 
-    let mut stub_by_name: HashMap<String, (PlcImportBridgeV1PointComm, PlcImportBridgeV1PointVerification)> =
-        HashMap::new();
+    let mut stub_by_name: HashMap<
+        String,
+        (
+            PlcImportBridgeV1PointComm,
+            PlcImportBridgeV1PointVerification,
+        ),
+    > = HashMap::new();
     for p in &stub.points {
         stub_by_name.insert(
             p.name.trim().to_string(),
@@ -592,7 +622,10 @@ pub fn merge_import_sources_v1(
         generated_at_utc: now,
         sources: sources.clone(),
         points: union_points,
-        device_groups: union_xlsx_parser::build_device_groups(&union_out.points, &union_out.profiles),
+        device_groups: union_xlsx_parser::build_device_groups(
+            &union_out.points,
+            &union_out.profiles,
+        ),
         hardware: union_xlsx_parser::build_hardware_snapshot(&union_out.profiles, &columns_info),
         statistics: UnifiedImportV1Statistics {
             union_points: union_out.points.points.len() as u32,
@@ -604,14 +637,15 @@ pub fn merge_import_sources_v1(
         },
     };
 
-    let unified_text = serde_json::to_string_pretty(&unified).map_err(|e| MergeImportSourcesError {
-        kind: MergeImportSourcesErrorKind::MergeWriteError,
-        message: e.to_string(),
-        details: Some(MergeImportSourcesErrorDetails {
-            out_path: Some(out_path.to_string_lossy().to_string()),
-            ..Default::default()
-        }),
-    })?;
+    let unified_text =
+        serde_json::to_string_pretty(&unified).map_err(|e| MergeImportSourcesError {
+            kind: MergeImportSourcesErrorKind::MergeWriteError,
+            message: e.to_string(),
+            details: Some(MergeImportSourcesErrorDetails {
+                out_path: Some(out_path.to_string_lossy().to_string()),
+                ..Default::default()
+            }),
+        })?;
     let unified_digest = sha256_prefixed_bytes(unified_text.as_bytes());
 
     write_text_atomic(out_path, &unified_text).map_err(|e| MergeImportSourcesError {
@@ -633,14 +667,15 @@ pub fn merge_import_sources_v1(
         overridden_count: overridden,
         conflicts,
     };
-    let report_text = serde_json::to_string_pretty(&report).map_err(|e| MergeImportSourcesError {
-        kind: MergeImportSourcesErrorKind::MergeWriteError,
-        message: e.to_string(),
-        details: Some(MergeImportSourcesErrorDetails {
-            report_path: Some(report_path.to_string_lossy().to_string()),
-            ..Default::default()
-        }),
-    })?;
+    let report_text =
+        serde_json::to_string_pretty(&report).map_err(|e| MergeImportSourcesError {
+            kind: MergeImportSourcesErrorKind::MergeWriteError,
+            message: e.to_string(),
+            details: Some(MergeImportSourcesErrorDetails {
+                report_path: Some(report_path.to_string_lossy().to_string()),
+                ..Default::default()
+            }),
+        })?;
     let report_digest = sha256_prefixed_bytes(report_text.as_bytes());
     write_text_atomic(report_path, &report_text).map_err(|e| MergeImportSourcesError {
         kind: MergeImportSourcesErrorKind::MergeWriteError,
@@ -681,14 +716,19 @@ mod tests {
     use uuid::Uuid;
 
     fn temp_xlsx_path(prefix: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("plc-codeforge-merge-{prefix}-{}.xlsx", Uuid::new_v4()))
+        std::env::temp_dir().join(format!(
+            "plc-codeforge-merge-{prefix}-{}.xlsx",
+            Uuid::new_v4()
+        ))
     }
 
     fn write_union_xlsx(path: &Path, rows: &[Vec<&str>]) {
         let headers = crate::comm::union_spec_v1::REQUIRED_COLUMNS_V1;
         let mut workbook = Workbook::new();
         let sheet = workbook.add_worksheet();
-        sheet.set_name(crate::comm::union_spec_v1::DEFAULT_SHEET_V1).unwrap();
+        sheet
+            .set_name(crate::comm::union_spec_v1::DEFAULT_SHEET_V1)
+            .unwrap();
 
         for (col, header) in headers.iter().enumerate() {
             sheet.write_string(0, col as u16, *header).unwrap();
@@ -704,7 +744,14 @@ mod tests {
         workbook.save(path).unwrap();
     }
 
-    fn stub_point(name: &str, channel: &str) -> (String, PlcImportBridgeV1PointComm, PlcImportBridgeV1PointVerification) {
+    fn stub_point(
+        name: &str,
+        channel: &str,
+    ) -> (
+        String,
+        PlcImportBridgeV1PointComm,
+        PlcImportBridgeV1PointVerification,
+    ) {
         let comm = PlcImportBridgeV1PointComm {
             channel_name: channel.to_string(),
             address_spec: CommIrV1AddressSpec {
@@ -734,7 +781,14 @@ mod tests {
         (name.to_string(), comm, ver)
     }
 
-    fn write_stub(path: &Path, points: Vec<(String, PlcImportBridgeV1PointComm, PlcImportBridgeV1PointVerification)>) {
+    fn write_stub(
+        path: &Path,
+        points: Vec<(
+            String,
+            PlcImportBridgeV1PointComm,
+            PlcImportBridgeV1PointVerification,
+        )>,
+    ) {
         let now = Utc::now();
         let stub = ImportResultStubV1 {
             schema_version: SCHEMA_VERSION_V1,
@@ -744,10 +798,12 @@ mod tests {
             source_bridge_digest: "sha256:deadbeef".to_string(),
             points: points
                 .into_iter()
-                .map(|(name, comm, verification)| crate::comm::bridge_plc_import::PlcImportBridgeV1Point {
-                    name,
-                    comm,
-                    verification,
+                .map(|(name, comm, verification)| {
+                    crate::comm::bridge_plc_import::PlcImportBridgeV1Point {
+                        name,
+                        comm,
+                        verification,
+                    }
                 })
                 .collect(),
             device_groups: Vec::new(),
@@ -807,7 +863,10 @@ mod tests {
 
         let dir = std::env::temp_dir().join(format!("plc-codeforge-merge-out-{}", Uuid::new_v4()));
         let stub_path = dir.join("import_result_stub.v1.json");
-        write_stub(&stub_path, vec![stub_point("P1", "tcp-1"), stub_point("EXTRA", "tcp-1")]);
+        write_stub(
+            &stub_path,
+            vec![stub_point("P1", "tcp-1"), stub_point("EXTRA", "tcp-1")],
+        );
 
         let out_path = dir.join("unified_import.v1.json");
         let report_path = dir.join("merge_report.v1.json");
@@ -837,7 +896,8 @@ mod tests {
             ],
         );
 
-        let dir = std::env::temp_dir().join(format!("plc-codeforge-consistency-{}", Uuid::new_v4()));
+        let dir =
+            std::env::temp_dir().join(format!("plc-codeforge-consistency-{}", Uuid::new_v4()));
         let stub_path = dir.join("import_result_stub.v1.json");
         write_stub(
             &stub_path,
@@ -846,7 +906,8 @@ mod tests {
 
         let unified_path = dir.join("unified_import.v1.json");
         let report_path = dir.join("merge_report.v1.json");
-        let merged = merge_import_sources_v1(&xlsx, &stub_path, &unified_path, &report_path).unwrap();
+        let merged =
+            merge_import_sources_v1(&xlsx, &stub_path, &unified_path, &report_path).unwrap();
         assert_eq!(merged.summary.matched, 2);
 
         let plc_stub_path = dir.join("plc_import.v1.json");

@@ -254,4 +254,3 @@ mod tests {
         assert_eq!(bool_value, DecodedValue::Bool(true));
     }
 }
-

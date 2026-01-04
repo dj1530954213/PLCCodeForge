@@ -65,6 +65,9 @@ impl CommDriver for ModbusRtuDriver {
                         .await
                         .map_err(|e| DriverError::Comm {
                             message: e.to_string(),
+                        })?
+                        .map_err(|e| DriverError::Comm {
+                            message: format!("modbus exception: {e}"),
                         })?;
                     Ok(RawReadData::Registers(data))
                 }
@@ -74,6 +77,9 @@ impl CommDriver for ModbusRtuDriver {
                         .await
                         .map_err(|e| DriverError::Comm {
                             message: e.to_string(),
+                        })?
+                        .map_err(|e| DriverError::Comm {
+                            message: format!("modbus exception: {e}"),
                         })?;
                     Ok(RawReadData::Registers(data))
                 }
@@ -83,6 +89,9 @@ impl CommDriver for ModbusRtuDriver {
                         .await
                         .map_err(|e| DriverError::Comm {
                             message: e.to_string(),
+                        })?
+                        .map_err(|e| DriverError::Comm {
+                            message: format!("modbus exception: {e}"),
                         })?;
                     Ok(RawReadData::Coils(data))
                 }
@@ -92,6 +101,9 @@ impl CommDriver for ModbusRtuDriver {
                         .await
                         .map_err(|e| DriverError::Comm {
                             message: e.to_string(),
+                        })?
+                        .map_err(|e| DriverError::Comm {
+                            message: format!("modbus exception: {e}"),
                         })?;
                     Ok(RawReadData::Coils(data))
                 }
@@ -146,7 +158,10 @@ mod tests {
             Ok(v) => v,
             Err(_) => return,
         };
-        let baud: u32 = match env::var("COMM_IT_RTU_BAUD").ok().and_then(|v| v.parse().ok()) {
+        let baud: u32 = match env::var("COMM_IT_RTU_BAUD")
+            .ok()
+            .and_then(|v| v.parse().ok())
+        {
             Some(v) => v,
             None => return,
         };
@@ -156,15 +171,24 @@ mod tests {
             Some("Odd") => SerialParity::Odd,
             _ => return,
         };
-        let data_bits: u8 = match env::var("COMM_IT_RTU_DATABITS").ok().and_then(|v| v.parse().ok()) {
+        let data_bits: u8 = match env::var("COMM_IT_RTU_DATABITS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+        {
             Some(v) => v,
             None => return,
         };
-        let stop_bits: u8 = match env::var("COMM_IT_RTU_STOPBITS").ok().and_then(|v| v.parse().ok()) {
+        let stop_bits: u8 = match env::var("COMM_IT_RTU_STOPBITS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+        {
             Some(v) => v,
             None => return,
         };
-        let slave_id: u8 = match env::var("COMM_IT_RTU_SLAVEID").ok().and_then(|v| v.parse().ok()) {
+        let slave_id: u8 = match env::var("COMM_IT_RTU_SLAVEID")
+            .ok()
+            .and_then(|v| v.parse().ok())
+        {
             Some(v) => v,
             None => return,
         };
@@ -197,4 +221,3 @@ mod tests {
         assert!(matches!(raw, Ok(RawReadData::Registers(_))));
     }
 }
-

@@ -9,8 +9,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use serde_json::{json, Value as JsonValue};
 
-use super::model::{CommWarning, ConnectionProfile, PointsV1, ProfilesV1};
-use super::union_spec_v1;
+use crate::comm::core::model::{CommWarning, ConnectionProfile, PointsV1, ProfilesV1};
+use crate::comm::core::union_spec_v1;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnionXlsxColumnsInfo {
@@ -20,7 +20,8 @@ pub struct UnionXlsxColumnsInfo {
 }
 
 pub fn columns_info_from_detected(detected_columns: &[String]) -> UnionXlsxColumnsInfo {
-    let set: std::collections::HashSet<&str> = detected_columns.iter().map(|s| s.as_str()).collect();
+    let set: std::collections::HashSet<&str> =
+        detected_columns.iter().map(|s| s.as_str()).collect();
 
     let mut parsed: Vec<String> = Vec::new();
     for c in union_spec_v1::REQUIRED_COLUMNS_V1 {
@@ -71,67 +72,68 @@ pub fn build_device_groups(points: &PointsV1, profiles: &ProfilesV1) -> Vec<Json
 
     let mut groups: Vec<JsonValue> = Vec::new();
     for profile in &profiles.profiles {
-        let (protocol_type, channel_name, device_id, read_area, start_address, length, conn) = match profile {
-            ConnectionProfile::Tcp {
-                channel_name,
-                device_id,
-                read_area,
-                start_address,
-                length,
-                ip,
-                port,
-                timeout_ms,
-                retry_count,
-                poll_interval_ms,
-            } => (
-                "TCP",
-                channel_name.clone(),
-                *device_id,
-                format!("{read_area:?}"),
-                *start_address,
-                *length,
-                json!({
-                    "tcp": { "ip": ip, "port": port },
-                    "timeoutMs": timeout_ms,
-                    "retryCount": retry_count,
-                    "pollIntervalMs": poll_interval_ms,
-                }),
-            ),
-            ConnectionProfile::Rtu485 {
-                channel_name,
-                device_id,
-                read_area,
-                start_address,
-                length,
-                serial_port,
-                baud_rate,
-                parity,
-                data_bits,
-                stop_bits,
-                timeout_ms,
-                retry_count,
-                poll_interval_ms,
-            } => (
-                "485",
-                channel_name.clone(),
-                *device_id,
-                format!("{read_area:?}"),
-                *start_address,
-                *length,
-                json!({
-                    "rtu485": {
-                        "serialPort": serial_port,
-                        "baudRate": baud_rate,
-                        "parity": format!("{parity:?}"),
-                        "dataBits": data_bits,
-                        "stopBits": stop_bits,
-                    },
-                    "timeoutMs": timeout_ms,
-                    "retryCount": retry_count,
-                    "pollIntervalMs": poll_interval_ms,
-                }),
-            ),
-        };
+        let (protocol_type, channel_name, device_id, read_area, start_address, length, conn) =
+            match profile {
+                ConnectionProfile::Tcp {
+                    channel_name,
+                    device_id,
+                    read_area,
+                    start_address,
+                    length,
+                    ip,
+                    port,
+                    timeout_ms,
+                    retry_count,
+                    poll_interval_ms,
+                } => (
+                    "TCP",
+                    channel_name.clone(),
+                    *device_id,
+                    format!("{read_area:?}"),
+                    *start_address,
+                    *length,
+                    json!({
+                        "tcp": { "ip": ip, "port": port },
+                        "timeoutMs": timeout_ms,
+                        "retryCount": retry_count,
+                        "pollIntervalMs": poll_interval_ms,
+                    }),
+                ),
+                ConnectionProfile::Rtu485 {
+                    channel_name,
+                    device_id,
+                    read_area,
+                    start_address,
+                    length,
+                    serial_port,
+                    baud_rate,
+                    parity,
+                    data_bits,
+                    stop_bits,
+                    timeout_ms,
+                    retry_count,
+                    poll_interval_ms,
+                } => (
+                    "485",
+                    channel_name.clone(),
+                    *device_id,
+                    format!("{read_area:?}"),
+                    *start_address,
+                    *length,
+                    json!({
+                        "rtu485": {
+                            "serialPort": serial_port,
+                            "baudRate": baud_rate,
+                            "parity": format!("{parity:?}"),
+                            "dataBits": data_bits,
+                            "stopBits": stop_bits,
+                        },
+                        "timeoutMs": timeout_ms,
+                        "retryCount": retry_count,
+                        "pollIntervalMs": poll_interval_ms,
+                    }),
+                ),
+            };
 
         let points_list = points_by_channel
             .get(channel_name.as_str())
@@ -153,10 +155,7 @@ pub fn build_device_groups(points: &PointsV1, profiles: &ProfilesV1) -> Vec<Json
     groups
 }
 
-pub fn build_hardware_snapshot(
-    profiles: &ProfilesV1,
-    columns: &UnionXlsxColumnsInfo,
-) -> JsonValue {
+pub fn build_hardware_snapshot(profiles: &ProfilesV1, columns: &UnionXlsxColumnsInfo) -> JsonValue {
     // MVP：当前模块仅能从联合表中解析“通讯相关字段”；
     // deviceGroups/hardware 结构为“可扩展的通用 JSON”，便于 UIA/PLC Generator 后续合并消费。
     let mut protocols: BTreeMap<String, u32> = BTreeMap::new();

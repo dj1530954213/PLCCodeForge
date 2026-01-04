@@ -35,16 +35,19 @@ impl CommDriver for ModbusTcpDriver {
                 }
             };
 
-            let socket_addr = format!("{ip}:{port}").parse().map_err(|e| DriverError::Comm {
-                message: format!("invalid socket addr: {e}"),
-            })?;
+            let socket_addr = format!("{ip}:{port}")
+                .parse()
+                .map_err(|e| DriverError::Comm {
+                    message: format!("invalid socket addr: {e}"),
+                })?;
 
             let slave = Slave(unit_id);
-            let mut ctx = tcp::connect_slave(socket_addr, slave)
-                .await
-                .map_err(|e| DriverError::Comm {
-                    message: e.to_string(),
-                })?;
+            let mut ctx =
+                tcp::connect_slave(socket_addr, slave)
+                    .await
+                    .map_err(|e| DriverError::Comm {
+                        message: e.to_string(),
+                    })?;
 
             match job.read_area {
                 RegisterArea::Holding => {
@@ -53,6 +56,9 @@ impl CommDriver for ModbusTcpDriver {
                         .await
                         .map_err(|e| DriverError::Comm {
                             message: e.to_string(),
+                        })?
+                        .map_err(|e| DriverError::Comm {
+                            message: format!("modbus exception: {e}"),
                         })?;
                     Ok(RawReadData::Registers(data))
                 }
@@ -62,6 +68,9 @@ impl CommDriver for ModbusTcpDriver {
                         .await
                         .map_err(|e| DriverError::Comm {
                             message: e.to_string(),
+                        })?
+                        .map_err(|e| DriverError::Comm {
+                            message: format!("modbus exception: {e}"),
                         })?;
                     Ok(RawReadData::Registers(data))
                 }
@@ -71,6 +80,9 @@ impl CommDriver for ModbusTcpDriver {
                         .await
                         .map_err(|e| DriverError::Comm {
                             message: e.to_string(),
+                        })?
+                        .map_err(|e| DriverError::Comm {
+                            message: format!("modbus exception: {e}"),
                         })?;
                     Ok(RawReadData::Coils(data))
                 }
@@ -80,6 +92,9 @@ impl CommDriver for ModbusTcpDriver {
                         .await
                         .map_err(|e| DriverError::Comm {
                             message: e.to_string(),
+                        })?
+                        .map_err(|e| DriverError::Comm {
+                            message: format!("modbus exception: {e}"),
                         })?;
                     Ok(RawReadData::Coils(data))
                 }
@@ -106,11 +121,17 @@ mod tests {
             Ok(v) => v,
             Err(_) => return,
         };
-        let port: u16 = match env::var("COMM_IT_TCP_PORT").ok().and_then(|v| v.parse().ok()) {
+        let port: u16 = match env::var("COMM_IT_TCP_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+        {
             Some(v) => v,
             None => return,
         };
-        let unit_id: u8 = match env::var("COMM_IT_TCP_UNITID").ok().and_then(|v| v.parse().ok()) {
+        let unit_id: u8 = match env::var("COMM_IT_TCP_UNITID")
+            .ok()
+            .and_then(|v| v.parse().ok())
+        {
             Some(v) => v,
             None => return,
         };
@@ -140,4 +161,3 @@ mod tests {
         assert!(matches!(raw, Ok(RawReadData::Registers(_))));
     }
 }
-

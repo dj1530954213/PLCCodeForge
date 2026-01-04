@@ -13,10 +13,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 
-use super::bridge_plc_import::{PlcImportBridgeV1PointComm, PlcImportBridgeV1PointVerification};
-use super::error::{UnifiedPlcImportStubError, UnifiedPlcImportStubErrorDetails, UnifiedPlcImportStubErrorKind};
-use super::merge_unified_import::{UnifiedImportV1, UnifiedImportV1PointDesign, UNIFIED_IMPORT_SPEC_VERSION_V1};
-use super::model::{RegisterArea, SCHEMA_VERSION_V1};
+use crate::comm::core::model::{RegisterArea, SCHEMA_VERSION_V1};
+use crate::comm::error::{
+    UnifiedPlcImportStubError, UnifiedPlcImportStubErrorDetails, UnifiedPlcImportStubErrorKind,
+};
+use crate::comm::usecase::bridge::bridge_plc_import::{
+    PlcImportBridgeV1PointComm, PlcImportBridgeV1PointVerification,
+};
+use crate::comm::usecase::merge_unified_import::{
+    UnifiedImportV1, UnifiedImportV1PointDesign, UNIFIED_IMPORT_SPEC_VERSION_V1,
+};
 
 pub const PLC_IMPORT_STUB_SPEC_VERSION_V1: &str = "v1";
 
@@ -95,11 +101,17 @@ fn write_text_atomic(path: &Path, text: &str) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn validate_unified(unified_path: &Path, unified: &UnifiedImportV1) -> Result<(), UnifiedPlcImportStubError> {
+fn validate_unified(
+    unified_path: &Path,
+    unified: &UnifiedImportV1,
+) -> Result<(), UnifiedPlcImportStubError> {
     if unified.schema_version != SCHEMA_VERSION_V1 {
         return Err(UnifiedPlcImportStubError {
             kind: UnifiedPlcImportStubErrorKind::UnifiedImportUnsupportedSchemaVersion,
-            message: format!("unsupported UnifiedImport schemaVersion: {}", unified.schema_version),
+            message: format!(
+                "unsupported UnifiedImport schemaVersion: {}",
+                unified.schema_version
+            ),
             details: Some(UnifiedPlcImportStubErrorDetails {
                 unified_import_path: Some(unified_path.to_string_lossy().to_string()),
                 schema_version: Some(unified.schema_version),
@@ -111,7 +123,10 @@ fn validate_unified(unified_path: &Path, unified: &UnifiedImportV1) -> Result<()
     if unified.spec_version != UNIFIED_IMPORT_SPEC_VERSION_V1 {
         return Err(UnifiedPlcImportStubError {
             kind: UnifiedPlcImportStubErrorKind::UnifiedImportUnsupportedSpecVersion,
-            message: format!("unsupported UnifiedImport specVersion: {}", unified.spec_version),
+            message: format!(
+                "unsupported UnifiedImport specVersion: {}",
+                unified.spec_version
+            ),
             details: Some(UnifiedPlcImportStubErrorDetails {
                 unified_import_path: Some(unified_path.to_string_lossy().to_string()),
                 schema_version: Some(unified.schema_version),
@@ -155,7 +170,8 @@ fn validate_unified(unified_path: &Path, unified: &UnifiedImportV1) -> Result<()
                 Some(RegisterArea::Input) => {
                     return Err(UnifiedPlcImportStubError {
                         kind: UnifiedPlcImportStubErrorKind::UnifiedImportValidationError,
-                        message: "readArea=Input is not supported in plc_import_stub.v1 (MVP)".to_string(),
+                        message: "readArea=Input is not supported in plc_import_stub.v1 (MVP)"
+                            .to_string(),
                         details: Some(UnifiedPlcImportStubErrorDetails {
                             unified_import_path: Some(unified_path.to_string_lossy().to_string()),
                             name: Some(name.to_string()),
@@ -169,7 +185,8 @@ fn validate_unified(unified_path: &Path, unified: &UnifiedImportV1) -> Result<()
                 Some(RegisterArea::Discrete) => {
                     return Err(UnifiedPlcImportStubError {
                         kind: UnifiedPlcImportStubErrorKind::UnifiedImportValidationError,
-                        message: "readArea=Discrete is not supported in plc_import_stub.v1 (MVP)".to_string(),
+                        message: "readArea=Discrete is not supported in plc_import_stub.v1 (MVP)"
+                            .to_string(),
                         details: Some(UnifiedPlcImportStubErrorDetails {
                             unified_import_path: Some(unified_path.to_string_lossy().to_string()),
                             name: Some(name.to_string()),
@@ -191,24 +208,26 @@ pub fn export_plc_import_stub_v1(
     unified_import_path: &Path,
     out_path: &Path,
 ) -> Result<PlcImportStubExportOutcome, UnifiedPlcImportStubError> {
-    let unified_text = std::fs::read_to_string(unified_import_path).map_err(|e| UnifiedPlcImportStubError {
-        kind: UnifiedPlcImportStubErrorKind::UnifiedImportReadError,
-        message: e.to_string(),
-        details: Some(UnifiedPlcImportStubErrorDetails {
-            unified_import_path: Some(unified_import_path.to_string_lossy().to_string()),
-            ..Default::default()
-        }),
-    })?;
+    let unified_text =
+        std::fs::read_to_string(unified_import_path).map_err(|e| UnifiedPlcImportStubError {
+            kind: UnifiedPlcImportStubErrorKind::UnifiedImportReadError,
+            message: e.to_string(),
+            details: Some(UnifiedPlcImportStubErrorDetails {
+                unified_import_path: Some(unified_import_path.to_string_lossy().to_string()),
+                ..Default::default()
+            }),
+        })?;
     let unified_digest = sha256_prefixed_bytes(unified_text.as_bytes());
 
-    let unified: UnifiedImportV1 = serde_json::from_str(&unified_text).map_err(|e| UnifiedPlcImportStubError {
-        kind: UnifiedPlcImportStubErrorKind::UnifiedImportDeserializeError,
-        message: e.to_string(),
-        details: Some(UnifiedPlcImportStubErrorDetails {
-            unified_import_path: Some(unified_import_path.to_string_lossy().to_string()),
-            ..Default::default()
-        }),
-    })?;
+    let unified: UnifiedImportV1 =
+        serde_json::from_str(&unified_text).map_err(|e| UnifiedPlcImportStubError {
+            kind: UnifiedPlcImportStubErrorKind::UnifiedImportDeserializeError,
+            message: e.to_string(),
+            details: Some(UnifiedPlcImportStubErrorDetails {
+                unified_import_path: Some(unified_import_path.to_string_lossy().to_string()),
+                ..Default::default()
+            }),
+        })?;
     validate_unified(unified_import_path, &unified)?;
 
     let mut comm_covered = 0u32;
@@ -283,11 +302,12 @@ pub fn export_plc_import_stub_v1(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::comm::export_ir::CommIrV1AddressSpec;
     use crate::comm::merge_unified_import::{
-        UnifiedImportV1Point, UnifiedImportV1Sources, UnifiedImportV1Source, UnifiedImportV1Statistics,
+        UnifiedImportV1Point, UnifiedImportV1Source, UnifiedImportV1Sources,
+        UnifiedImportV1Statistics,
     };
     use crate::comm::model::{ByteOrder32, DataType, Quality};
-    use crate::comm::export_ir::CommIrV1AddressSpec;
     use uuid::Uuid;
 
     #[test]
@@ -359,7 +379,11 @@ mod tests {
             },
         };
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(&unified_path, serde_json::to_string_pretty(&unified).unwrap()).unwrap();
+        std::fs::write(
+            &unified_path,
+            serde_json::to_string_pretty(&unified).unwrap(),
+        )
+        .unwrap();
 
         let outcome = export_plc_import_stub_v1(&unified_path, &out_path).unwrap();
         assert_eq!(outcome.summary.points, 2);

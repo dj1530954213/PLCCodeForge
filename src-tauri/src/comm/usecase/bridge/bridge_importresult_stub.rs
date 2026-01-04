@@ -13,8 +13,10 @@ use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 
 use super::bridge_plc_import::{PlcImportBridgeV1, PLC_IMPORT_BRIDGE_SPEC_VERSION_V1};
-use super::error::{ImportResultStubError, ImportResultStubErrorDetails, ImportResultStubErrorKind};
-use super::model::{RunStats, SCHEMA_VERSION_V1};
+use crate::comm::core::model::{RunStats, SCHEMA_VERSION_V1};
+use crate::comm::error::{
+    ImportResultStubError, ImportResultStubErrorDetails, ImportResultStubErrorKind,
+};
 
 pub const IMPORT_RESULT_STUB_SPEC_VERSION_V1: &str = "v1";
 
@@ -72,11 +74,17 @@ fn write_text_atomic(path: &Path, text: &str) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn validate_bridge_for_stub(bridge_path: &Path, bridge: &PlcImportBridgeV1) -> Result<(), ImportResultStubError> {
+fn validate_bridge_for_stub(
+    bridge_path: &Path,
+    bridge: &PlcImportBridgeV1,
+) -> Result<(), ImportResultStubError> {
     if bridge.schema_version != SCHEMA_VERSION_V1 {
         return Err(ImportResultStubError {
             kind: ImportResultStubErrorKind::PlcBridgeUnsupportedSchemaVersion,
-            message: format!("unsupported PlcImportBridge schemaVersion: {}", bridge.schema_version),
+            message: format!(
+                "unsupported PlcImportBridge schemaVersion: {}",
+                bridge.schema_version
+            ),
             details: Some(ImportResultStubErrorDetails {
                 bridge_path: Some(bridge_path.to_string_lossy().to_string()),
                 schema_version: Some(bridge.schema_version),
@@ -88,7 +96,10 @@ fn validate_bridge_for_stub(bridge_path: &Path, bridge: &PlcImportBridgeV1) -> R
     if bridge.spec_version != PLC_IMPORT_BRIDGE_SPEC_VERSION_V1 {
         return Err(ImportResultStubError {
             kind: ImportResultStubErrorKind::PlcBridgeUnsupportedSpecVersion,
-            message: format!("unsupported PlcImportBridge specVersion: {}", bridge.spec_version),
+            message: format!(
+                "unsupported PlcImportBridge specVersion: {}",
+                bridge.spec_version
+            ),
             details: Some(ImportResultStubErrorDetails {
                 bridge_path: Some(bridge_path.to_string_lossy().to_string()),
                 schema_version: Some(bridge.schema_version),
@@ -156,14 +167,15 @@ pub fn export_import_result_stub_v1(
     })?;
     let bridge_digest = sha256_prefixed_bytes(bridge_text.as_bytes());
 
-    let bridge: PlcImportBridgeV1 = serde_json::from_str(&bridge_text).map_err(|e| ImportResultStubError {
-        kind: ImportResultStubErrorKind::PlcBridgeDeserializeError,
-        message: e.to_string(),
-        details: Some(ImportResultStubErrorDetails {
-            bridge_path: Some(bridge_path.to_string_lossy().to_string()),
-            ..Default::default()
-        }),
-    })?;
+    let bridge: PlcImportBridgeV1 =
+        serde_json::from_str(&bridge_text).map_err(|e| ImportResultStubError {
+            kind: ImportResultStubErrorKind::PlcBridgeDeserializeError,
+            message: e.to_string(),
+            details: Some(ImportResultStubErrorDetails {
+                bridge_path: Some(bridge_path.to_string_lossy().to_string()),
+                ..Default::default()
+            }),
+        })?;
 
     validate_bridge_for_stub(bridge_path, &bridge)?;
 
@@ -213,9 +225,14 @@ pub fn export_import_result_stub_v1(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::comm::bridge_plc_import::{export_plc_import_bridge_v1, consume_bridge_and_write_summary};
+    use crate::comm::bridge_plc_import::{
+        consume_bridge_and_write_summary, export_plc_import_bridge_v1,
+    };
     use crate::comm::export_ir;
-    use crate::comm::model::{ByteOrder32, CommPoint, ConnectionProfile, DataType, PointsV1, ProfilesV1, Quality, RegisterArea, SampleResult};
+    use crate::comm::model::{
+        ByteOrder32, CommPoint, ConnectionProfile, DataType, PointsV1, ProfilesV1, Quality,
+        RegisterArea, SampleResult,
+    };
 
     fn make_bridge(tmp_dir: &Path) -> PathBuf {
         let profiles = ProfilesV1 {
@@ -268,18 +285,25 @@ mod tests {
         )
         .unwrap();
 
-        let bridge_path = tmp_dir.join("bridge").join("plc_import_bridge.v1.test.json");
+        let bridge_path = tmp_dir
+            .join("bridge")
+            .join("plc_import_bridge.v1.test.json");
         export_plc_import_bridge_v1(&ir_outcome.ir_path, &bridge_path).unwrap();
 
         // 额外调用一次 consumer，确保与 TASK-34 的链路相容（不作为断言重点）
-        let _ = consume_bridge_and_write_summary(&bridge_path, &tmp_dir.join("bridge_check").join("t1")).unwrap();
+        let _ = consume_bridge_and_write_summary(
+            &bridge_path,
+            &tmp_dir.join("bridge_check").join("t1"),
+        )
+        .unwrap();
 
         bridge_path
     }
 
     #[test]
     fn export_stub_writes_file_and_has_required_sections() {
-        let base = std::env::temp_dir().join(format!("plc-codeforge-stub-{}", uuid::Uuid::new_v4()));
+        let base =
+            std::env::temp_dir().join(format!("plc-codeforge-stub-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&base).unwrap();
         let bridge_path = make_bridge(&base);
 
@@ -287,7 +311,10 @@ mod tests {
         let outcome = export_import_result_stub_v1(&bridge_path, &out_path).unwrap();
 
         assert!(outcome.out_path.exists());
-        assert!(outcome.summary.import_result_stub_digest.starts_with("sha256:"));
+        assert!(outcome
+            .summary
+            .import_result_stub_digest
+            .starts_with("sha256:"));
 
         let text = std::fs::read_to_string(&outcome.out_path).unwrap();
         let json: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -301,7 +328,8 @@ mod tests {
 
     #[test]
     fn export_stub_fails_on_duplicate_name() {
-        let base = std::env::temp_dir().join(format!("plc-codeforge-stub-dup-{}", uuid::Uuid::new_v4()));
+        let base =
+            std::env::temp_dir().join(format!("plc-codeforge-stub-dup-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&base).unwrap();
 
         let bridge = PlcImportBridgeV1 {
@@ -335,12 +363,13 @@ mod tests {
                         scale: 1.0,
                         rw: "R".to_string(),
                     },
-                    verification: super::super::bridge_plc_import::PlcImportBridgeV1PointVerification {
-                        quality: Quality::Ok,
-                        value_display: "1".to_string(),
-                        timestamp: Utc::now(),
-                        message: "".to_string(),
-                    },
+                    verification:
+                        super::super::bridge_plc_import::PlcImportBridgeV1PointVerification {
+                            quality: Quality::Ok,
+                            value_display: "1".to_string(),
+                            timestamp: Utc::now(),
+                            message: "".to_string(),
+                        },
                 },
                 super::super::bridge_plc_import::PlcImportBridgeV1Point {
                     name: "DUP".to_string(),
@@ -362,12 +391,13 @@ mod tests {
                         scale: 1.0,
                         rw: "R".to_string(),
                     },
-                    verification: super::super::bridge_plc_import::PlcImportBridgeV1PointVerification {
-                        quality: Quality::Ok,
-                        value_display: "2".to_string(),
-                        timestamp: Utc::now(),
-                        message: "".to_string(),
-                    },
+                    verification:
+                        super::super::bridge_plc_import::PlcImportBridgeV1PointVerification {
+                            quality: Quality::Ok,
+                            value_display: "2".to_string(),
+                            timestamp: Utc::now(),
+                            message: "".to_string(),
+                        },
                 },
             ],
             statistics: RunStats {
@@ -384,7 +414,10 @@ mod tests {
         std::fs::write(&bridge_path, serde_json::to_string_pretty(&bridge).unwrap()).unwrap();
         let out_path = base.join("stub.json");
         let err = export_import_result_stub_v1(&bridge_path, &out_path).unwrap_err();
-        assert_eq!(err.kind, ImportResultStubErrorKind::ImportResultStubValidationError);
+        assert_eq!(
+            err.kind,
+            ImportResultStubErrorKind::ImportResultStubValidationError
+        );
         assert!(err.message.contains("duplicate"));
         assert_eq!(
             err.details.as_ref().and_then(|d| d.name.as_deref()),

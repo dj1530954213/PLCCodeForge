@@ -5,14 +5,14 @@
 //! - 485通讯地址表（5列）
 //! - 通讯参数（14列）
 
-use std::path::Path;
 use std::collections::HashMap;
+use std::path::Path;
 use std::time::Instant;
 
 use rust_xlsxwriter::{Format, Workbook, XlsxError};
 use thiserror::Error;
 
-use super::model::{
+use crate::comm::core::model::{
     ByteOrder32, CommExportDiagnostics, CommPoint, CommWarning, ConnectionProfile, DataType,
     ExportedRows, RegisterArea, SerialParity,
 };
@@ -202,8 +202,16 @@ pub fn export_comm_address_xlsx(
     }
 
     // 确定性排序：按 points 原始顺序；tie-break 用 pointKey。
-    tcp_rows.sort_by(|a, b| a.index.cmp(&b.index).then_with(|| a.point_key.cmp(&b.point_key)));
-    rtu_rows.sort_by(|a, b| a.index.cmp(&b.index).then_with(|| a.point_key.cmp(&b.point_key)));
+    tcp_rows.sort_by(|a, b| {
+        a.index
+            .cmp(&b.index)
+            .then_with(|| a.point_key.cmp(&b.point_key))
+    });
+    rtu_rows.sort_by(|a, b| {
+        a.index
+            .cmp(&b.index)
+            .then_with(|| a.point_key.cmp(&b.point_key))
+    });
 
     let mut workbook = Workbook::new();
 
@@ -220,7 +228,11 @@ pub fn export_comm_address_xlsx(
             tcp_sheet.write_string(row, 1, &seed.data_type)?;
             tcp_sheet.write_string(row, 2, &seed.byte_order)?;
             tcp_sheet.write_string(row, 3, &seed.channel_name)?;
-            let scale = if seed.scale.is_finite() { seed.scale } else { 0.0 };
+            let scale = if seed.scale.is_finite() {
+                seed.scale
+            } else {
+                0.0
+            };
             tcp_sheet.write_number(row, 4, scale)?;
             row += 1;
         }
@@ -237,7 +249,11 @@ pub fn export_comm_address_xlsx(
             rtu_sheet.write_string(row, 1, &seed.data_type)?;
             rtu_sheet.write_string(row, 2, &seed.byte_order)?;
             rtu_sheet.write_string(row, 3, &seed.channel_name)?;
-            let scale = if seed.scale.is_finite() { seed.scale } else { 0.0 };
+            let scale = if seed.scale.is_finite() {
+                seed.scale
+            } else {
+                0.0
+            };
             rtu_sheet.write_number(row, 4, scale)?;
             row += 1;
         }
@@ -379,13 +395,13 @@ fn data_type_to_str(data_type: &DataType) -> &'static str {
     }
 }
 
-fn byte_order_to_str(byte_order: &super::model::ByteOrder32) -> &'static str {
+fn byte_order_to_str(byte_order: &ByteOrder32) -> &'static str {
     match byte_order {
-        super::model::ByteOrder32::ABCD => "ABCD",
-        super::model::ByteOrder32::BADC => "BADC",
-        super::model::ByteOrder32::CDAB => "CDAB",
-        super::model::ByteOrder32::DCBA => "DCBA",
-        super::model::ByteOrder32::Unknown => "",
+        ByteOrder32::ABCD => "ABCD",
+        ByteOrder32::BADC => "BADC",
+        ByteOrder32::CDAB => "CDAB",
+        ByteOrder32::DCBA => "DCBA",
+        ByteOrder32::Unknown => "",
     }
 }
 
@@ -449,7 +465,7 @@ mod tests {
                 point_key: Uuid::from_u128(1),
                 hmi_name: "P1".to_string(),
                 data_type: DataType::UInt16,
-                byte_order: super::super::model::ByteOrder32::ABCD,
+                byte_order: ByteOrder32::ABCD,
                 channel_name: "tcp-1".to_string(),
                 address_offset: None,
                 scale: 1.0,
@@ -458,14 +474,17 @@ mod tests {
                 point_key: Uuid::from_u128(2),
                 hmi_name: "P2".to_string(),
                 data_type: DataType::Bool,
-                byte_order: super::super::model::ByteOrder32::ABCD,
+                byte_order: ByteOrder32::ABCD,
                 channel_name: "485-1".to_string(),
                 address_offset: None,
                 scale: 1.0,
             },
         ];
 
-        let out_path = std::env::temp_dir().join(format!("PLCCodeForge-TASK-10-通讯地址表-{}.xlsx", Uuid::new_v4()));
+        let out_path = std::env::temp_dir().join(format!(
+            "PLCCodeForge-TASK-10-通讯地址表-{}.xlsx",
+            Uuid::new_v4()
+        ));
         let outcome = export_comm_address_xlsx(&out_path, &profiles, &points).unwrap();
 
         println!("outPath={}", out_path.display());
@@ -501,7 +520,7 @@ mod tests {
                 point_key: Uuid::from_u128(10),
                 hmi_name: "MISSING_CHANNEL".to_string(),
                 data_type: DataType::UInt16,
-                byte_order: super::super::model::ByteOrder32::ABCD,
+                byte_order: ByteOrder32::ABCD,
                 channel_name: "".to_string(),
                 address_offset: None,
                 scale: 1.0,
@@ -511,7 +530,7 @@ mod tests {
                 point_key: Uuid::from_u128(11),
                 hmi_name: "MISSING_PROFILE".to_string(),
                 data_type: DataType::UInt16,
-                byte_order: super::super::model::ByteOrder32::ABCD,
+                byte_order: ByteOrder32::ABCD,
                 channel_name: "tcp-missing".to_string(),
                 address_offset: None,
                 scale: 1.0,
@@ -521,7 +540,7 @@ mod tests {
                 point_key: Uuid::from_u128(12),
                 hmi_name: "UNKNOWN_TYPES".to_string(),
                 data_type: DataType::Unknown,
-                byte_order: super::super::model::ByteOrder32::Unknown,
+                byte_order: ByteOrder32::Unknown,
                 channel_name: "tcp-1".to_string(),
                 address_offset: None,
                 scale: f64::NAN,
@@ -542,7 +561,8 @@ mod tests {
 
         assert_eq!(outcome.headers, ExportHeaders::from_consts());
         assert!(warning_codes.contains(&"POINT_MISSING_CHANNEL_NAME".to_string()));
-        assert!(warning_codes.iter().any(|c| c == "POINT_MISSING_PROFILE" || c == "POINT_NO_SHEET_MATCH"));
+        assert!(warning_codes
+            .iter()
+            .any(|c| c == "POINT_MISSING_PROFILE" || c == "POINT_NO_SHEET_MATCH"));
     }
 }
-

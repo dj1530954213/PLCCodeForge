@@ -5,12 +5,12 @@ use std::pin::Pin;
 
 use thiserror::Error;
 
-use super::model::ConnectionProfile;
-use super::plan::ReadJob;
+use crate::comm::core::model::ConnectionProfile;
+use crate::comm::core::plan::ReadJob;
 
-pub mod modbus_tcp;
-pub mod modbus_rtu;
 pub mod mock;
+pub mod modbus_rtu;
+pub mod modbus_tcp;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RawReadData {
@@ -27,7 +27,8 @@ pub enum DriverError {
     Comm { message: String },
 }
 
-pub type DriverFuture<'a> = Pin<Box<dyn Future<Output = Result<RawReadData, DriverError>> + Send + 'a>>;
+pub type DriverFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<RawReadData, DriverError>> + Send + 'a>>;
 
 pub trait CommDriver: Send + Sync {
     fn read<'a>(&'a self, profile: &'a ConnectionProfile, job: &'a ReadJob) -> DriverFuture<'a>;

@@ -37,7 +37,11 @@ pub fn resolve_output_dir(base_dir: &Path) -> PathBuf {
 }
 
 pub fn ts_label(now: DateTime<Utc>) -> String {
-    format!("{}-{}", now.format("%Y%m%dT%H%M%SZ"), now.timestamp_millis())
+    format!(
+        "{}-{}",
+        now.format("%Y%m%dT%H%M%SZ"),
+        now.timestamp_millis()
+    )
 }
 
 pub fn default_delivery_xlsx_path(output_dir: &Path, now: DateTime<Utc>) -> PathBuf {

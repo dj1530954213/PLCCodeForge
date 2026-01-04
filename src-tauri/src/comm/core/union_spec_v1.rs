@@ -39,7 +39,8 @@ pub const OPTIONAL_COLUMNS_V1: [&str; 14] = [
 ];
 
 pub const ALLOWED_PROTOCOLS_V1: [&str; 2] = ["TCP", "485"];
-pub const ALLOWED_DATATYPES_V1: [&str; 6] = ["Bool", "Int16", "UInt16", "Int32", "UInt32", "Float32"];
+pub const ALLOWED_DATATYPES_V1: [&str; 6] =
+    ["Bool", "Int16", "UInt16", "Int32", "UInt32", "Float32"];
 pub const ALLOWED_BYTEORDERS_V1: [&str; 4] = ["ABCD", "BADC", "CDAB", "DCBA"];
 pub const ALLOWED_READ_AREAS_V1: [&str; 4] = ["Holding", "Input", "Coil", "Discrete"];
 
@@ -119,4 +120,3 @@ mod tests {
         assert_eq!(ALLOWED_BYTEORDERS_V1, ["ABCD", "BADC", "CDAB", "DCBA"]);
     }
 }
-
