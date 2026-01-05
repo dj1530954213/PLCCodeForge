@@ -39,7 +39,7 @@ import {
 const route = useRoute();
 const projectId = computed(() => String(route.params.projectId ?? ""));
 
-const DATA_TYPES: DataType[] = ["Bool", "Int16", "UInt16", "Int32", "UInt32", "Float32"];
+const DATA_TYPES: DataType[] = ["Bool", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Float32", "Float64"];
 const BYTE_ORDERS: ByteOrder32[] = ["ABCD", "BADC", "CDAB", "DCBA"];
 
 type RunUiState = "idle" | "starting" | "running" | "stopping" | "error";

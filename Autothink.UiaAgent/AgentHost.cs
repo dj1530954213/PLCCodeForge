@@ -33,6 +33,15 @@ internal static class AgentHost
 
         try
         {
+            // 诊断信息写 stderr，便于确认运行的是哪个版本以及支持哪些动作。
+            string version = typeof(AgentHost).Assembly.GetName().Version?.ToString() ?? "unknown";
+            string assemblyPath = typeof(AgentHost).Assembly.Location;
+            DateTimeOffset buildTimeUtc = File.Exists(assemblyPath)
+                ? File.GetLastWriteTimeUtc(assemblyPath)
+                : DateTimeOffset.UtcNow;
+            Console.Error.WriteLine($"[Agent] Version={version} BuildUtc={buildTimeUtc:O}");
+            Console.Error.WriteLine("[Agent] OpenImportDialogSteps actions: Click, DoubleClick, RightClick, Hover, SetText, SendKeys, WaitUntil");
+
             // sidecar 约定：Agent 启动后尽快写出 READY，让宿主确认“进程已启动且已进入监听状态”。
             // 注意：这行写到 stdout；后续 stdout 会用于 JSON-RPC 数据流，因此不能再写业务日志到 stdout。
             Console.Out.WriteLine("READY");

@@ -53,12 +53,13 @@ export function parseHumanAddress(input: string): ParseHumanAddressResult {
 }
 
 // Span (unit length) derived from dataType, for Modbus address advancement.
-// - Holding/Input: 16-bit types => 1 register; 32-bit types => 2 registers
+// - Holding/Input: 16-bit types => 1 register; 32-bit types => 2 registers; 64-bit types => 4 registers
 // - Coil/Discrete: Bool => 1 coil; others unsupported (null)
 export function spanForArea(area: RegisterArea, dataType: DataType): number | null {
   if (area === "Holding" || area === "Input") {
     if (dataType === "Int16" || dataType === "UInt16") return 1;
     if (dataType === "Int32" || dataType === "UInt32" || dataType === "Float32") return 2;
+    if (dataType === "Int64" || dataType === "UInt64" || dataType === "Float64") return 4;
     return null;
   }
   if (area === "Coil" || area === "Discrete") {
@@ -85,3 +86,88 @@ export function nextAddress(
   return { ok: true, nextHumanAddr: formatHumanAddressFrom0Based(parsed.area, parsed.start0Based + span) };
 }
 
+
+/**
+ * 智能推断下一个地址
+ * 根据上一行的地址和数据类型，自动计算下一个可用地址
+ * 遵循SRP：只负责地址推断逻辑
+ * 
+ * @param lastRowAddress 上一行的Modbus地址（人类可读格式，如"40001"）
+ * @param lastRowDataType 上一行的数据类型
+ * @param profileArea 连接配置的寄存器区域
+ * @param profileStartAddress 连接配置的起始地址（0-based）
+ * @returns 推断的下一个地址（人类可读格式）或错误信息
+ */
+export function inferNextAddress(
+  lastRowAddress: string | null | undefined,
+  lastRowDataType: DataType | null | undefined,
+  profileArea: RegisterArea,
+  profileStartAddress: number
+): string {
+  // 如果没有上一行数据，返回连接配置的起始地址
+  if (!lastRowAddress || !lastRowDataType) {
+    return formatHumanAddressFrom0Based(profileArea, profileStartAddress);
+  }
+
+  // 尝试计算下一个地址
+  const nextResult = nextAddress(lastRowAddress, lastRowDataType);
+  if (nextResult.ok) {
+    return nextResult.nextHumanAddr;
+  }
+
+  // 如果计算失败，返回连接配置的起始地址
+  return formatHumanAddressFrom0Based(profileArea, profileStartAddress);
+}
+
+/**
+ * 验证地址范围是否有效
+ * 检查批量生成的地址是否都在连接配置的范围内
+ * 遵循SRP：只负责地址范围验证
+ * 
+ * @param startAddress 起始地址（0-based）
+ * @param count 生成数量
+ * @param dataType 数据类型
+ * @param profileArea 连接配置的寄存器区域
+ * @param profileStartAddress 连接配置的起始地址（0-based）
+ * @param profileLength 连接配置的长度
+ * @returns 验证结果
+ */
+export function validateAddressRange(
+  startAddress: number,
+  count: number,
+  dataType: DataType,
+  profileArea: RegisterArea,
+  profileStartAddress: number,
+  profileLength: number
+): { ok: true } | { ok: false; message: string } {
+  // 验证数据类型与区域的兼容性
+  const span = spanForArea(profileArea, dataType);
+  if (span === null) {
+    return {
+      ok: false,
+      message: `数据类型 ${dataType} 不适用于 ${profileArea} 区域`,
+    };
+  }
+
+  // 验证起始地址是否在范围内
+  if (startAddress < profileStartAddress) {
+    return {
+      ok: false,
+      message: `起始地址 ${formatHumanAddressFrom0Based(profileArea, startAddress)} 小于连接起始地址 ${formatHumanAddressFrom0Based(profileArea, profileStartAddress)}`,
+    };
+  }
+
+  // 计算结束地址
+  const endAddress = startAddress + span * count;
+  const profileEndAddress = profileStartAddress + profileLength;
+
+  // 验证结束地址是否在范围内
+  if (endAddress > profileEndAddress) {
+    return {
+      ok: false,
+      message: `地址范围越界：结束地址 ${formatHumanAddressFrom0Based(profileArea, endAddress - 1)} 超出连接范围 ${formatHumanAddressFrom0Based(profileArea, profileEndAddress - 1)}`,
+    };
+  }
+
+  return { ok: true };
+}

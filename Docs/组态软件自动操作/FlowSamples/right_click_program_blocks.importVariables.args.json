@@ -20,55 +20,12 @@
       }
     },
     {
-      "action": "WaitUntil",
-      "searchRoot": "desktop",
-      "condition": {
-        "kind": "ElementExists",
-        "selector": {
-          "Path": [
-            {
-              "Search": "Descendants",
-              "ControlType": "Menu",
-              "NameContains": "上下文",
-              "IgnoreCase": true,
-              "NormalizeWhitespace": true,
-              "Index": 0
-            },
-            {
-              "Search": "Descendants",
-              "ControlType": "MenuItem",
-              "NameContains": "添加程序",
-              "IgnoreCase": true,
-              "NormalizeWhitespace": true,
-              "Index": 0
-            }
-          ]
-        }
-      }
+      "action": "SendKeys",
+      "keys": "DOWN"
     },
     {
-      "action": "Click",
-      "searchRoot": "desktop",
-      "selector": {
-        "Path": [
-          {
-            "Search": "Descendants",
-            "ControlType": "Menu",
-            "NameContains": "上下文",
-            "IgnoreCase": true,
-            "NormalizeWhitespace": true,
-            "Index": 0
-          },
-          {
-            "Search": "Descendants",
-            "ControlType": "MenuItem",
-            "NameContains": "添加程序",
-            "IgnoreCase": true,
-            "NormalizeWhitespace": true,
-            "Index": 0
-          }
-        ]
-      }
+      "action": "SendKeys",
+      "keys": "ENTER"
     },
     {
       "action": "WaitUntil",

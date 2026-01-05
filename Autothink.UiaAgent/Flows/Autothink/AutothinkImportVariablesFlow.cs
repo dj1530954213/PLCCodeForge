@@ -21,6 +21,7 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
     private const string StepActionClick = "Click";
     private const string StepActionDoubleClick = "DoubleClick";
     private const string StepActionRightClick = "RightClick";
+    private const string StepActionHover = "Hover";
     private const string StepActionSetText = "SetText";
     private const string StepActionSendKeys = "SendKeys";
     private const string StepActionWaitUntil = "WaitUntil";
@@ -463,6 +464,15 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
                 case StepActionRightClick:
                     element.RightClick();
                     break;
+                case StepActionHover:
+                    if (!TryHoverElement(element, out RpcError? hoverError))
+                    {
+                        error = hoverError ?? new RpcError { Kind = RpcErrorKinds.ActionError, Message = "Hover failed" };
+                        context.MarkFailure(step, error);
+                        return false;
+                    }
+
+                    break;
                 case StepActionSetText:
                     string text = stepAction.Text ?? string.Empty;
                     string mode = string.IsNullOrWhiteSpace(stepAction.Mode) ? SetTextModes.Replace : stepAction.Mode!;
@@ -750,6 +760,11 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
             return StepActionRightClick;
         }
 
+        if (string.Equals(action, StepActionHover, StringComparison.OrdinalIgnoreCase))
+        {
+            return StepActionHover;
+        }
+
         if (string.Equals(action, StepActionSetText, StringComparison.OrdinalIgnoreCase))
         {
             return StepActionSetText;
@@ -766,6 +781,28 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
         }
 
         return null;
+    }
+
+    private static bool TryHoverElement(AutomationElement element, out RpcError? error)
+    {
+        error = null;
+
+        try
+        {
+            if (!element.TryGetClickablePoint(out System.Drawing.Point point))
+            {
+                error = new RpcError { Kind = RpcErrorKinds.ActionError, Message = "Hover failed: no clickable point" };
+                return false;
+            }
+
+            Mouse.MoveTo(point);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = CreateError(RpcErrorKinds.ActionError, "Hover failed", ex);
+            return false;
+        }
     }
 
     private static string? NormalizeSearchRoot(string? value)
@@ -1150,7 +1187,12 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
                 string? actionKind = NormalizeActionKind(step.Action);
                 if (actionKind is null)
                 {
-                    error = new RpcError { Kind = RpcErrorKinds.InvalidArgument, Message = "OpenImportDialogSteps action must be provided" };
+                    string received = step.Action ?? string.Empty;
+                    error = new RpcError
+                    {
+                        Kind = RpcErrorKinds.InvalidArgument,
+                        Message = $"OpenImportDialogSteps action is not supported: '{received}'",
+                    };
                     return false;
                 }
 

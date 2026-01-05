@@ -16,7 +16,7 @@
     "programBlocksAddProgramMenuItem": {
       "Path": [
         {
-          "Search": "Descendants",
+          "Search": "Children",
           "ControlType": "Menu",
           "NameContains": "上下文",
           "IgnoreCase": true,
@@ -24,7 +24,7 @@
           "Index": 0
         },
         {
-          "Search": "Descendants",
+          "Search": "Children",
           "ControlType": "MenuItem",
           "NameContains": "添加程序",
           "IgnoreCase": true,
@@ -36,7 +36,7 @@
     "programBlocksContextMenuRoot": {
       "Path": [
         {
-          "Search": "Descendants",
+          "Search": "Children",
           "ControlType": "Menu",
           "NameContains": "上下文",
           "IgnoreCase": true,
