@@ -1,3 +1,6 @@
+// 说明:
+// - RPC 统一返回封装：包含 Ok/Error/StepLog。
+// - 上层只需判断 Ok 即可，详细证据在 StepLog 中。
 namespace Autothink.UiaAgent.Rpc.Contracts;
 
 /// <summary>

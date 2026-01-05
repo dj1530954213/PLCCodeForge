@@ -1,0 +1,140 @@
+{
+  "filePath": "C:\\\\temp\\\\dummy.xlsx",
+  "searchRoot": "mainWindow",
+  "findTimeoutMs": 3000,
+  "waitTimeoutMs": 3000,
+  "openImportDialogSteps": [
+    {
+      "action": "RightClick",
+      "selector": {
+        "Path": [
+          {
+            "Search": "Descendants",
+            "ControlType": "TreeItem",
+            "NameContains": "程序块",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          }
+        ]
+      }
+    },
+    {
+      "action": "WaitUntil",
+      "searchRoot": "desktop",
+      "condition": {
+        "kind": "ElementExists",
+        "selector": {
+          "Path": [
+            {
+              "Search": "Descendants",
+              "ControlType": "Menu",
+              "NameContains": "上下文",
+              "IgnoreCase": true,
+              "NormalizeWhitespace": true,
+              "Index": 0
+            },
+            {
+              "Search": "Descendants",
+              "ControlType": "MenuItem",
+              "NameContains": "添加程序",
+              "IgnoreCase": true,
+              "NormalizeWhitespace": true,
+              "Index": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "action": "Click",
+      "searchRoot": "desktop",
+      "selector": {
+        "Path": [
+          {
+            "Search": "Descendants",
+            "ControlType": "Menu",
+            "NameContains": "上下文",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          },
+          {
+            "Search": "Descendants",
+            "ControlType": "MenuItem",
+            "NameContains": "添加程序",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          }
+        ]
+      }
+    },
+    {
+      "action": "WaitUntil",
+      "condition": {
+        "kind": "ElementExists",
+        "selector": {
+          "Path": [
+            {
+              "Search": "Descendants",
+              "ControlType": "RadioButton",
+              "NameContains": "结构化文本",
+              "IgnoreCase": true,
+              "NormalizeWhitespace": true,
+              "Index": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "action": "Click",
+      "selector": {
+        "Path": [
+          {
+            "Search": "Descendants",
+            "ControlType": "RadioButton",
+            "NameContains": "结构化文本",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          }
+        ]
+      }
+    }
+  ],
+  "filePathEditorSelector": {
+    "Path": [
+      {
+        "Search": "Descendants",
+        "ControlType": "Edit",
+        "NameContains": "__missing__",
+        "Index": 0
+      }
+    ]
+  },
+  "confirmButtonSelector": {
+    "Path": [
+      {
+        "Search": "Descendants",
+        "ControlType": "Button",
+        "NameContains": "__missing__",
+        "Index": 0
+      }
+    ]
+  },
+  "completedCondition": {
+    "kind": "ElementExists",
+    "selector": {
+      "Path": [
+        {
+          "Search": "Descendants",
+          "ControlType": "Text",
+          "NameContains": "__missing__",
+          "Index": 0
+        }
+      ]
+    }
+  }
+}

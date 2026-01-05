@@ -1,9 +1,15 @@
+// 说明:
+// - WinFormsHarness 内部的 Agent 进程管理器。
+// - 负责启动 sidecar、完成 READY 握手、建立 JSON-RPC 通道并转发 stderr 日志。
 using System.Diagnostics;
 using System.Text;
 using StreamJsonRpc;
 
 namespace Autothink.UiaAgent.WinFormsHarness;
 
+/// <summary>
+/// 负责与 UiaAgent 进程建立 RPC 通道的轻量客户端。
+/// </summary>
 internal sealed class AgentRpcClient : IAsyncDisposable
 {
     private Process? process;

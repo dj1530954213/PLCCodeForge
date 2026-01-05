@@ -1,3 +1,6 @@
+// 说明:
+// - FlowDispatcher 负责 RunFlow 的核心分发逻辑与错误语义封装。
+// - 保证 Unknown/NotImplemented 的区分，并统一将异常转为 ActionError。
 using System.Text.Json;
 using Autothink.UiaAgent.Rpc.Contracts;
 

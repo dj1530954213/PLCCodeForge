@@ -1,5 +1,11 @@
+// 说明:
+// - DemoTarget 主窗体：模拟真实组态软件的核心交互（导入变量/导入程序/编译）。
+// - 控件的 Name/AccessibleName 设计为稳定的 AutomationId，便于 selector 回归测试。
 namespace Autothink.UiaAgent.DemoTarget;
 
+/// <summary>
+/// DemoTarget 主界面，提供可自动化的按钮/输入区作为演示目标。
+/// </summary>
 internal sealed class MainForm : Form
 {
     private Form? importDialog;

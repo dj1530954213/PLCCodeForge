@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "programBlocksTreeItem": {
+      "Path": [
+        {
+          "Search": "Descendants",
+          "ControlType": "TreeItem",
+          "NameContains": "程序块",
+          "IgnoreCase": true,
+          "NormalizeWhitespace": true,
+          "Index": 0
+        }
+      ]
+    },
+    "programBlocksAddProgramMenuItem": {
+      "Path": [
+        {
+          "Search": "Descendants",
+          "ControlType": "Menu",
+          "NameContains": "上下文",
+          "IgnoreCase": true,
+          "NormalizeWhitespace": true,
+          "Index": 0
+        },
+        {
+          "Search": "Descendants",
+          "ControlType": "MenuItem",
+          "NameContains": "添加程序",
+          "IgnoreCase": true,
+          "NormalizeWhitespace": true,
+          "Index": 0
+        }
+      ]
+    },
+    "programBlocksContextMenuRoot": {
+      "Path": [
+        {
+          "Search": "Descendants",
+          "ControlType": "Menu",
+          "NameContains": "上下文",
+          "IgnoreCase": true,
+          "NormalizeWhitespace": true,
+          "Index": 0
+        }
+      ]
+    },
+    "programTypeStructuredTextRadio": {
+      "Path": [
+        {
+          "Search": "Descendants",
+          "ControlType": "RadioButton",
+          "NameContains": "结构化文本",
+          "IgnoreCase": true,
+          "NormalizeWhitespace": true,
+          "Index": 0
+        }
+      ]
+    }
+  }
+}

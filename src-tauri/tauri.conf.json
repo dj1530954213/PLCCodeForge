@@ -5,7 +5,7 @@
   "identifier": "com.plccodeforge.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
-    "devUrl": "http://localhost:51420",
+    "devUrl": "http://localhost:61420",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },

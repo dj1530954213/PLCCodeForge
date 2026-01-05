@@ -1,3 +1,6 @@
+// 说明:
+// - Flow 层接口：以统一的 Run 入口封装组合动作，产出 StepLog 与结构化错误。
+// - 具体实现放在 Flows/Autothink 下（普通型 AUTOTHINK）。
 using System.Text.Json;
 using Autothink.UiaAgent.Rpc.Contracts;
 

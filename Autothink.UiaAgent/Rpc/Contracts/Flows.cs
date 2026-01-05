@@ -1,3 +1,6 @@
+// 说明:
+// - RunFlow 的请求/响应契约：用于流程层的统一入口。
+// - Args 以 JsonElement/ArgsJson 双通道传递，便于跨端兼容。
 using System.Text.Json;
 
 namespace Autothink.UiaAgent.Rpc.Contracts;

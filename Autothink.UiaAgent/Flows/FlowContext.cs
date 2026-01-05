@@ -1,3 +1,6 @@
+// 说明:
+// - FlowContext 将“会话、超时、StepLog”打包为 flow 执行上下文。
+// - 提供统一的 StepLog 记录与常用工具（如剪贴板写入）以简化 flow 实现。
 using Autothink.UiaAgent.Rpc.Contracts;
 using Autothink.UiaAgent.Uia;
 
@@ -50,6 +53,9 @@ internal sealed class FlowContext
         return entry;
     }
 
+    // 业务语义：
+    // - 将剪贴板写入视为“可失败但可降级”的步骤；
+    // - 失败时记录 StepLog，并由调用方决定是否 fallback 输入。
     public bool TrySetClipboardText(string? text, out RpcError? error, int? timeoutMs = null, bool warnOnFailure = false)
     {
         int effectiveTimeoutMs = timeoutMs is > 0 ? timeoutMs.Value : 2_000;

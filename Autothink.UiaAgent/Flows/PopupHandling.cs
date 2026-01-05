@@ -1,9 +1,15 @@
+// 说明:
+// - PopupHandling 提供最小弹窗收敛策略，避免流程被“提示/确认/保存对话框”打断。
+// - 该逻辑可由 Runner/Flow 配置启用，默认关闭以避免误点。
 using Autothink.UiaAgent.Rpc.Contracts;
 using Autothink.UiaAgent.Uia;
 using FlaUI.Core.AutomationElements;
 
 namespace Autothink.UiaAgent.Flows;
 
+/// <summary>
+/// 弹窗处理配置：定义查找 root、按钮选择器与策略开关。
+/// </summary>
 internal sealed class PopupHandlingOptions
 {
     public bool Enabled { get; set; }
@@ -21,6 +27,9 @@ internal sealed class PopupHandlingOptions
     public ElementSelector? CancelButtonSelector { get; set; }
 }
 
+/// <summary>
+/// 弹窗处理入口：在关键步骤前后尝试识别并关闭弹窗。
+/// </summary>
 internal static class PopupHandling
 {
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(200);

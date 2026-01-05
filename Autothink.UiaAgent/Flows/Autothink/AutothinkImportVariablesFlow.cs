@@ -1,3 +1,6 @@
+// 说明:
+// - autothink.importVariables：通过菜单/按钮打开导入对话框，填写变量文件路径并等待导入完成。
+// - 该 flow 以 selector 配置驱动，不在代码内硬编码具体 UI 文本。
 using System.Text.Json;
 using Autothink.UiaAgent.Flows;
 using Autothink.UiaAgent.Rpc.Contracts;
@@ -8,6 +11,9 @@ using FlaUI.Core.WindowsAPI;
 
 namespace Autothink.UiaAgent.Flows.Autothink;
 
+/// <summary>
+/// AUTOTHINK 变量导入流程：以“可配置 selector + 可观测等待”为主线。
+/// </summary>
 internal sealed class AutothinkImportVariablesFlow : IFlow
 {
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(200);
@@ -31,6 +37,11 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
 
         var result = new RpcResult<RunFlowResponse> { StepLog = context.StepLog };
 
+        // 业务步骤：
+        // 1) 校验参数与 selector。
+        // 2) 获取/置前主窗口（必要时处理弹窗）。
+        // 3) 打开导入对话框，填写文件路径并确认。
+        // 4) 等待导入完成的可观测条件。
         StepLogEntry validateStep = context.StartStep(stepId: "ValidateArgs", action: "Validate args");
         if (!TryParseArgs(args, out ParsedImportVariablesArgs parsed, out RpcError? parseError))
         {
@@ -244,6 +255,24 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
     {
         string stepId = index == 0 ? "OpenImportDialog" : $"OpenImportDialog.{index + 1}";
         string? actionKind = NormalizeActionKind(stepAction.Action);
+        string stepRootKind = searchRootKind;
+        AutomationElement stepRoot = searchRoot;
+        if (!string.IsNullOrWhiteSpace(stepAction.SearchRoot))
+        {
+            string? normalized = NormalizeSearchRoot(stepAction.SearchRoot);
+            if (normalized is null)
+            {
+                error = new RpcError { Kind = RpcErrorKinds.InvalidArgument, Message = "OpenImportDialogSteps searchRoot must be mainWindow/desktop" };
+                StepLogEntry invalidStep = context.StartStep(stepId: stepId, action: "Open import dialog step");
+                context.MarkFailure(invalidStep, error);
+                return false;
+            }
+
+            stepRootKind = normalized;
+            stepRoot = string.Equals(stepRootKind, SearchRootDesktop, StringComparison.OrdinalIgnoreCase)
+                ? context.Session.Automation.GetDesktop()
+                : mainWindow;
+        }
 
         StepLogEntry step = context.StartStep(
             stepId: stepId,
@@ -254,7 +283,7 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
                 ["action"] = actionKind ?? string.Empty,
             });
 
-        AddRootParameters(step.Parameters, searchRootKind);
+        AddRootParameters(step.Parameters, stepRootKind);
 
         if (actionKind is null)
         {
@@ -363,13 +392,13 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
             step.Parameters ??= new Dictionary<string, string>(StringComparer.Ordinal);
             step.Parameters["kind"] = stepAction.Condition.Kind ?? string.Empty;
             step.Parameters["timeoutMs"] = waitTimeoutMs.ToString();
-            AddRootParameters(step.Parameters, searchRootKind);
+            AddRootParameters(step.Parameters, stepRootKind);
 
             try
             {
                 AutomationElement desktop = context.Session.Automation.GetDesktop();
                 bool ok = Waiter.PollUntil(
-                    predicate: () => EvaluateWaitCondition(mainWindow, desktop, context.Session.Automation, stepAction.Condition, searchRootKind),
+                    predicate: () => EvaluateWaitCondition(mainWindow, desktop, context.Session.Automation, stepAction.Condition, stepRootKind),
                     timeout: TimeSpan.FromMilliseconds(waitTimeoutMs),
                     interval: DefaultPollInterval);
 
@@ -402,11 +431,11 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
 
         if (!TryFindElementWithSearchRoot(
                 mainWindow,
-                searchRoot,
+                stepRoot,
                 context.Session.Automation,
                 selector,
                 findTimeoutMs,
-                searchRootKind,
+                stepRootKind,
                 out AutomationElement? element,
                 out string? failureKind,
                 out Dictionary<string, string>? details) ||
@@ -419,7 +448,7 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
 
         step.Parameters ??= new Dictionary<string, string>(StringComparer.Ordinal);
         step.Parameters["timeoutMs"] = findTimeoutMs.ToString();
-        AddRootParameters(step.Parameters, searchRootKind);
+        AddRootParameters(step.Parameters, stepRootKind);
 
         try
         {
@@ -1145,6 +1174,18 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
                         return false;
                     }
                 }
+
+                if (!string.IsNullOrWhiteSpace(step.SearchRoot))
+                {
+                    string? normalized = NormalizeSearchRoot(step.SearchRoot);
+                    if (normalized is null)
+                    {
+                        error = new RpcError { Kind = RpcErrorKinds.InvalidArgument, Message = "OpenImportDialogSteps searchRoot must be mainWindow/desktop" };
+                        return false;
+                    }
+
+                    step.SearchRoot = normalized;
+                }
             }
         }
 
@@ -1256,5 +1297,7 @@ internal sealed class AutothinkImportVariablesFlow : IFlow
         public WaitCondition? Condition { get; set; }
 
         public int? TimeoutMs { get; set; }
+
+        public string? SearchRoot { get; set; }
     }
 }

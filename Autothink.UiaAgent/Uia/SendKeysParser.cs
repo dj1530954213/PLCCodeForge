@@ -1,7 +1,13 @@
+// 说明:
+// - 解析 SendKeys 文本（如 "CTRL+V"、"ENTER" 或普通文本）为统一结构，供输入动作复用。
+// - 该解析逻辑尽量简单可预测，避免引入过度复杂的键盘脚本语法。
 using FlaUI.Core.WindowsAPI;
 
 namespace Autothink.UiaAgent.Uia;
 
+/// <summary>
+/// SendKeys 解析结果：区分“组合键/单键/纯文本”三类。
+/// </summary>
 internal sealed record ParsedSendKeys
 {
     public required string Kind { get; init; }
@@ -10,6 +16,9 @@ internal sealed record ParsedSendKeys
     public string? Text { get; init; }
 }
 
+/// <summary>
+/// SendKeys 解析器表示层：将用户输入字符串转换为 UIA 可执行的键盘动作。
+/// </summary>
 internal static class SendKeysParser
 {
     public static bool TryParse(string? input, out ParsedSendKeys? parsed, out string? error)

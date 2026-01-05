@@ -1,3 +1,6 @@
+// 说明:
+// - UiaSession 表示一次与目标进程绑定的会话，承载 UIA Automation 资源与窗口访问能力。
+// - 由 UiaSessionRegistry 管理生命周期，供 RPC/Flow 层复用。
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.UIA3;

@@ -167,6 +167,71 @@ pub struct CommConfigV1 {
     pub output_dir: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommProjectV1 {
+    pub schema_version: u32,
+    pub project_id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    pub created_at_utc: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deleted_at_utc: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CommProjectUiStateV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_channel_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub points_batch_template: Option<CommPointsBatchTemplateV1>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommPointsBatchTemplateV1 {
+    pub schema_version: u32,
+    pub count: u32,
+    pub start_address_human: String,
+    pub data_type: DataType,
+    pub byte_order: ByteOrder32,
+    pub hmi_name_template: String,
+    pub scale_template: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub insert_mode: Option<String>,
+}
+
+/// Project "single source of truth" payload (v1): meta + connections + points + uiState.
+///
+/// Notes:
+/// - Top-level meta fields intentionally match `CommProjectV1` for backward compatibility.
+/// - `connections/points/uiState` are additional project-scoped data for persistence.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommProjectDataV1 {
+    pub schema_version: u32,
+    pub project_id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    pub created_at_utc: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deleted_at_utc: Option<DateTime<Utc>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connections: Option<ProfilesV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub points: Option<PointsV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_state: Option<CommProjectUiStateV1>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommWarning {

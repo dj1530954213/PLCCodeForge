@@ -1,3 +1,6 @@
+// 说明:
+// - autothink.build：触发编译按钮并等待可观测条件，输出 BuildOutcome 证据。
+// - 成功判定由 Runner/args 配置驱动，避免硬编码具体 UI 文案。
 using System.Linq;
 using System.Text.Json;
 using Autothink.UiaAgent.Flows;
@@ -7,6 +10,9 @@ using FlaUI.Core.AutomationElements;
 
 namespace Autothink.UiaAgent.Flows.Autothink;
 
+/// <summary>
+/// AUTOTHINK 构建流程：点击编译并等待完成/失败信号。
+/// </summary>
 internal sealed class AutothinkBuildFlow : IFlow
 {
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(200);
@@ -29,6 +35,11 @@ internal sealed class AutothinkBuildFlow : IFlow
 
         var result = new RpcResult<RunFlowResponse> { StepLog = context.StepLog };
 
+        // 业务步骤：
+        // 1) 校验参数与 selector。
+        // 2) 获取主窗口并（可选）处理弹窗。
+        // 3) 点击构建按钮。
+        // 4) 根据 BuildOutcome 配置等待成功/失败信号并落盘证据。
         StepLogEntry validateStep = context.StartStep(stepId: "ValidateArgs", action: "Validate args");
         if (!TryParseArgs(args, out ParsedBuildArgs parsed, out RpcError? parseError))
         {

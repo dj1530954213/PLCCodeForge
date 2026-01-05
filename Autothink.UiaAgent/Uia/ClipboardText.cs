@@ -1,8 +1,14 @@
+// 说明:
+// - ClipboardText 是早期剪贴板写入工具，提供简单重试机制。
+// - 新增的 ClipboardAdapter 会提供更细的失败分类；该类保留用于兼容与测试。
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace Autothink.UiaAgent.Uia;
 
+/// <summary>
+/// 旧版剪贴板写入辅助：基于重试与超时的最小实现。
+/// </summary>
 internal static class ClipboardText
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(2);

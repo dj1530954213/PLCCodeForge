@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::comm::core::model::{
     CommConfigV1, PointsV1, ProfilesV1, RunStats, SampleResult, SCHEMA_VERSION_V1,
@@ -14,6 +15,7 @@ pub const POINTS_FILE_NAME: &str = "points.v1.json";
 pub const PLAN_FILE_NAME: &str = "plan.v1.json";
 pub const LAST_RESULTS_FILE_NAME: &str = "last_results.v1.json";
 pub const CONFIG_FILE_NAME: &str = "config.v1.json";
+pub const RUNS_DIR_NAME: &str = "runs";
 
 #[derive(Debug, Error)]
 pub enum StorageError {
@@ -144,6 +146,41 @@ pub fn save_last_results(
 
 pub fn load_last_results(base_dir: &Path) -> Result<Option<LastResultsV1>, StorageError> {
     read_json_optional::<LastResultsV1>(base_dir.join(LAST_RESULTS_FILE_NAME)).and_then(|opt| {
+        if let Some(v) = &opt {
+            if v.schema_version != SCHEMA_VERSION_V1 {
+                return Err(StorageError::UnsupportedSchemaVersion(v.schema_version));
+            }
+        }
+        Ok(opt)
+    })
+}
+
+pub fn save_run_last_results(
+    base_dir: &Path,
+    run_id: Uuid,
+    results: &[SampleResult],
+    stats: &RunStats,
+) -> Result<(), StorageError> {
+    let payload = LastResultsV1 {
+        schema_version: SCHEMA_VERSION_V1,
+        results: results.to_vec(),
+        stats: stats.clone(),
+    };
+
+    let run_dir = base_dir.join(RUNS_DIR_NAME).join(run_id.to_string());
+    write_json_atomic(run_dir.join(LAST_RESULTS_FILE_NAME), &payload)
+}
+
+pub fn load_run_last_results(
+    base_dir: &Path,
+    run_id: Uuid,
+) -> Result<Option<LastResultsV1>, StorageError> {
+    let path = base_dir
+        .join(RUNS_DIR_NAME)
+        .join(run_id.to_string())
+        .join(LAST_RESULTS_FILE_NAME);
+
+    read_json_optional::<LastResultsV1>(path).and_then(|opt| {
         if let Some(v) = &opt {
             if v.schema_version != SCHEMA_VERSION_V1 {
                 return Err(StorageError::UnsupportedSchemaVersion(v.schema_version));

@@ -2,7 +2,10 @@
 //!
 //! MVP：支持 Holding / Input / Coil / Discrete 的读取；上层 engine 负责 timeout/retry。
 
-use super::{CommDriver, DriverError, DriverFuture, RawReadData};
+use super::{
+    CommDriver, ConnectFuture, ConnectedClient, ConnectionKey, DriverError, DriverFuture,
+    RawReadData,
+};
 use crate::comm::model::{ConnectionProfile, RegisterArea, SerialParity};
 use crate::comm::plan::ReadJob;
 
@@ -20,7 +23,42 @@ impl ModbusRtuDriver {
 }
 
 impl CommDriver for ModbusRtuDriver {
-    fn read<'a>(&'a self, profile: &'a ConnectionProfile, job: &'a ReadJob) -> DriverFuture<'a> {
+    fn connection_key(&self, profile: &ConnectionProfile) -> Result<ConnectionKey, DriverError> {
+        let (serial_port, baud_rate, parity, data_bits, stop_bits, slave_id) = match profile {
+            ConnectionProfile::Rtu485 {
+                serial_port,
+                baud_rate,
+                parity,
+                data_bits,
+                stop_bits,
+                device_id,
+                ..
+            } => (
+                serial_port.clone(),
+                *baud_rate,
+                parity,
+                *data_bits,
+                *stop_bits,
+                *device_id,
+            ),
+            _ => {
+                return Err(DriverError::Comm {
+                    message: "ModbusRtuDriver requires a 485 profile".to_string(),
+                });
+            }
+        };
+
+        Ok(ConnectionKey::Rtu485 {
+            serial_port,
+            baud_rate,
+            parity: format!("{parity:?}"),
+            data_bits,
+            stop_bits,
+            slave_id,
+        })
+    }
+
+    fn connect<'a>(&'a self, profile: &'a ConnectionProfile) -> ConnectFuture<'a> {
         Box::pin(async move {
             let (serial_port, baud_rate, parity, data_bits, stop_bits, slave_id) = match profile {
                 ConnectionProfile::Rtu485 {
@@ -56,11 +94,20 @@ impl CommDriver for ModbusRtuDriver {
             })?;
 
             let slave = Slave(slave_id);
-            let mut ctx = rtu::attach_slave(port, slave);
+            let ctx = rtu::attach_slave(port, slave);
+            Ok(ctx)
+        })
+    }
 
+    fn read_with_client<'a>(
+        &'a self,
+        client: &'a mut ConnectedClient,
+        job: &'a ReadJob,
+    ) -> DriverFuture<'a> {
+        Box::pin(async move {
             match job.read_area {
                 RegisterArea::Holding => {
-                    let data = ctx
+                    let data = client
                         .read_holding_registers(job.start_address, job.length)
                         .await
                         .map_err(|e| DriverError::Comm {
@@ -72,7 +119,7 @@ impl CommDriver for ModbusRtuDriver {
                     Ok(RawReadData::Registers(data))
                 }
                 RegisterArea::Input => {
-                    let data = ctx
+                    let data = client
                         .read_input_registers(job.start_address, job.length)
                         .await
                         .map_err(|e| DriverError::Comm {
@@ -84,7 +131,7 @@ impl CommDriver for ModbusRtuDriver {
                     Ok(RawReadData::Registers(data))
                 }
                 RegisterArea::Coil => {
-                    let data = ctx
+                    let data = client
                         .read_coils(job.start_address, job.length)
                         .await
                         .map_err(|e| DriverError::Comm {
@@ -96,7 +143,7 @@ impl CommDriver for ModbusRtuDriver {
                     Ok(RawReadData::Coils(data))
                 }
                 RegisterArea::Discrete => {
-                    let data = ctx
+                    let data = client
                         .read_discrete_inputs(job.start_address, job.length)
                         .await
                         .map_err(|e| DriverError::Comm {
@@ -217,7 +264,8 @@ mod tests {
             points: vec![],
         };
 
-        let raw = driver.read(&profile, &job).await;
+        let mut client = driver.connect(&profile).await.unwrap();
+        let raw = driver.read_with_client(&mut client, &job).await;
         assert!(matches!(raw, Ok(RawReadData::Registers(_))));
     }
 }

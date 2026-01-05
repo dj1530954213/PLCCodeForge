@@ -1,4 +1,6 @@
-
+// 说明:
+// - WinForms 手工测试台主界面，用于验证选择器、原子操作与 RunFlow 的端到端效果。
+// - 主要面向现场联调：加载 selectors、发起 RPC 调用、查看 StepLog 证据链。
 using System.Linq;
 using System.Text.Json;
 using Autothink.UiaAgent.Rpc.Contracts;
@@ -6,8 +8,14 @@ using StreamJsonRpc;
 
 namespace Autothink.UiaAgent.WinFormsHarness;
 
+/// <summary>
+/// WinFormsHarness 主窗体：承载 UIA 调试面板与日志视图。
+/// </summary>
 internal sealed class MainForm : Form
 {
+    /// <summary>
+    /// 下拉框显示项：同时保存显示文本与真实值。
+    /// </summary>
     private sealed class ComboItem
     {
         public ComboItem(string display, string value)

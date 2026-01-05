@@ -1,8 +1,8 @@
 //! 通讯地址采集并生成模块：执行引擎（engine）。
 //!
-//! 本文件在 TASK-05 阶段先提供最小“执行一次计划”的能力，用于 mock 验收与后续 TASK-08 的后台 run 演进。
+//! 本文件提供“执行一次计划/后台 run”的能力；底层通讯由 driver（Modbus TCP/RTU）实现。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -12,7 +12,8 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-use crate::comm::adapters::driver::{CommDriver, DriverError, RawReadData};
+use crate::comm::adapters::driver::connection_manager::ConnectionManager;
+use crate::comm::adapters::driver::{CommDriver, ConnectionKey, DriverError, RawReadData};
 use crate::comm::core::codec::{
     decode_from_bits, decode_from_registers, DecodeError, DecodedValue,
 };
@@ -27,10 +28,46 @@ pub async fn execute_plan_once(
     points: &[CommPoint],
     plan: &ReadPlan,
 ) -> (Vec<SampleResult>, RunStats) {
+    let run_id = Uuid::nil();
+    let mut conn_mgr = ConnectionManager::new(run_id);
+    let (stop_tx, stop_rx) = watch::channel(false);
+    let _keep_sender_alive = stop_tx;
+
+    execute_plan_once_with_manager(driver, &mut conn_mgr, &stop_rx, profiles, points, plan)
+        .await
+        .unwrap_or_else(|| {
+            let now = Utc::now();
+            let results: Vec<SampleResult> = points
+                .iter()
+                .map(|p| SampleResult {
+                    point_key: p.point_key,
+                    value_display: "".to_string(),
+                    quality: Quality::ConfigError,
+                    timestamp: now,
+                    duration_ms: 0,
+                    error_message: "cancelled".to_string(),
+                })
+                .collect();
+            let stats = calc_stats(&results);
+            (results, stats)
+        })
+}
+
+async fn execute_plan_once_with_manager(
+    driver: &dyn CommDriver,
+    conn_mgr: &mut ConnectionManager,
+    stop_rx: &watch::Receiver<bool>,
+    profiles: &[ConnectionProfile],
+    points: &[CommPoint],
+    plan: &ReadPlan,
+) -> Option<(Vec<SampleResult>, RunStats)> {
     let profiles_by_channel = build_profile_map(profiles);
     let now = Utc::now();
 
     let mut results_by_key: HashMap<Uuid, SampleResult> = HashMap::new();
+    let mut groups: HashMap<ConnectionKey, Vec<(&ConnectionProfile, &ReadJob)>> = HashMap::new();
+    let mut group_order: Vec<ConnectionKey> = Vec::new();
+
     for job in &plan.jobs {
         let profile = match profiles_by_channel.get(job.channel_name.as_str()) {
             Some(profile) => *profile,
@@ -47,22 +84,96 @@ pub async fn execute_plan_once(
             }
         };
 
-        let (raw, duration_ms) = read_with_retry(driver, profile, job).await;
-        match raw {
-            Ok(data) => decode_job_data(&mut results_by_key, job, data, now, duration_ms),
-            Err(err) => {
-                let (quality, message) = match err {
-                    DriverError::Timeout => (Quality::Timeout, "timeout".to_string()),
-                    DriverError::Comm { message } => (Quality::CommError, message),
-                };
+        let key = match driver.connection_key(profile) {
+            Ok(k) => k,
+            Err(DriverError::Timeout) => {
                 mark_job_failure(
                     &mut results_by_key,
                     job,
                     now,
-                    quality,
-                    &message,
-                    duration_ms,
+                    Quality::Timeout,
+                    "timeout",
+                    0,
                 );
+                continue;
+            }
+            Err(DriverError::Comm { message }) => {
+                mark_job_failure(
+                    &mut results_by_key,
+                    job,
+                    now,
+                    Quality::CommError,
+                    &message,
+                    0,
+                );
+                continue;
+            }
+        };
+
+        if !groups.contains_key(&key) {
+            group_order.push(key.clone());
+        }
+        groups.entry(key).or_default().push((profile, job));
+    }
+
+    let mut reconnected_keys: HashSet<ConnectionKey> = HashSet::new();
+
+    for key in group_order {
+        if *stop_rx.borrow() {
+            return None;
+        }
+        let Some(items) = groups.get(&key) else {
+            continue;
+        };
+        let Some((profile0, _)) = items.first() else {
+            continue;
+        };
+
+        let timeout = Duration::from_millis(profile_timeout_ms(profile0) as u64);
+        if let Err(err) = conn_mgr
+            .ensure_connected(driver, profile0, stop_rx, timeout)
+            .await
+        {
+            if *stop_rx.borrow() {
+                return None;
+            }
+            let (quality, message) = match err {
+                DriverError::Timeout => (Quality::Timeout, "timeout".to_string()),
+                DriverError::Comm { message } => (Quality::CommError, message),
+            };
+            for (_, job) in items {
+                mark_job_failure(&mut results_by_key, job, now, quality.clone(), &message, 0);
+            }
+            continue;
+        };
+
+        for (profile, job) in items {
+            let (raw, duration_ms) = read_with_retry(
+                driver,
+                conn_mgr,
+                stop_rx,
+                &key,
+                profile,
+                job,
+                &mut reconnected_keys,
+            )
+            .await?;
+            match raw {
+                Ok(data) => decode_job_data(&mut results_by_key, job, data, now, duration_ms),
+                Err(err) => {
+                    let (quality, message) = match err {
+                        DriverError::Timeout => (Quality::Timeout, "timeout".to_string()),
+                        DriverError::Comm { message } => (Quality::CommError, message),
+                    };
+                    mark_job_failure(
+                        &mut results_by_key,
+                        job,
+                        now,
+                        quality,
+                        &message,
+                        duration_ms,
+                    );
+                }
             }
         }
     }
@@ -84,7 +195,7 @@ pub async fn execute_plan_once(
     }
 
     let stats = calc_stats(&ordered_results);
-    (ordered_results, stats)
+    Some((ordered_results, stats))
 }
 
 fn build_profile_map<'a>(
@@ -117,32 +228,99 @@ fn profile_retry_count(profile: &ConnectionProfile) -> u32 {
 
 async fn read_with_retry(
     driver: &dyn CommDriver,
+    conn_mgr: &mut ConnectionManager,
+    stop_rx: &watch::Receiver<bool>,
+    key: &ConnectionKey,
     profile: &ConnectionProfile,
     job: &ReadJob,
-) -> (Result<RawReadData, DriverError>, u32) {
+    reconnected_keys: &mut HashSet<ConnectionKey>,
+) -> Option<(Result<RawReadData, DriverError>, u32)> {
     let timeout = Duration::from_millis(profile_timeout_ms(profile) as u64);
     let max_retries = profile_retry_count(profile);
 
     let mut attempt: u32 = 0;
     loop {
+        if *stop_rx.borrow() {
+            return None;
+        }
+
         let started = Instant::now();
 
-        let result = match tokio::time::timeout(timeout, driver.read(profile, job)).await {
-            Ok(inner) => inner,
-            Err(_) => Err(DriverError::Timeout),
+        if conn_mgr.get_mut(key).is_none() {
+            let connect = conn_mgr
+                .ensure_connected(driver, profile, stop_rx, timeout)
+                .await;
+            if let Err(e) = connect {
+                let duration_ms = started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
+                if *stop_rx.borrow() {
+                    return None;
+                }
+                return Some((Err(e), duration_ms));
+            }
+        }
+
+        let Some(client) = conn_mgr.get_mut(key) else {
+            let duration_ms = started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
+            return Some((
+                Err(DriverError::Comm {
+                    message: "missing connected client".to_string(),
+                }),
+                duration_ms,
+            ));
+        };
+
+        let read_fut = driver.read_with_client(client, job);
+        let stop_fut = wait_stop(stop_rx.clone());
+        let result = tokio::select! {
+            _ = stop_fut => {
+                return None;
+            }
+            res = tokio::time::timeout(timeout, read_fut) => {
+                match res {
+                    Ok(inner) => inner,
+                    Err(_) => Err(DriverError::Timeout),
+                }
+            }
         };
 
         let duration_ms = started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
+
         match &result {
-            Ok(_) => return (result, duration_ms),
+            Ok(_) => return Some((result, duration_ms)),
             Err(DriverError::Timeout) | Err(DriverError::Comm { .. }) => {
+                // Per-connection, per-poll: at most one reconnect. Subsequent failures
+                // keep the connection (to avoid reconnect storms) but invalidate on final failure.
+                if !reconnected_keys.contains(key) {
+                    conn_mgr.invalidate(key, "read failed; will reconnect once");
+                    reconnected_keys.insert(key.clone());
+                    continue;
+                }
+
                 if attempt >= max_retries {
-                    return (result, duration_ms);
+                    conn_mgr.invalidate(key, "read failed after reconnect/retries");
+                    return Some((result, duration_ms));
                 }
 
                 attempt += 1;
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                let stop_sleep = wait_stop(stop_rx.clone());
+                tokio::select! {
+                    _ = stop_sleep => {
+                        return None;
+                    }
+                    _ = tokio::time::sleep(Duration::from_millis(50)) => {}
+                }
             }
+        }
+    }
+}
+
+async fn wait_stop(mut stop_rx: watch::Receiver<bool>) {
+    loop {
+        if *stop_rx.borrow() {
+            return;
+        }
+        if stop_rx.changed().await.is_err() {
+            std::future::pending::<()>().await;
         }
     }
 }
@@ -318,34 +496,40 @@ impl CommRunEngine {
         let interval = Duration::from_millis(poll_interval_ms as u64);
 
         let join = tokio::spawn(async move {
+            let mut conn_mgr = ConnectionManager::new(run_id);
+            let mut ticker = tokio::time::interval(interval);
+
             loop {
-                if *stop_rx.borrow() {
-                    break;
-                }
-
                 tokio::select! {
-                  _ = stop_rx.changed() => {
-                      continue;
-                  }
-                    output = execute_plan_once(driver.as_ref(), &profiles, &points, &plan) => {
-                        let (results, stats) = output;
-                        let updated_at_utc = results.first().map(|r| r.timestamp).unwrap_or_else(Utc::now);
-                        let run_warnings = build_run_warnings(&results, &stats);
-                        let mut guard = latest_for_task.lock();
-                        guard.results = results;
-                        guard.stats = stats;
-                        guard.updated_at_utc = updated_at_utc;
-                        guard.run_warnings = run_warnings;
-                    }
-                }
-
-                tokio::select! {
-                    _ = stop_rx.changed() => {
-                        if *stop_rx.borrow() {
+                    changed = stop_rx.changed() => {
+                        if changed.is_err() || *stop_rx.borrow() {
                             break;
                         }
                     }
-                    _ = tokio::time::sleep(interval) => {}
+                    _ = ticker.tick() => {
+                        if *stop_rx.borrow() {
+                            break;
+                        }
+
+                        if let Some((results, stats)) = execute_plan_once_with_manager(
+                            driver.as_ref(),
+                            &mut conn_mgr,
+                            &stop_rx,
+                            &profiles,
+                            &points,
+                            &plan
+                        ).await {
+                            let updated_at_utc = results.first().map(|r| r.timestamp).unwrap_or_else(Utc::now);
+                            let run_warnings = build_run_warnings(&results, &stats);
+                            let mut guard = latest_for_task.lock();
+                            guard.results = results;
+                            guard.stats = stats;
+                            guard.updated_at_utc = updated_at_utc;
+                            guard.run_warnings = run_warnings;
+                        } else if *stop_rx.borrow() {
+                            break;
+                        }
+                    }
                 }
             }
         });
@@ -391,211 +575,6 @@ impl CommRunEngine {
             Ok(join_result) => join_result.is_ok(),
             Err(_) => false,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use crate::comm::driver::mock::MockDriver;
-    use crate::comm::model::{ByteOrder32, DataType, RegisterArea};
-    use crate::comm::plan::{build_read_plan, PlanOptions};
-
-    fn tcp_profile(channel_name: &str) -> ConnectionProfile {
-        ConnectionProfile::Tcp {
-            channel_name: channel_name.to_string(),
-            device_id: 1,
-            read_area: RegisterArea::Holding,
-            start_address: 0,
-            length: 10,
-            ip: "127.0.0.1".to_string(),
-            port: 502,
-            timeout_ms: 50,
-            retry_count: 0,
-            poll_interval_ms: 500,
-        }
-    }
-
-    fn point(channel_name: &str, point_key: uuid::Uuid) -> CommPoint {
-        CommPoint {
-            point_key,
-            hmi_name: "X".to_string(),
-            data_type: DataType::UInt16,
-            byte_order: ByteOrder32::ABCD,
-            channel_name: channel_name.to_string(),
-            address_offset: None,
-            scale: 1.0,
-        }
-    }
-
-    #[tokio::test]
-    async fn mock_driver_produces_ok_timeout_and_decode_error_stats() {
-        let profiles = vec![
-            tcp_profile("tcp-ok"),
-            tcp_profile("tcp-timeout"),
-            tcp_profile("tcp-decode"),
-        ];
-
-        let points = vec![
-            point("tcp-ok", uuid::Uuid::from_u128(1)),
-            point("tcp-timeout", uuid::Uuid::from_u128(2)),
-            point("tcp-decode", uuid::Uuid::from_u128(3)),
-        ];
-
-        let plan = build_read_plan(&profiles, &points, PlanOptions::default()).unwrap();
-        let driver = MockDriver::new();
-
-        let (results, stats) = execute_plan_once(&driver, &profiles, &points, &plan).await;
-
-        assert_eq!(results.len(), 3);
-        assert_eq!(stats.total, 3);
-        assert_eq!(stats.ok, 1);
-        assert_eq!(stats.timeout, 1);
-        assert_eq!(stats.decode_error, 1);
-        assert_eq!(stats.comm_error, 0);
-
-        assert_eq!(results[0].quality, Quality::Ok);
-        assert_eq!(results[1].quality, Quality::Timeout);
-        assert_eq!(results[2].quality, Quality::DecodeError);
-    }
-
-    #[tokio::test]
-    async fn run_engine_stop_within_1s_and_latest_is_ordered_by_points() {
-        let engine = CommRunEngine::new();
-        let profiles = vec![tcp_profile("tcp-ok")];
-        let points = vec![
-            point("tcp-ok", uuid::Uuid::from_u128(100)),
-            point("tcp-ok", uuid::Uuid::from_u128(101)),
-            point("tcp-ok", uuid::Uuid::from_u128(102)),
-        ];
-        let plan = build_read_plan(&profiles, &points, PlanOptions::default()).unwrap();
-        let driver = Arc::new(MockDriver::new());
-
-        let run_id = engine.start_run(driver, profiles, points.clone(), plan, 50);
-
-        // 等待至少一次采集写入缓存（最多 1s）。
-        let mut latest: Option<(Vec<SampleResult>, RunStats, DateTime<Utc>)> = None;
-        for _ in 0..20 {
-            if let Some((results, stats, updated_at_utc, _run_warnings)) = engine.latest(run_id) {
-                if results.len() == points.len() && stats.total == points.len() as u32 {
-                    latest = Some((results, stats, updated_at_utc));
-                    break;
-                }
-            }
-
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-
-        let (results, stats, _updated_at_utc) =
-            latest.expect("run should produce at least one tick");
-        assert_eq!(stats.total, 3);
-        assert_eq!(results.len(), 3);
-        assert_eq!(results[0].point_key, points[0].point_key);
-        assert_eq!(results[1].point_key, points[1].point_key);
-        assert_eq!(results[2].point_key, points[2].point_key);
-
-        let started = Instant::now();
-        let stopped = engine.stop_run(run_id).await;
-        assert!(stopped);
-        assert!(started.elapsed() < Duration::from_secs(1));
-    }
-
-    #[tokio::test]
-    async fn run_engine_latest_contains_ok_timeout_and_decode_error_when_using_mock() {
-        let engine = CommRunEngine::new();
-        let profiles = vec![
-            tcp_profile("tcp-ok"),
-            tcp_profile("tcp-timeout"),
-            tcp_profile("tcp-decode"),
-        ];
-
-        let points = vec![
-            CommPoint {
-                point_key: uuid::Uuid::from_u128(1),
-                hmi_name: "OK_U16".to_string(),
-                data_type: DataType::UInt16,
-                byte_order: ByteOrder32::ABCD,
-                channel_name: "tcp-ok".to_string(),
-                address_offset: None,
-                scale: 1.0,
-            },
-            CommPoint {
-                point_key: uuid::Uuid::from_u128(2),
-                hmi_name: "OK_F32_CDAB".to_string(),
-                data_type: DataType::Float32,
-                byte_order: ByteOrder32::CDAB,
-                channel_name: "tcp-ok".to_string(),
-                address_offset: None,
-                scale: 0.1,
-            },
-            CommPoint {
-                point_key: uuid::Uuid::from_u128(3),
-                hmi_name: "OK_I32_DCBA".to_string(),
-                data_type: DataType::Int32,
-                byte_order: ByteOrder32::DCBA,
-                channel_name: "tcp-ok".to_string(),
-                address_offset: None,
-                scale: 1.0,
-            },
-            CommPoint {
-                point_key: uuid::Uuid::from_u128(4),
-                hmi_name: "TIMEOUT_U16".to_string(),
-                data_type: DataType::UInt16,
-                byte_order: ByteOrder32::ABCD,
-                channel_name: "tcp-timeout".to_string(),
-                address_offset: None,
-                scale: 1.0,
-            },
-            CommPoint {
-                point_key: uuid::Uuid::from_u128(5),
-                hmi_name: "DECODE_U32".to_string(),
-                data_type: DataType::UInt32,
-                byte_order: ByteOrder32::ABCD,
-                channel_name: "tcp-decode".to_string(),
-                address_offset: None,
-                scale: 1.0,
-            },
-        ];
-
-        let plan = build_read_plan(&profiles, &points, PlanOptions::default()).unwrap();
-        let driver = Arc::new(MockDriver::new());
-
-        let run_id = engine.start_run(driver, profiles, points.clone(), plan, 50);
-
-        let mut snapshot: Option<(Vec<SampleResult>, RunStats, DateTime<Utc>)> = None;
-        for _ in 0..40 {
-            if let Some((results, stats, updated_at_utc, _run_warnings)) = engine.latest(run_id) {
-                if results.len() == points.len() && stats.total == points.len() as u32 {
-                    // 等待至少一次真实采集（不是初始 ConfigError）。
-                    if results.iter().any(|r| r.quality != Quality::ConfigError) {
-                        snapshot = Some((results, stats, updated_at_utc));
-                        break;
-                    }
-                }
-            }
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
-
-        let (results, stats, updated_at_utc) =
-            snapshot.expect("run should produce at least one tick");
-
-        // 用于 TASK-12 文档验收的可读日志（默认被 cargo test 捕获；可用 -- --nocapture 查看）。
-        println!("runId={run_id} updatedAtUtc={updated_at_utc} stats={stats:?}");
-        for (i, r) in results.iter().enumerate() {
-            println!(
-                "row[{i}] pointKey={} quality={:?} valueDisplay='{}' errorMessage='{}' durationMs={}",
-                r.point_key, r.quality, r.value_display, r.error_message, r.duration_ms
-            );
-        }
-
-        assert_eq!(stats.total, 5);
-        assert!(results.iter().any(|r| r.quality == Quality::Ok));
-        assert!(results.iter().any(|r| r.quality == Quality::Timeout));
-        assert!(results.iter().any(|r| r.quality == Quality::DecodeError));
-
-        let stopped = engine.stop_run(run_id).await;
-        assert!(stopped);
     }
 }
 

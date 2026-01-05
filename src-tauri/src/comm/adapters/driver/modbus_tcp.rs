@@ -2,7 +2,10 @@
 //!
 //! MVP：支持 Holding / Input / Coil / Discrete 的读取；上层 engine 负责 timeout/retry。
 
-use super::{CommDriver, DriverError, DriverFuture, RawReadData};
+use super::{
+    CommDriver, ConnectFuture, ConnectedClient, ConnectionKey, DriverError, DriverFuture,
+    RawReadData,
+};
 use crate::comm::model::{ConnectionProfile, RegisterArea};
 use crate::comm::plan::ReadJob;
 
@@ -19,7 +22,24 @@ impl ModbusTcpDriver {
 }
 
 impl CommDriver for ModbusTcpDriver {
-    fn read<'a>(&'a self, profile: &'a ConnectionProfile, job: &'a ReadJob) -> DriverFuture<'a> {
+    fn connection_key(&self, profile: &ConnectionProfile) -> Result<ConnectionKey, DriverError> {
+        let (ip, port, unit_id) = match profile {
+            ConnectionProfile::Tcp {
+                ip,
+                port,
+                device_id,
+                ..
+            } => (ip.clone(), *port, *device_id),
+            _ => {
+                return Err(DriverError::Comm {
+                    message: "ModbusTcpDriver requires a TCP profile".to_string(),
+                });
+            }
+        };
+        Ok(ConnectionKey::Tcp { ip, port, unit_id })
+    }
+
+    fn connect<'a>(&'a self, profile: &'a ConnectionProfile) -> ConnectFuture<'a> {
         Box::pin(async move {
             let (ip, port, unit_id) = match profile {
                 ConnectionProfile::Tcp {
@@ -42,16 +62,26 @@ impl CommDriver for ModbusTcpDriver {
                 })?;
 
             let slave = Slave(unit_id);
-            let mut ctx =
+            let ctx =
                 tcp::connect_slave(socket_addr, slave)
                     .await
                     .map_err(|e| DriverError::Comm {
                         message: e.to_string(),
                     })?;
 
+            Ok(ctx)
+        })
+    }
+
+    fn read_with_client<'a>(
+        &'a self,
+        client: &'a mut ConnectedClient,
+        job: &'a ReadJob,
+    ) -> DriverFuture<'a> {
+        Box::pin(async move {
             match job.read_area {
                 RegisterArea::Holding => {
-                    let data = ctx
+                    let data = client
                         .read_holding_registers(job.start_address, job.length)
                         .await
                         .map_err(|e| DriverError::Comm {
@@ -63,7 +93,7 @@ impl CommDriver for ModbusTcpDriver {
                     Ok(RawReadData::Registers(data))
                 }
                 RegisterArea::Input => {
-                    let data = ctx
+                    let data = client
                         .read_input_registers(job.start_address, job.length)
                         .await
                         .map_err(|e| DriverError::Comm {
@@ -75,7 +105,7 @@ impl CommDriver for ModbusTcpDriver {
                     Ok(RawReadData::Registers(data))
                 }
                 RegisterArea::Coil => {
-                    let data = ctx
+                    let data = client
                         .read_coils(job.start_address, job.length)
                         .await
                         .map_err(|e| DriverError::Comm {
@@ -87,7 +117,7 @@ impl CommDriver for ModbusTcpDriver {
                     Ok(RawReadData::Coils(data))
                 }
                 RegisterArea::Discrete => {
-                    let data = ctx
+                    let data = client
                         .read_discrete_inputs(job.start_address, job.length)
                         .await
                         .map_err(|e| DriverError::Comm {
@@ -157,7 +187,8 @@ mod tests {
             points: vec![],
         };
 
-        let raw = driver.read(&profile, &job).await;
+        let mut client = driver.connect(&profile).await.unwrap();
+        let raw = driver.read_with_client(&mut client, &job).await;
         assert!(matches!(raw, Ok(RawReadData::Registers(_))));
     }
 }

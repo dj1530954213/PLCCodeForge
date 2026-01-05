@@ -73,6 +73,59 @@ export interface CommConfigV1 {
   outputDir: string;
 }
 
+export interface CommProjectV1 {
+  schemaVersion: number;
+  projectId: string;
+  name: string;
+  device?: string;
+  createdAtUtc: string;
+  notes?: string;
+  deletedAtUtc?: string;
+}
+
+export type BatchInsertMode = "append" | "afterSelection";
+
+export interface CommPointsBatchTemplateV1 {
+  schemaVersion: number;
+  count: number;
+  startAddressHuman: string;
+  dataType: DataType;
+  byteOrder: ByteOrder32;
+  hmiNameTemplate: string;
+  scaleTemplate: string;
+  insertMode?: BatchInsertMode;
+}
+
+export interface CommProjectUiStateV1 {
+  activeChannelName?: string;
+  pointsBatchTemplate?: CommPointsBatchTemplateV1;
+}
+
+export interface CommProjectDataV1 extends CommProjectV1 {
+  connections?: ProfilesV1;
+  points?: PointsV1;
+  uiState?: CommProjectUiStateV1;
+}
+
+export interface CommProjectCreateRequest {
+  name: string;
+  device?: string;
+  notes?: string;
+}
+
+export interface CommProjectsListResponse {
+  projects: CommProjectV1[];
+}
+
+export interface CommProjectsListRequest {
+  includeDeleted?: boolean;
+}
+
+export interface CommProjectCopyRequest {
+  projectId: string;
+  name?: string;
+}
+
 export interface PlannedPointRead {
   pointKey: string;
   dataType: DataType;
@@ -103,7 +156,7 @@ export interface PlanOptions {
   maxCoilsPerJob: number;
 }
 
-export type CommDriverKind = "Mock" | "Tcp" | "Rtu485";
+export type CommDriverKind = "Tcp" | "Rtu485";
 
 export interface SampleResult {
   pointKey: string;
@@ -576,36 +629,68 @@ export async function commPing(): Promise<{ ok: boolean }> {
   return invoke("comm_ping");
 }
 
-export async function commConfigLoad(): Promise<CommConfigV1> {
-  return invoke("comm_config_load");
+export async function commProjectCreate(request: CommProjectCreateRequest): Promise<CommProjectV1> {
+  return invoke("comm_project_create", { request });
 }
 
-export async function commConfigSave(payload: CommConfigV1): Promise<void> {
-  await invoke("comm_config_save", { payload });
+export async function commProjectsList(request?: CommProjectsListRequest): Promise<CommProjectsListResponse> {
+  return invoke("comm_projects_list", { request });
 }
 
-export async function commProfilesSave(payload: ProfilesV1): Promise<void> {
-  await invoke("comm_profiles_save", { payload });
+export async function commProjectGet(projectId: string): Promise<CommProjectV1 | null> {
+  return invoke("comm_project_get", { projectId });
 }
 
-export async function commProfilesLoad(): Promise<ProfilesV1> {
-  return invoke("comm_profiles_load");
+export async function commProjectLoadV1(projectId: string): Promise<CommProjectDataV1> {
+  return invoke("comm_project_load_v1", { projectId });
 }
 
-export async function commPointsSave(payload: PointsV1): Promise<void> {
-  await invoke("comm_points_save", { payload });
+export async function commProjectSaveV1(payload: CommProjectDataV1): Promise<void> {
+  await invoke("comm_project_save_v1", { payload });
 }
 
-export async function commPointsLoad(): Promise<PointsV1> {
-  return invoke("comm_points_load");
+export async function commProjectUiStatePatchV1(projectId: string, patch: CommProjectUiStateV1): Promise<void> {
+  await invoke("comm_project_ui_state_patch_v1", { projectId, patch });
+}
+
+export async function commProjectCopy(request: CommProjectCopyRequest): Promise<CommProjectV1> {
+  return invoke("comm_project_copy", { request });
+}
+
+export async function commProjectDelete(projectId: string): Promise<CommProjectV1> {
+  return invoke("comm_project_delete", { projectId });
+}
+
+export async function commConfigLoad(projectId?: string): Promise<CommConfigV1> {
+  return invoke("comm_config_load", projectId ? { projectId } : {});
+}
+
+export async function commConfigSave(payload: CommConfigV1, projectId?: string): Promise<void> {
+  await invoke("comm_config_save", projectId ? { payload, projectId } : { payload });
+}
+
+export async function commProfilesSave(payload: ProfilesV1, projectId?: string): Promise<void> {
+  await invoke("comm_profiles_save", projectId ? { payload, projectId } : { payload });
+}
+
+export async function commProfilesLoad(projectId?: string): Promise<ProfilesV1> {
+  return invoke("comm_profiles_load", projectId ? { projectId } : {});
+}
+
+export async function commPointsSave(payload: PointsV1, projectId?: string): Promise<void> {
+  await invoke("comm_points_save", projectId ? { payload, projectId } : { payload });
+}
+
+export async function commPointsLoad(projectId?: string): Promise<PointsV1> {
+  return invoke("comm_points_load", projectId ? { projectId } : {});
 }
 
 export async function commPlanBuild(request: {
   profiles?: ProfilesV1;
   points?: PointsV1;
   options?: PlanOptions;
-}): Promise<PlanV1> {
-  return invoke("comm_plan_build", { request });
+}, projectId?: string): Promise<PlanV1> {
+  return invoke("comm_plan_build", projectId ? { request, projectId } : { request });
 }
 
 export async function commRunStart(request: {
@@ -613,24 +698,75 @@ export async function commRunStart(request: {
   profiles?: ProfilesV1;
   points?: PointsV1;
   plan?: ReadPlan;
-}): Promise<CommRunStartResponse> {
-  return invoke("comm_run_start", { request });
+}, projectId?: string): Promise<CommRunStartResponse> {
+  return invoke("comm_run_start", projectId ? { request, projectId } : { request });
 }
 
 export async function commRunLatest(runId: string): Promise<CommRunLatestResponse> {
   return invoke("comm_run_latest", { runId });
 }
 
-export async function commRunStop(runId: string): Promise<void> {
-  await invoke("comm_run_stop", { runId });
+export async function commRunStop(runId: string, projectId?: string): Promise<void> {
+  await invoke("comm_run_stop", projectId ? { runId, projectId } : { runId });
+}
+
+export type CommRunErrorKind = "ConfigError" | "RunNotFound" | "InternalError";
+
+export interface CommRunError {
+  kind: CommRunErrorKind;
+  message: string;
+  details?: {
+    runId?: string;
+    projectId?: string;
+    missingFields?: Array<{
+      pointKey?: string;
+      hmiName?: string;
+      field: string;
+      reason?: string;
+    }>;
+  };
+}
+
+export interface CommRunStartObsResponse {
+  ok: boolean;
+  runId?: string;
+  error?: CommRunError;
+}
+
+export interface CommRunLatestObsResponse {
+  ok: boolean;
+  value?: CommRunLatestResponse;
+  error?: CommRunError;
+}
+
+export interface CommRunStopObsResponse {
+  ok: boolean;
+  error?: CommRunError;
+}
+
+export async function commRunStartObs(request: {
+  driver?: CommDriverKind;
+  profiles?: ProfilesV1;
+  points?: PointsV1;
+  plan?: ReadPlan;
+}, projectId?: string): Promise<CommRunStartObsResponse> {
+  return invoke("comm_run_start_obs", projectId ? { request, projectId } : { request });
+}
+
+export async function commRunLatestObs(runId: string): Promise<CommRunLatestObsResponse> {
+  return invoke("comm_run_latest_obs", { runId });
+}
+
+export async function commRunStopObs(runId: string, projectId?: string): Promise<CommRunStopObsResponse> {
+  return invoke("comm_run_stop_obs", projectId ? { runId, projectId } : { runId });
 }
 
 export async function commExportXlsx(request: {
   outPath: string;
   profiles?: ProfilesV1;
   points?: PointsV1;
-}): Promise<CommExportXlsxResponse> {
-  return invoke("comm_export_xlsx", { request });
+}, projectId?: string): Promise<CommExportXlsxResponse> {
+  return invoke("comm_export_xlsx", projectId ? { request, projectId } : { request });
 }
 
 export async function commExportDeliveryXlsx(request: {
@@ -641,18 +777,22 @@ export async function commExportDeliveryXlsx(request: {
   stats?: RunStats;
   profiles?: ProfilesV1;
   points?: PointsV1;
-}): Promise<CommExportDeliveryXlsxResponse> {
-  return invoke("comm_export_delivery_xlsx", { request });
+}, projectId?: string): Promise<CommExportDeliveryXlsxResponse> {
+  return invoke("comm_export_delivery_xlsx", projectId ? { request, projectId } : { request });
 }
 
-export async function commExportIrV1(request: CommExportIrV1Request): Promise<CommExportIrV1Response> {
-  return invoke("comm_export_ir_v1", { request });
+export async function commExportIrV1(request: CommExportIrV1Request, projectId?: string): Promise<CommExportIrV1Response> {
+  return invoke("comm_export_ir_v1", projectId ? { request, projectId } : { request });
 }
 
 export async function commBridgeToPlcImportV1(
-  request: CommBridgeToPlcImportV1Request
+  request: CommBridgeToPlcImportV1Request,
+  projectId?: string
 ): Promise<CommBridgeToPlcImportV1Response> {
-  const resp = await invoke<CommBridgeToPlcImportV1Response>("comm_bridge_to_plc_import_v1", { request });
+  const resp = await invoke<CommBridgeToPlcImportV1Response>(
+    "comm_bridge_to_plc_import_v1",
+    projectId ? { request, projectId } : { request }
+  );
   if (resp.ok === false || resp.error) {
     throw (
       resp.error ?? {
@@ -665,9 +805,13 @@ export async function commBridgeToPlcImportV1(
 }
 
 export async function commBridgeConsumeCheck(
-  request: CommBridgeConsumeCheckRequest
+  request: CommBridgeConsumeCheckRequest,
+  projectId?: string
 ): Promise<CommBridgeConsumeCheckResponse> {
-  const resp = await invoke<CommBridgeConsumeCheckResponse>("comm_bridge_consume_check", { request });
+  const resp = await invoke<CommBridgeConsumeCheckResponse>(
+    "comm_bridge_consume_check",
+    projectId ? { request, projectId } : { request }
+  );
   if (resp.ok === false || resp.error) {
     throw (
       resp.error ?? {
@@ -680,9 +824,13 @@ export async function commBridgeConsumeCheck(
 }
 
 export async function commBridgeExportImportResultStubV1(
-  request: CommBridgeExportImportResultStubV1Request
+  request: CommBridgeExportImportResultStubV1Request,
+  projectId?: string
 ): Promise<CommBridgeExportImportResultStubV1Response> {
-  const resp = await invoke<CommBridgeExportImportResultStubV1Response>("comm_bridge_export_importresult_stub_v1", { request });
+  const resp = await invoke<CommBridgeExportImportResultStubV1Response>(
+    "comm_bridge_export_importresult_stub_v1",
+    projectId ? { request, projectId } : { request }
+  );
   if (resp.ok === false || resp.error) {
     throw (
       resp.error ?? {
@@ -695,9 +843,13 @@ export async function commBridgeExportImportResultStubV1(
 }
 
 export async function commMergeImportSourcesV1(
-  request: CommMergeImportSourcesV1Request
+  request: CommMergeImportSourcesV1Request,
+  projectId?: string
 ): Promise<CommMergeImportSourcesV1Response> {
-  const resp = await invoke<CommMergeImportSourcesV1Response>("comm_merge_import_sources_v1", { request });
+  const resp = await invoke<CommMergeImportSourcesV1Response>(
+    "comm_merge_import_sources_v1",
+    projectId ? { request, projectId } : { request }
+  );
   if (resp.ok === false || resp.error) {
     throw (
       resp.error ?? {
@@ -710,9 +862,13 @@ export async function commMergeImportSourcesV1(
 }
 
 export async function commUnifiedExportPlcImportStubV1(
-  request: CommUnifiedExportPlcImportStubV1Request
+  request: CommUnifiedExportPlcImportStubV1Request,
+  projectId?: string
 ): Promise<CommUnifiedExportPlcImportStubV1Response> {
-  const resp = await invoke<CommUnifiedExportPlcImportStubV1Response>("comm_unified_export_plc_import_stub_v1", { request });
+  const resp = await invoke<CommUnifiedExportPlcImportStubV1Response>(
+    "comm_unified_export_plc_import_stub_v1",
+    projectId ? { request, projectId } : { request }
+  );
   if (resp.ok === false || resp.error) {
     throw (
       resp.error ?? {
@@ -724,8 +880,8 @@ export async function commUnifiedExportPlcImportStubV1(
   return resp;
 }
 
-export async function commEvidencePackCreate(request: CommEvidencePackRequest): Promise<CommEvidencePackResponse> {
-  return invoke("comm_evidence_pack_create", { request });
+export async function commEvidencePackCreate(request: CommEvidencePackRequest, projectId?: string): Promise<CommEvidencePackResponse> {
+  return invoke("comm_evidence_pack_create", projectId ? { request, projectId } : { request });
 }
 
 export async function commEvidenceVerifyV1(path: string): Promise<CommEvidenceVerifyV1Response> {

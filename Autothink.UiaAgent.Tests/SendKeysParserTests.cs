@@ -2,8 +2,13 @@ using Autothink.UiaAgent.Uia;
 using FlaUI.Core.WindowsAPI;
 using Xunit;
 
+// 说明:
+// - 覆盖 SendKeys 解析器对组合键/单键/文本的解析规则。
 namespace Autothink.UiaAgent.Tests;
 
+/// <summary>
+/// SendKeysParser 的解析规则测试。
+/// </summary>
 public sealed class SendKeysParserTests
 {
     [Fact]

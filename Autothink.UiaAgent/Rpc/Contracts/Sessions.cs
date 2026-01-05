@@ -1,3 +1,6 @@
+// 说明:
+// - 会话相关 RPC 契约：用于附加目标进程并获取 SessionId。
+// - SessionId 是后续 UIA 操作的稳定上下文标识。
 namespace Autothink.UiaAgent.Rpc.Contracts;
 
 /// <summary>

@@ -1,3 +1,7 @@
+// 说明:
+// - Stage2Runner 是 UIA 自动化的“现场执行器”，负责读取配置与 selector 资产、启动/连接 Agent 并顺序执行 flows。
+// - 同时提供 probe/check/verify 等运维能力，产出 summary/evidence pack 作为可提交的诊断证据。
+// - 该入口不修改 RPC 契约，仅通过 JSON-RPC 调用 Agent 侧能力进行编排。
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
@@ -14,6 +18,9 @@ using StreamJsonRpc;
 
 namespace Autothink.UiaAgent.Stage2Runner;
 
+/// <summary>
+/// Stage 2 Runner 控制台入口：负责解析参数、选择执行模式并调度核心流程。
+/// </summary>
 internal static class Program
 {
     private static async Task<int> Main(string[] args)

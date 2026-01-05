@@ -1,3 +1,5 @@
+// 说明:
+// - 进程内会话仓库：集中创建/获取/释放 UiaSession，保证会话唯一性与生命周期一致。
 using FlaUI.Core;
 using FlaUI.UIA3;
 

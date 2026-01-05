@@ -1,9 +1,15 @@
+// 说明:
+// - autothink.attach：用于附加到 AUTOTHINK 主窗口并验证会话可用。
+// - 该 flow 仅做“窗口获取 + 置前”，不包含业务操作。
 using System.Text.Json;
 using Autothink.UiaAgent.Rpc.Contracts;
 using FlaUI.Core.AutomationElements;
 
 namespace Autothink.UiaAgent.Flows.Autothink;
 
+/// <summary>
+/// AUTOTHINK 附加流程：确保 main window 可用并返回基本信息。
+/// </summary>
 internal sealed class AutothinkAttachFlow : IFlow
 {
     public string Name => FlowNames.AutothinkAttach;
@@ -16,6 +22,7 @@ internal sealed class AutothinkAttachFlow : IFlow
 
         var result = new RpcResult<RunFlowResponse> { StepLog = context.StepLog };
 
+        // 业务步骤：获取主窗口 -> 尝试置前 -> 返回进程与窗口信息。
         StepLogEntry mainWindowStep = context.StartStep(stepId: "GetMainWindow", action: "Get main window");
         Window mainWindow;
         try
@@ -77,4 +84,3 @@ internal sealed class AutothinkAttachFlow : IFlow
         return result;
     }
 }
-

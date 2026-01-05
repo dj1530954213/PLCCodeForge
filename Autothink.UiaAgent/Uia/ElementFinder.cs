@@ -1,3 +1,6 @@
+// 说明:
+// - ElementFinder 是 selector 到 UIA 元素的核心匹配引擎。
+// - 按“路径步骤”逐层查找，并负责 Name/AutomationId/ControlType 等过滤逻辑与错误分类。
 using Autothink.UiaAgent.Rpc.Contracts;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
@@ -5,6 +8,9 @@ using FlaUI.UIA3;
 
 namespace Autothink.UiaAgent.Uia;
 
+/// <summary>
+/// UIA 元素查找器：将 ElementSelector 转换为具体的 AutomationElement。
+/// </summary>
 internal static class ElementFinder
 {
     /// <summary>

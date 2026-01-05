@@ -1,9 +1,14 @@
 using System.Windows.Forms;
+// 说明:
+// - 覆盖 ClipboardText 基础行为与异常路径（非真实剪贴板联通）。
 using Autothink.UiaAgent.Uia;
 using Xunit;
 
 namespace Autothink.UiaAgent.Tests;
 
+/// <summary>
+/// ClipboardText 的基础逻辑测试。
+/// </summary>
 public sealed class ClipboardTextTests
 {
     [Fact]

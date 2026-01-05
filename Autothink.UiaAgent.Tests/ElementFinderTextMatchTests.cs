@@ -1,9 +1,14 @@
+// 说明:
+// - 覆盖 ElementFinder 的 Name/NameContains/IgnoreCase/NormalizeWhitespace 匹配行为。
 using Autothink.UiaAgent.Rpc.Contracts;
 using Autothink.UiaAgent.Uia;
 using Xunit;
 
 namespace Autothink.UiaAgent.Tests;
 
+/// <summary>
+/// ElementFinder 文本匹配规则测试。
+/// </summary>
 public sealed class ElementFinderTextMatchTests
 {
     [Fact]

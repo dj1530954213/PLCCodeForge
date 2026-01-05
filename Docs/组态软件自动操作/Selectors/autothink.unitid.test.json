@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "modbusWindow": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 }
+      ]
+    },
+    "modbusTcpGroup": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Group", "NameContains": "Modbus-TCP", "IgnoreCase": true, "Index": 0 }
+      ]
+    },
+    "edit_idx0": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 0 }
+      ]
+    },
+    "edit_idx1": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 1 }
+      ]
+    },
+    "edit_idx2": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 2 }
+      ]
+    },
+    "edit_idx3": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 3 }
+      ]
+    },
+    "edit_idx4": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 4 }
+      ]
+    },
+    "edit_idx5": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 5 }
+      ]
+    },
+    "edit_idx6": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 6 }
+      ]
+    },
+    "edit_idx7": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 7 }
+      ]
+    },
+    "edit_idx8": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 8 }
+      ]
+    },
+    "edit_idx9": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 9 }
+      ]
+    },
+    "edit_idx10": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 10 }
+      ]
+    },
+    "unitIdCandidate_idx8": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 8 }
+      ]
+    },
+    "timeoutCandidate_idx9": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 9 }
+      ]
+    },
+    "portCandidate_idx10": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 10 }
+      ]
+    }
+  }
+}

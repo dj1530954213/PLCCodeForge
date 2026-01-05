@@ -1,8 +1,14 @@
+// 说明:
+// - WinFormsHarness 侧 RPC 代理接口，覆盖完整的 UIA 原子操作与 RunFlow。
+// - 仅用于开发/现场联调，不对外发布为 SDK。
 using Autothink.UiaAgent.Rpc.Contracts;
 using StreamJsonRpc;
 
 namespace Autothink.UiaAgent.WinFormsHarness;
 
+/// <summary>
+/// WinForms 测试台使用的 RPC 代理接口。
+/// </summary>
 internal interface IUiaAgentRpc
 {
     [JsonRpcMethod("Ping")]
@@ -38,4 +44,3 @@ internal interface IUiaAgentRpc
     [JsonRpcMethod("RunFlow")]
     Task<RpcResult<RunFlowResponse>> RunFlowAsync(RunFlowRequest request);
 }
-

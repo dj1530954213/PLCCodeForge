@@ -1,3 +1,5 @@
+// 说明:
+// - UiaAgent 进程入口：确保 UIA 调用在 STA 单线程内运行，并维持 JSON-RPC 服务生命周期。
 namespace Autothink.UiaAgent;
 
 /// <summary>

@@ -1,3 +1,5 @@
+// 说明:
+// - 覆盖 autothink.importVariables 的参数解析与必填项验证。
 using System.Text.Json;
 using Autothink.UiaAgent.Flows.Autothink;
 using Autothink.UiaAgent.Rpc.Contracts;
@@ -5,6 +7,9 @@ using Xunit;
 
 namespace Autothink.UiaAgent.Tests;
 
+/// <summary>
+/// autothink.importVariables 参数校验测试。
+/// </summary>
 public sealed class AutothinkImportVariablesArgsTests
 {
     [Fact]

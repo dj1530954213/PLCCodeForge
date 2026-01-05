@@ -8,6 +8,7 @@
 //! - `comm_run_stop` 必须在 1s 内生效（MVP）
 //! - DTO 契约冻结：只允许新增可选字段，不得改名/删字段/改语义
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -19,16 +20,15 @@ use uuid::Uuid;
 
 use super::bridge_importresult_stub;
 use super::bridge_plc_import;
-use super::driver::mock::MockDriver;
 use super::driver::modbus_rtu::ModbusRtuDriver;
 use super::driver::modbus_tcp::ModbusTcpDriver;
 use super::driver::CommDriver;
 use super::engine::CommRunEngine;
 use super::error::{
-    BridgeCheckError, BridgeCheckErrorKind, ImportResultStubError, ImportResultStubErrorKind,
-    ImportUnionError, ImportUnionErrorDetails, ImportUnionErrorKind, MergeImportSourcesError,
-    MergeImportSourcesErrorKind, PlcBridgeError, PlcBridgeErrorKind, UnifiedPlcImportStubError,
-    UnifiedPlcImportStubErrorKind,
+    BridgeCheckError, BridgeCheckErrorKind, CommRunError, CommRunErrorDetails, CommRunErrorKind,
+    ImportResultStubError, ImportResultStubErrorKind, ImportUnionError, ImportUnionErrorDetails,
+    ImportUnionErrorKind, MergeImportSourcesError, MergeImportSourcesErrorKind, PlcBridgeError,
+    PlcBridgeErrorKind, UnifiedPlcImportStubError, UnifiedPlcImportStubErrorKind,
 };
 use super::export_delivery_xlsx;
 use super::export_ir;
@@ -37,19 +37,53 @@ use super::export_xlsx::export_comm_address_xlsx;
 use super::import_union_xlsx;
 use super::merge_unified_import;
 use super::model::{
-    CommConfigV1, CommExportDiagnostics, CommWarning, ConnectionProfile, PointsV1, ProfilesV1,
-    RunStats, SampleResult, SCHEMA_VERSION_V1,
+    CommConfigV1, CommExportDiagnostics, CommProjectDataV1, CommProjectUiStateV1, CommProjectV1,
+    CommWarning, ConnectionProfile, PointsV1, ProfilesV1, RunStats, SampleResult,
+    SCHEMA_VERSION_V1,
 };
 use super::path_resolver;
 use super::plan::{build_read_plan, PlanOptions, ReadPlan};
 use super::storage;
 use super::union_spec_v1;
 use super::usecase::evidence_pack;
+use super::usecase::run_validation;
+use crate::comm::adapters::storage::projects;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommPingResponse {
     pub ok: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommProjectCreateRequest {
+    pub name: String,
+    #[serde(default)]
+    pub device: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommProjectsListRequest {
+    #[serde(default)]
+    pub include_deleted: Option<bool>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommProjectsListResponse {
+    pub projects: Vec<CommProjectV1>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommProjectCopyRequest {
+    pub project_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -74,7 +108,6 @@ pub struct PlanV1 {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum CommDriverKind {
-    Mock,
     Tcp,
     Rtu485,
 }
@@ -98,6 +131,17 @@ pub struct CommRunStartResponse {
     pub run_id: Uuid,
 }
 
+/// Run 启动：结构化可观测返回（用于 UI 稳定展示；不依赖 reject）。
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommRunStartObsResponse {
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<CommRunError>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommRunLatestResponse {
@@ -106,6 +150,26 @@ pub struct CommRunLatestResponse {
     pub updated_at_utc: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_warnings: Option<Vec<CommWarning>>,
+}
+
+/// Run latest：结构化可观测返回（用于 UI 稳定展示；不依赖 reject）。
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommRunLatestObsResponse {
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<CommRunLatestResponse>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<CommRunError>,
+}
+
+/// Run stop：结构化可观测返回（用于 UI 稳定展示；不依赖 reject）。
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommRunStopObsResponse {
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<CommRunError>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -361,17 +425,31 @@ pub struct CommImportUnionXlsxResponse {
     pub error: Option<ImportUnionError>,
 }
 
-#[derive(Default)]
-struct CommMemoryStore {
+#[derive(Default, Clone)]
+struct CommMemoryScope {
     profiles: Option<ProfilesV1>,
     points: Option<PointsV1>,
     plan: Option<ReadPlan>,
 }
 
+#[derive(Default)]
+struct CommMemoryStore {
+    scopes: HashMap<String, CommMemoryScope>,
+}
+
+impl CommMemoryStore {
+    fn scope_mut(&mut self, key: &str) -> &mut CommMemoryScope {
+        self.scopes.entry(key.to_string()).or_default()
+    }
+
+    fn scope(&self, key: &str) -> Option<&CommMemoryScope> {
+        self.scopes.get(key)
+    }
+}
+
 pub struct CommState {
     memory: Mutex<CommMemoryStore>,
     engine: CommRunEngine,
-    mock_driver: Arc<MockDriver>,
     tcp_driver: Arc<ModbusTcpDriver>,
     rtu_driver: Arc<ModbusRtuDriver>,
 }
@@ -381,7 +459,6 @@ impl CommState {
         Self {
             memory: Mutex::new(CommMemoryStore::default()),
             engine: CommRunEngine::new(),
-            mock_driver: Arc::new(MockDriver::new()),
             tcp_driver: Arc::new(ModbusTcpDriver::new()),
             rtu_driver: Arc::new(ModbusRtuDriver::new()),
         }
@@ -394,8 +471,136 @@ pub fn comm_ping() -> CommPingResponse {
 }
 
 #[tauri::command]
-pub fn comm_config_load(app: AppHandle) -> Result<CommConfigV1, String> {
-    let base_dir = comm_base_dir(&app)?;
+pub async fn comm_project_create(
+    app: AppHandle,
+    request: CommProjectCreateRequest,
+) -> Result<CommProjectV1, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        projects::create_project(&app_data_dir, request.name, request.device, request.notes)
+    })
+    .await
+    .map_err(|e| format!("comm_project_create join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn comm_projects_list(
+    app: AppHandle,
+    request: Option<CommProjectsListRequest>,
+) -> Result<CommProjectsListResponse, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let include_deleted = request.and_then(|r| r.include_deleted).unwrap_or(false);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        projects::list_projects(&app_data_dir, include_deleted)
+    })
+    .await
+    .map_err(|e| format!("comm_projects_list join error: {e}"))?
+    .map(|projects| CommProjectsListResponse { projects })
+}
+
+#[tauri::command]
+pub async fn comm_project_get(
+    app: AppHandle,
+    project_id: String,
+) -> Result<Option<CommProjectV1>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || projects::load_project(&app_data_dir, &project_id))
+        .await
+        .map_err(|e| format!("comm_project_get join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn comm_project_load_v1(
+    app: AppHandle,
+    project_id: String,
+) -> Result<CommProjectDataV1, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        projects::load_project_data(&app_data_dir, &project_id)
+    })
+    .await
+    .map_err(|e| format!("comm_project_load_v1 join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn comm_project_save_v1(
+    app: AppHandle,
+    payload: CommProjectDataV1,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        projects::save_project_data(&app_data_dir, &payload)
+    })
+    .await
+    .map_err(|e| format!("comm_project_save_v1 join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn comm_project_ui_state_patch_v1(
+    app: AppHandle,
+    project_id: String,
+    patch: CommProjectUiStateV1,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut project = projects::load_project_data(&app_data_dir, &project_id)?;
+
+        let mut ui = project.ui_state.unwrap_or_default();
+        if patch.active_channel_name.is_some() {
+            ui.active_channel_name = patch.active_channel_name;
+        }
+        if patch.points_batch_template.is_some() {
+            ui.points_batch_template = patch.points_batch_template;
+        }
+        project.ui_state = Some(ui);
+
+        projects::save_project_data(&app_data_dir, &project)?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("comm_project_ui_state_patch_v1 join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn comm_project_copy(
+    app: AppHandle,
+    request: CommProjectCopyRequest,
+) -> Result<CommProjectV1, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        projects::copy_project(&app_data_dir, &request.project_id, request.name)
+    })
+    .await
+    .map_err(|e| format!("comm_project_copy join error: {e}"))?
+}
+
+#[tauri::command]
+pub async fn comm_project_delete(
+    app: AppHandle,
+    project_id: String,
+) -> Result<CommProjectV1, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        projects::soft_delete_project(&app_data_dir, &project_id)
+    })
+    .await
+    .map_err(|e| format!("comm_project_delete join error: {e}"))?
+}
+
+#[tauri::command]
+pub fn comm_config_load(
+    app: AppHandle,
+    project_id: Option<String>,
+) -> Result<CommConfigV1, String> {
+    let base_dir = comm_base_dir(&app, project_id.as_deref())?;
     let default_dir = storage::default_output_dir(&base_dir)
         .to_string_lossy()
         .to_string();
@@ -415,7 +620,11 @@ pub fn comm_config_load(app: AppHandle) -> Result<CommConfigV1, String> {
 }
 
 #[tauri::command]
-pub fn comm_config_save(app: AppHandle, payload: CommConfigV1) -> Result<(), String> {
+pub fn comm_config_save(
+    app: AppHandle,
+    payload: CommConfigV1,
+    project_id: Option<String>,
+) -> Result<(), String> {
     if payload.schema_version != SCHEMA_VERSION_V1 {
         return Err(format!(
             "unsupported schemaVersion: {}",
@@ -423,7 +632,7 @@ pub fn comm_config_save(app: AppHandle, payload: CommConfigV1) -> Result<(), Str
         ));
     }
 
-    let base_dir = comm_base_dir(&app)?;
+    let base_dir = comm_base_dir(&app, project_id.as_deref())?;
     let default_dir = storage::default_output_dir(&base_dir)
         .to_string_lossy()
         .to_string();
@@ -442,6 +651,7 @@ pub fn comm_profiles_save(
     app: AppHandle,
     state: State<'_, CommState>,
     payload: ProfilesV1,
+    project_id: Option<String>,
 ) -> Result<(), String> {
     if payload.schema_version != SCHEMA_VERSION_V1 {
         return Err(format!(
@@ -450,9 +660,17 @@ pub fn comm_profiles_save(
         ));
     }
 
-    let base_dir = comm_base_dir(&app)?;
-    storage::save_profiles(&base_dir, &payload).map_err(|e| e.to_string())?;
-    state.memory.lock().profiles = Some(payload);
+    let scope = scope_key(project_id.as_deref());
+    if let Some(project_id) = project_id.as_deref() {
+        let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        let mut project = projects::load_project_data(&app_data_dir, project_id)?;
+        project.connections = Some(payload.clone());
+        projects::save_project_data(&app_data_dir, &project)?;
+    } else {
+        let base_dir = comm_base_dir(&app, None)?;
+        storage::save_profiles(&base_dir, &payload).map_err(|e| e.to_string())?;
+    }
+    state.memory.lock().scope_mut(&scope).profiles = Some(payload);
     Ok(())
 }
 
@@ -460,18 +678,36 @@ pub fn comm_profiles_save(
 pub fn comm_profiles_load(
     app: AppHandle,
     state: State<'_, CommState>,
+    project_id: Option<String>,
 ) -> Result<ProfilesV1, String> {
-    let base_dir = comm_base_dir(&app)?;
+    let scope = scope_key(project_id.as_deref());
+    if let Some(project_id) = project_id.as_deref() {
+        let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        let project = projects::load_project_data(&app_data_dir, project_id)?;
+        let profiles = project.connections.unwrap_or(ProfilesV1 {
+            schema_version: SCHEMA_VERSION_V1,
+            profiles: vec![],
+        });
+        state.memory.lock().scope_mut(&scope).profiles = Some(profiles.clone());
+        return Ok(profiles);
+    }
+
+    let base_dir = comm_base_dir(&app, None)?;
     let loaded = storage::load_profiles(&base_dir).map_err(|e| e.to_string())?;
     if let Some(v) = loaded {
-        state.memory.lock().profiles = Some(v.clone());
+        state.memory.lock().scope_mut(&scope).profiles = Some(v.clone());
         return Ok(v);
     }
 
-    Ok(state.memory.lock().profiles.clone().unwrap_or(ProfilesV1 {
-        schema_version: SCHEMA_VERSION_V1,
-        profiles: vec![],
-    }))
+    Ok(state
+        .memory
+        .lock()
+        .scope(&scope)
+        .and_then(|v| v.profiles.clone())
+        .unwrap_or(ProfilesV1 {
+            schema_version: SCHEMA_VERSION_V1,
+            profiles: vec![],
+        }))
 }
 
 #[tauri::command]
@@ -479,6 +715,7 @@ pub fn comm_points_save(
     app: AppHandle,
     state: State<'_, CommState>,
     payload: PointsV1,
+    project_id: Option<String>,
 ) -> Result<(), String> {
     if payload.schema_version != SCHEMA_VERSION_V1 {
         return Err(format!(
@@ -487,25 +724,54 @@ pub fn comm_points_save(
         ));
     }
 
-    let base_dir = comm_base_dir(&app)?;
-    storage::save_points(&base_dir, &payload).map_err(|e| e.to_string())?;
-    state.memory.lock().points = Some(payload);
+    let scope = scope_key(project_id.as_deref());
+    if let Some(project_id) = project_id.as_deref() {
+        let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        let mut project = projects::load_project_data(&app_data_dir, project_id)?;
+        project.points = Some(payload.clone());
+        projects::save_project_data(&app_data_dir, &project)?;
+    } else {
+        let base_dir = comm_base_dir(&app, None)?;
+        storage::save_points(&base_dir, &payload).map_err(|e| e.to_string())?;
+    }
+    state.memory.lock().scope_mut(&scope).points = Some(payload);
     Ok(())
 }
 
 #[tauri::command]
-pub fn comm_points_load(app: AppHandle, state: State<'_, CommState>) -> Result<PointsV1, String> {
-    let base_dir = comm_base_dir(&app)?;
+pub fn comm_points_load(
+    app: AppHandle,
+    state: State<'_, CommState>,
+    project_id: Option<String>,
+) -> Result<PointsV1, String> {
+    let scope = scope_key(project_id.as_deref());
+    if let Some(project_id) = project_id.as_deref() {
+        let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        let project = projects::load_project_data(&app_data_dir, project_id)?;
+        let points = project.points.unwrap_or(PointsV1 {
+            schema_version: SCHEMA_VERSION_V1,
+            points: vec![],
+        });
+        state.memory.lock().scope_mut(&scope).points = Some(points.clone());
+        return Ok(points);
+    }
+
+    let base_dir = comm_base_dir(&app, None)?;
     let loaded = storage::load_points(&base_dir).map_err(|e| e.to_string())?;
     if let Some(v) = loaded {
-        state.memory.lock().points = Some(v.clone());
+        state.memory.lock().scope_mut(&scope).points = Some(v.clone());
         return Ok(v);
     }
 
-    Ok(state.memory.lock().points.clone().unwrap_or(PointsV1 {
-        schema_version: SCHEMA_VERSION_V1,
-        points: vec![],
-    }))
+    Ok(state
+        .memory
+        .lock()
+        .scope(&scope)
+        .and_then(|v| v.points.clone())
+        .unwrap_or(PointsV1 {
+            schema_version: SCHEMA_VERSION_V1,
+            points: vec![],
+        }))
 }
 
 #[tauri::command]
@@ -513,16 +779,18 @@ pub fn comm_plan_build(
     app: AppHandle,
     state: State<'_, CommState>,
     request: CommPlanBuildRequest,
+    project_id: Option<String>,
 ) -> Result<PlanV1, String> {
-    let base_dir = comm_base_dir(&app)?;
-    let profiles = resolve_profiles(&app, &state, request.profiles)?;
-    let points = resolve_points(&app, &state, request.points)?;
+    let scope = scope_key(project_id.as_deref());
+    let base_dir = comm_base_dir(&app, project_id.as_deref())?;
+    let profiles = resolve_profiles(&base_dir, &state, &scope, request.profiles)?;
+    let points = resolve_points(&base_dir, &state, &scope, request.points)?;
 
     let options = request.options.unwrap_or_default();
     let plan =
         build_read_plan(&profiles.profiles, &points.points, options).map_err(|e| e.to_string())?;
 
-    state.memory.lock().plan = Some(plan.clone());
+    state.memory.lock().scope_mut(&scope).plan = Some(plan.clone());
     storage::save_plan(&base_dir, &plan).map_err(|e| e.to_string())?;
     Ok(PlanV1 {
         schema_version: SCHEMA_VERSION_V1,
@@ -535,31 +803,125 @@ pub async fn comm_run_start(
     app: AppHandle,
     state: State<'_, CommState>,
     request: CommRunStartRequest,
+    project_id: Option<String>,
 ) -> Result<CommRunStartResponse, String> {
-    let base_dir = comm_base_dir(&app)?;
-    let profiles = resolve_profiles(&app, &state, request.profiles)?;
-    let points = resolve_points(&app, &state, request.points)?;
+    let run_id = comm_run_start_inner(app, state, request, project_id)
+        .await
+        .map_err(|e| e.message)?;
+    Ok(CommRunStartResponse { run_id })
+}
+
+#[tauri::command]
+pub async fn comm_run_start_obs(
+    app: AppHandle,
+    state: State<'_, CommState>,
+    request: CommRunStartRequest,
+    project_id: Option<String>,
+) -> Result<CommRunStartObsResponse, CommRunError> {
+    let resp = match comm_run_start_inner(app, state, request, project_id.clone()).await {
+        Ok(run_id) => CommRunStartObsResponse {
+            ok: true,
+            run_id: Some(run_id),
+            error: None,
+        },
+        Err(err) => CommRunStartObsResponse {
+            ok: false,
+            run_id: None,
+            error: Some(err),
+        },
+    };
+    Ok(resp)
+}
+
+async fn comm_run_start_inner(
+    app: AppHandle,
+    state: State<'_, CommState>,
+    request: CommRunStartRequest,
+    project_id: Option<String>,
+) -> Result<Uuid, CommRunError> {
+    let scope = scope_key(project_id.as_deref());
+    let base_dir = comm_base_dir(&app, project_id.as_deref())
+        .map_err(|message| comm_run_error_from_message(message, None, project_id.clone()))?;
+    let profiles = resolve_profiles(&base_dir, &state, &scope, request.profiles)
+        .map_err(|message| comm_run_error_from_message(message, None, project_id.clone()))?;
+    let points = resolve_points(&base_dir, &state, &scope, request.points)
+        .map_err(|message| comm_run_error_from_message(message, None, project_id.clone()))?;
+
+    if profiles.profiles.is_empty() {
+        return Err(CommRunError {
+            kind: CommRunErrorKind::ConfigError,
+            message: "profiles is empty".to_string(),
+            details: Some(CommRunErrorDetails {
+                project_id,
+                ..Default::default()
+            }),
+        });
+    }
+
+    if points.points.is_empty() {
+        return Err(CommRunError {
+            kind: CommRunErrorKind::ConfigError,
+            message: "points is empty".to_string(),
+            details: Some(CommRunErrorDetails {
+                project_id,
+                ..Default::default()
+            }),
+        });
+    }
+
+    let missing_fields = run_validation::validate_run_inputs(&profiles.profiles, &points.points);
+    if !missing_fields.is_empty() {
+        return Err(CommRunError {
+            kind: CommRunErrorKind::ConfigError,
+            message: "invalid points/profiles configuration".to_string(),
+            details: Some(CommRunErrorDetails {
+                project_id,
+                missing_fields: Some(missing_fields),
+                ..Default::default()
+            }),
+        });
+    }
 
     let plan = match request.plan {
         Some(p) => p,
         None => {
-            if let Some(saved) = state.memory.lock().plan.clone() {
+            if let Some(saved) = state
+                .memory
+                .lock()
+                .scope(&scope)
+                .and_then(|v| v.plan.clone())
+            {
                 saved
+            } else if let Some(saved) = storage::load_plan(&base_dir)
+                .map_err(|e| comm_run_error_from_message(e.to_string(), None, project_id.clone()))?
+            {
+                state.memory.lock().scope_mut(&scope).plan = Some(saved.plan.clone());
+                saved.plan
             } else {
-                if let Some(saved) = storage::load_plan(&base_dir).map_err(|e| e.to_string())? {
-                    state.memory.lock().plan = Some(saved.plan.clone());
-                    saved.plan
-                } else {
-                    build_read_plan(&profiles.profiles, &points.points, PlanOptions::default())
-                        .map_err(|e| e.to_string())?
-                }
+                build_read_plan(&profiles.profiles, &points.points, PlanOptions::default())
+                    .map_err(|e| {
+                        comm_run_error_from_message(e.to_string(), None, project_id.clone())
+                    })?
             }
         }
     };
 
-    let driver_kind = request.driver.unwrap_or(CommDriverKind::Mock);
+    let driver_kind = match request.driver {
+        Some(v) => v,
+        None => infer_driver_kind_from_profiles(&profiles.profiles)
+            .map_err(|message| comm_run_error_from_message(message, None, project_id.clone()))?,
+    };
+    if profiles_has_mismatched_protocol(&profiles.profiles, driver_kind.clone()) {
+        return Err(CommRunError {
+            kind: CommRunErrorKind::ConfigError,
+            message: format!("driver={driver_kind:?} does not match profiles.protocolType"),
+            details: Some(CommRunErrorDetails {
+                project_id,
+                ..Default::default()
+            }),
+        });
+    }
     let driver: Arc<dyn CommDriver> = match driver_kind {
-        CommDriverKind::Mock => Arc::clone(&state.mock_driver) as Arc<dyn CommDriver>,
         CommDriverKind::Tcp => Arc::clone(&state.tcp_driver) as Arc<dyn CommDriver>,
         CommDriverKind::Rtu485 => Arc::clone(&state.rtu_driver) as Arc<dyn CommDriver>,
     };
@@ -573,11 +935,34 @@ pub async fn comm_run_start(
         poll_interval_ms,
     );
 
-    Ok(CommRunStartResponse { run_id })
+    Ok(run_id)
 }
 
 #[tauri::command]
 pub fn comm_run_latest(
+    state: State<'_, CommState>,
+    run_id: Uuid,
+) -> Result<CommRunLatestResponse, String> {
+    comm_run_latest_inner(state, run_id)
+}
+
+#[tauri::command]
+pub fn comm_run_latest_obs(state: State<'_, CommState>, run_id: Uuid) -> CommRunLatestObsResponse {
+    match comm_run_latest_inner(state, run_id) {
+        Ok(value) => CommRunLatestObsResponse {
+            ok: true,
+            value: Some(value),
+            error: None,
+        },
+        Err(message) => CommRunLatestObsResponse {
+            ok: false,
+            value: None,
+            error: Some(comm_run_error_from_message(message, Some(run_id), None)),
+        },
+    }
+}
+
+fn comm_run_latest_inner(
     state: State<'_, CommState>,
     run_id: Uuid,
 ) -> Result<CommRunLatestResponse, String> {
@@ -602,6 +987,40 @@ pub async fn comm_run_stop(
     app: AppHandle,
     state: State<'_, CommState>,
     run_id: Uuid,
+    project_id: Option<String>,
+) -> Result<(), String> {
+    comm_run_stop_inner(app, state, run_id, project_id).await
+}
+
+#[tauri::command]
+pub async fn comm_run_stop_obs(
+    app: AppHandle,
+    state: State<'_, CommState>,
+    run_id: Uuid,
+    project_id: Option<String>,
+) -> Result<CommRunStopObsResponse, CommRunError> {
+    let resp = match comm_run_stop_inner(app, state, run_id, project_id.clone()).await {
+        Ok(()) => CommRunStopObsResponse {
+            ok: true,
+            error: None,
+        },
+        Err(message) => CommRunStopObsResponse {
+            ok: false,
+            error: Some(comm_run_error_from_message(
+                message,
+                Some(run_id),
+                project_id,
+            )),
+        },
+    };
+    Ok(resp)
+}
+
+async fn comm_run_stop_inner(
+    app: AppHandle,
+    state: State<'_, CommState>,
+    run_id: Uuid,
+    project_id: Option<String>,
 ) -> Result<(), String> {
     let snapshot = state.engine.latest(run_id);
     let stopped = state.engine.stop_run(run_id).await;
@@ -611,17 +1030,57 @@ pub async fn comm_run_stop(
     }
 
     if let Some((results, stats, _updated_at_utc, _run_warnings)) = snapshot {
-        let base_dir = match comm_base_dir(&app) {
+        let base_dir = match comm_base_dir(&app, project_id.as_deref()) {
             Ok(v) => v,
             Err(_) => return Ok(()),
         };
+        let is_project = project_id.is_some();
 
         tauri::async_runtime::spawn_blocking(move || {
-            let _ = storage::save_last_results(&base_dir, &results, &stats);
+            if is_project {
+                let _ = storage::save_run_last_results(&base_dir, run_id, &results, &stats);
+                let _ = storage::save_last_results(&base_dir, &results, &stats);
+            } else {
+                let _ = storage::save_last_results(&base_dir, &results, &stats);
+            }
         });
     }
 
     Ok(())
+}
+
+fn comm_run_error_kind_from_message(message: &str) -> CommRunErrorKind {
+    let msg = message.to_ascii_lowercase();
+    if msg.contains("run not found") {
+        return CommRunErrorKind::RunNotFound;
+    }
+    if msg.contains("profiles")
+        || msg.contains("points")
+        || msg.contains("plan")
+        || msg.contains("schemaversion")
+        || msg.contains("projectid")
+        || msg.contains("unsupported")
+        || msg.contains("not provided")
+    {
+        return CommRunErrorKind::ConfigError;
+    }
+    CommRunErrorKind::InternalError
+}
+
+fn comm_run_error_from_message(
+    message: String,
+    run_id: Option<Uuid>,
+    project_id: Option<String>,
+) -> CommRunError {
+    CommRunError {
+        kind: comm_run_error_kind_from_message(&message),
+        message,
+        details: Some(CommRunErrorDetails {
+            run_id: run_id.map(|v| v.to_string()),
+            project_id,
+            ..Default::default()
+        }),
+    }
 }
 
 #[tauri::command]
@@ -629,20 +1088,29 @@ pub async fn comm_export_xlsx(
     app: AppHandle,
     state: State<'_, CommState>,
     request: CommExportXlsxRequest,
+    project_id: Option<String>,
 ) -> Result<CommExportXlsxResponse, String> {
-    let profiles = resolve_profiles(&app, &state, request.profiles)?;
-    let points = resolve_points(&app, &state, request.points)?;
+    let scope = scope_key(project_id.as_deref());
+    let profiles_dir = comm_base_dir(&app, project_id.as_deref())?;
+    let profiles = resolve_profiles(&profiles_dir, &state, &scope, request.profiles)?;
+    let points = resolve_points(&profiles_dir, &state, &scope, request.points)?;
 
-    let base_dir = comm_base_dir(&app)?;
+    let base_dir = profiles_dir;
     let out_path_text = request.out_path;
     let profiles_vec = profiles.profiles.clone();
     let points_vec = points.points.clone();
+    let is_project = project_id.is_some();
 
     tauri::async_runtime::spawn_blocking(move || {
         let now = chrono::Utc::now();
-        let output_dir = path_resolver::resolve_output_dir(&base_dir);
         let out_path = if out_path_text.trim().is_empty() {
-            path_resolver::default_delivery_xlsx_path(&output_dir, now)
+            if is_project {
+                let ts = path_resolver::ts_label(now);
+                projects::project_exports_dir(&base_dir).join(format!("通讯地址表.{ts}.xlsx"))
+            } else {
+                let output_dir = path_resolver::resolve_output_dir(&base_dir);
+                path_resolver::default_delivery_xlsx_path(&output_dir, now)
+            }
         } else {
             std::path::PathBuf::from(&out_path_text)
         };
@@ -686,6 +1154,7 @@ pub async fn comm_export_delivery_xlsx(
     app: AppHandle,
     state: State<'_, CommState>,
     request: CommExportDeliveryXlsxRequest,
+    project_id: Option<String>,
 ) -> Result<CommExportDeliveryXlsxResponse, String> {
     let CommExportDeliveryXlsxRequest {
         out_path: out_path_text,
@@ -697,21 +1166,28 @@ pub async fn comm_export_delivery_xlsx(
         points: request_points,
     } = request;
 
-    let profiles = resolve_profiles(&app, &state, request_profiles)?;
-    let points = resolve_points(&app, &state, request_points)?;
+    let scope = scope_key(project_id.as_deref());
+    let base_dir = comm_base_dir(&app, project_id.as_deref())?;
+    let profiles = resolve_profiles(&base_dir, &state, &scope, request_profiles)?;
+    let points = resolve_points(&base_dir, &state, &scope, request_points)?;
 
-    let base_dir = comm_base_dir(&app)?;
     let include_results = include_results.unwrap_or(false);
     let results_source = results_source.unwrap_or(DeliveryResultsSource::Appdata);
 
     let profiles_vec = profiles.profiles.clone();
     let points_vec = points.points.clone();
+    let is_project = project_id.is_some();
 
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         let now = chrono::Utc::now();
-        let output_dir = path_resolver::resolve_output_dir(&base_dir);
         let out_path = if out_path_text.trim().is_empty() {
-            path_resolver::default_delivery_xlsx_path(&output_dir, now)
+            if is_project {
+                let ts = path_resolver::ts_label(now);
+                projects::project_exports_dir(&base_dir).join(format!("通讯地址表.{ts}.xlsx"))
+            } else {
+                let output_dir = path_resolver::resolve_output_dir(&base_dir);
+                path_resolver::default_delivery_xlsx_path(&output_dir, now)
+            }
         } else {
             std::path::PathBuf::from(&out_path_text)
         };
@@ -821,10 +1297,12 @@ pub async fn comm_export_ir_v1(
     app: AppHandle,
     state: State<'_, CommState>,
     request: CommExportIrV1Request,
+    project_id: Option<String>,
 ) -> Result<CommExportIrV1Response, String> {
-    let base_dir = comm_base_dir(&app)?;
-    let profiles = resolve_profiles(&app, &state, request.profiles)?;
-    let points = resolve_points(&app, &state, request.points)?;
+    let scope = scope_key(project_id.as_deref());
+    let base_dir = comm_base_dir(&app, project_id.as_deref())?;
+    let profiles = resolve_profiles(&base_dir, &state, &scope, request.profiles)?;
+    let points = resolve_points(&base_dir, &state, &scope, request.points)?;
 
     let union_xlsx_path = request.union_xlsx_path;
     let decisions = request.decisions;
@@ -883,8 +1361,9 @@ pub async fn comm_export_ir_v1(
 pub async fn comm_bridge_to_plc_import_v1(
     app: AppHandle,
     request: CommBridgeToPlcImportV1Request,
+    project_id: Option<String>,
 ) -> CommBridgeToPlcImportV1Response {
-    let base_dir = match comm_base_dir(&app) {
+    let base_dir = match comm_base_dir(&app, project_id.as_deref()) {
         Ok(v) => v,
         Err(e) => {
             return CommBridgeToPlcImportV1Response {
@@ -969,8 +1448,9 @@ pub async fn comm_bridge_to_plc_import_v1(
 pub async fn comm_bridge_consume_check(
     app: AppHandle,
     request: CommBridgeConsumeCheckRequest,
+    project_id: Option<String>,
 ) -> CommBridgeConsumeCheckResponse {
-    let base_dir = match comm_base_dir(&app) {
+    let base_dir = match comm_base_dir(&app, project_id.as_deref()) {
         Ok(v) => v,
         Err(e) => {
             return CommBridgeConsumeCheckResponse {
@@ -1041,8 +1521,9 @@ pub async fn comm_bridge_consume_check(
 pub async fn comm_bridge_export_importresult_stub_v1(
     app: AppHandle,
     request: CommBridgeExportImportResultStubV1Request,
+    project_id: Option<String>,
 ) -> CommBridgeExportImportResultStubV1Response {
-    let base_dir = match comm_base_dir(&app) {
+    let base_dir = match comm_base_dir(&app, project_id.as_deref()) {
         Ok(v) => v,
         Err(e) => {
             return CommBridgeExportImportResultStubV1Response {
@@ -1128,8 +1609,9 @@ pub async fn comm_bridge_export_importresult_stub_v1(
 pub async fn comm_merge_import_sources_v1(
     app: AppHandle,
     request: CommMergeImportSourcesV1Request,
+    project_id: Option<String>,
 ) -> CommMergeImportSourcesV1Response {
-    let base_dir = match comm_base_dir(&app) {
+    let base_dir = match comm_base_dir(&app, project_id.as_deref()) {
         Ok(v) => v,
         Err(e) => {
             return CommMergeImportSourcesV1Response {
@@ -1241,8 +1723,9 @@ pub async fn comm_merge_import_sources_v1(
 pub async fn comm_unified_export_plc_import_stub_v1(
     app: AppHandle,
     request: CommUnifiedExportPlcImportStubV1Request,
+    project_id: Option<String>,
 ) -> CommUnifiedExportPlcImportStubV1Response {
-    let base_dir = match comm_base_dir(&app) {
+    let base_dir = match comm_base_dir(&app, project_id.as_deref()) {
         Ok(v) => v,
         Err(e) => {
             return CommUnifiedExportPlcImportStubV1Response {
@@ -1328,15 +1811,21 @@ pub async fn comm_unified_export_plc_import_stub_v1(
 pub async fn comm_evidence_pack_create(
     app: AppHandle,
     request: CommEvidencePackRequest,
+    project_id: Option<String>,
 ) -> Result<CommEvidencePackResponse, String> {
-    let base_dir = comm_base_dir(&app)?;
+    let base_dir = comm_base_dir(&app, project_id.as_deref())?;
+    let output_dir = if project_id.is_some() {
+        base_dir.clone()
+    } else {
+        path_resolver::resolve_output_dir(&base_dir)
+    };
     let app_name = app.config().identifier.clone();
     let app_version = app.package_info().version.to_string();
     let git_commit = option_env!("GIT_COMMIT").unwrap_or("unknown").to_string();
 
     tauri::async_runtime::spawn_blocking(move || {
         evidence_pack::create_evidence_pack(
-            &base_dir,
+            &output_dir,
             &request,
             &app_name,
             &app_version,
@@ -1473,8 +1962,9 @@ pub async fn comm_import_union_xlsx(
 }
 
 fn resolve_profiles(
-    app: &AppHandle,
+    base_dir: &std::path::Path,
     state: &State<'_, CommState>,
+    scope: &str,
     payload: Option<ProfilesV1>,
 ) -> Result<ProfilesV1, String> {
     if let Some(payload) = payload {
@@ -1487,23 +1977,23 @@ fn resolve_profiles(
         return Ok(payload);
     }
 
-    let base_dir = comm_base_dir(app)?;
     if let Some(v) = storage::load_profiles(&base_dir).map_err(|e| e.to_string())? {
-        state.memory.lock().profiles = Some(v.clone());
+        state.memory.lock().scope_mut(scope).profiles = Some(v.clone());
         return Ok(v);
     }
 
     state
         .memory
         .lock()
-        .profiles
-        .clone()
+        .scope(scope)
+        .and_then(|v| v.profiles.clone())
         .ok_or_else(|| "profiles not provided and not saved".to_string())
 }
 
 fn resolve_points(
-    app: &AppHandle,
+    base_dir: &std::path::Path,
     state: &State<'_, CommState>,
+    scope: &str,
     payload: Option<PointsV1>,
 ) -> Result<PointsV1, String> {
     if let Some(payload) = payload {
@@ -1516,17 +2006,16 @@ fn resolve_points(
         return Ok(payload);
     }
 
-    let base_dir = comm_base_dir(app)?;
     if let Some(v) = storage::load_points(&base_dir).map_err(|e| e.to_string())? {
-        state.memory.lock().points = Some(v.clone());
+        state.memory.lock().scope_mut(scope).points = Some(v.clone());
         return Ok(v);
     }
 
     state
         .memory
         .lock()
-        .points
-        .clone()
+        .scope(scope)
+        .and_then(|v| v.points.clone())
         .ok_or_else(|| "points not provided and not saved".to_string())
 }
 
@@ -1544,9 +2033,57 @@ fn profiles_min_poll_interval_ms(profiles: &[ConnectionProfile]) -> Option<u32> 
         .min()
 }
 
-fn comm_base_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+fn profiles_has_mismatched_protocol(
+    profiles: &[ConnectionProfile],
+    driver_kind: CommDriverKind,
+) -> bool {
+    match driver_kind {
+        CommDriverKind::Tcp => profiles
+            .iter()
+            .any(|p| matches!(p, ConnectionProfile::Rtu485 { .. })),
+        CommDriverKind::Rtu485 => profiles
+            .iter()
+            .any(|p| matches!(p, ConnectionProfile::Tcp { .. })),
+    }
+}
+
+fn infer_driver_kind_from_profiles(
+    profiles: &[ConnectionProfile],
+) -> Result<CommDriverKind, String> {
+    let mut has_tcp = false;
+    let mut has_rtu = false;
+    for p in profiles {
+        match p {
+            ConnectionProfile::Tcp { .. } => has_tcp = true,
+            ConnectionProfile::Rtu485 { .. } => has_rtu = true,
+        }
+    }
+
+    match (has_tcp, has_rtu) {
+        (true, false) => Ok(CommDriverKind::Tcp),
+        (false, true) => Ok(CommDriverKind::Rtu485),
+        (false, false) => Err("profiles is empty".to_string()),
+        (true, true) => Err(
+            "mixed TCP and 485 profiles are not supported in a single run; please run separately"
+                .to_string(),
+        ),
+    }
+}
+
+fn scope_key(project_id: Option<&str>) -> String {
+    project_id.unwrap_or("legacy").to_string()
+}
+
+fn comm_base_dir(app: &AppHandle, project_id: Option<&str>) -> Result<std::path::PathBuf, String> {
+    if let Some(v) = project_id {
+        projects::validate_project_id(v)?;
+    }
+
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    Ok(storage::comm_dir(app_data_dir))
+    Ok(match project_id {
+        Some(project_id) => projects::project_comm_dir(&app_data_dir, project_id),
+        None => storage::comm_dir(app_data_dir),
+    })
 }
 
 // Legacy evidence-pack implementation (previously behind `#[cfg(any())]`) has been removed.

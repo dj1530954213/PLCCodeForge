@@ -1,9 +1,15 @@
+// 说明:
+// - ClipboardAdapter 封装剪贴板写入的稳定性策略与错误分类。
+// - 仅作为内部能力供 flow 调用，不暴露为 RPC 方法。
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Windows.Forms;
 
 namespace Autothink.UiaAgent.Uia;
 
+/// <summary>
+/// 剪贴板写入失败的分类，用于诊断与降级决策。
+/// </summary>
 internal enum ClipboardFailureKind
 {
     AccessDenied,
@@ -12,6 +18,9 @@ internal enum ClipboardFailureKind
     Unsupported,
 }
 
+/// <summary>
+/// 单次剪贴板写入尝试的结果与诊断信息。
+/// </summary>
 internal sealed class ClipboardAttemptResult
 {
     public bool Ok { get; init; }
@@ -20,6 +29,9 @@ internal sealed class ClipboardAttemptResult
     public string? ExceptionType { get; init; }
 }
 
+/// <summary>
+/// 剪贴板访问适配器：在 STA 线程内执行写入并返回结构化错误信息。
+/// </summary>
 internal static class ClipboardAdapter
 {
     private const int ClipbrdCantOpen = unchecked((int)0x800401D0);

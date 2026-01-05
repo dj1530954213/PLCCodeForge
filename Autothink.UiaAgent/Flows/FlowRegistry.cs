@@ -1,9 +1,15 @@
+// 说明:
+// - FlowRegistry 是 flow 的注册表/路由表，负责 Name -> IFlow 的映射。
+// - 用于 RunFlow 分发与测试替换（OverrideForTests）。
 using System.Text.Json;
 using Autothink.UiaAgent.Rpc.Contracts;
 using Autothink.UiaAgent.Flows.Autothink;
 
 namespace Autothink.UiaAgent.Flows;
 
+/// <summary>
+/// Flow 注册中心：管理各 Flow 的实例与查询。
+/// </summary>
 internal static class FlowRegistry
 {
     private static readonly object Sync = new();

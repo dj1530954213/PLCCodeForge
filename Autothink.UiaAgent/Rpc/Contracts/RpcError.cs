@@ -1,3 +1,6 @@
+// 说明:
+// - RPC 错误契约：用于在不抛异常的情况下返回稳定的错误分类与可诊断信息。
+// - Runner 与上层会据此做 summary 分类、重试与现场定位。
 namespace Autothink.UiaAgent.Rpc.Contracts;
 
 /// <summary>

@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 
 import type { ConnectionProfile, ProfilesV1, RegisterArea, SerialParity } from "../api";
 import { commProfilesLoad, commProfilesSave } from "../api";
+
+const route = useRoute();
+const projectId = computed(() => String(route.params.projectId ?? ""));
 
 const AREA_OPTIONS: RegisterArea[] = ["Holding", "Coil"];
 const PARITY_OPTIONS: SerialParity[] = ["None", "Even", "Odd"];
@@ -92,14 +96,22 @@ const editingUiStartAddress = computed<number>({
   },
 });
 
-async function load() {
-  model.value = await commProfilesLoad();
-  ElMessage.success("已加载 profiles");
+async function load(silent = false) {
+  try {
+    model.value = await commProfilesLoad(projectId.value);
+    if (!silent) ElMessage.success("已加载 profiles");
+  } catch (e: unknown) {
+    ElMessage.error(String((e as any)?.message ?? e ?? "加载失败"));
+  }
 }
 
 async function save() {
-  await commProfilesSave(model.value);
-  ElMessage.success("已保存 profiles");
+  try {
+    await commProfilesSave(model.value, projectId.value);
+    ElMessage.success("已保存 profiles");
+  } catch (e: unknown) {
+    ElMessage.error(String((e as any)?.message ?? e ?? "保存失败"));
+  }
 }
 
 function saveEditing() {
@@ -126,54 +138,7 @@ function saveEditing() {
   dialogOpen.value = false;
 }
 
-async function loadDemo() {
-  model.value = {
-    schemaVersion: 1,
-    profiles: [
-      {
-        protocolType: "TCP",
-        channelName: "tcp-ok",
-        deviceId: 1,
-        readArea: "Holding",
-        startAddress: 0,
-        length: 10,
-        ip: "127.0.0.1",
-        port: 502,
-        timeoutMs: 200,
-        retryCount: 0,
-        pollIntervalMs: 500,
-      },
-      {
-        protocolType: "TCP",
-        channelName: "tcp-timeout",
-        deviceId: 1,
-        readArea: "Holding",
-        startAddress: 0,
-        length: 10,
-        ip: "127.0.0.1",
-        port: 502,
-        timeoutMs: 200,
-        retryCount: 0,
-        pollIntervalMs: 500,
-      },
-      {
-        protocolType: "TCP",
-        channelName: "tcp-decode",
-        deviceId: 1,
-        readArea: "Holding",
-        startAddress: 0,
-        length: 10,
-        ip: "127.0.0.1",
-        port: 502,
-        timeoutMs: 200,
-        retryCount: 0,
-        pollIntervalMs: 500,
-      },
-    ],
-  };
-  await save();
-  ElMessage.success("已加载并保存 demo profiles（mock）");
-}
+watch(projectId, () => void load(true), { immediate: true });
 </script>
 
 <template>
@@ -183,9 +148,8 @@ async function loadDemo() {
     <el-space wrap>
       <el-button type="primary" @click="openAddTcp">新增 TCP</el-button>
       <el-button type="primary" @click="openAdd485">新增 485</el-button>
-      <el-button @click="load">加载</el-button>
+      <el-button @click="load(false)">加载</el-button>
       <el-button @click="save">保存</el-button>
-      <el-button type="success" @click="loadDemo">加载 Demo（mock）</el-button>
     </el-space>
 
     <el-divider />

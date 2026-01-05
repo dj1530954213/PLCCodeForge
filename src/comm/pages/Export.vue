@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 
 import type {
@@ -12,6 +13,9 @@ import type {
   RunStats,
 } from "../api";
 import { commExportDeliveryXlsx, commExportXlsx, commPointsLoad, commProfilesLoad, commRunLatest } from "../api";
+
+const route = useRoute();
+const projectId = computed(() => String(route.params.projectId ?? ""));
 
 const outPath = ref<string>("");
 const last = ref<CommExportXlsxResponse | null>(null);
@@ -32,21 +36,21 @@ async function setDefaultPath() {
 }
 
 async function exportNow() {
-  const profiles: ProfilesV1 = await commProfilesLoad();
-  const points: PointsV1 = await commPointsLoad();
+  const profiles: ProfilesV1 = await commProfilesLoad(projectId.value);
+  const points: PointsV1 = await commPointsLoad(projectId.value);
   if (profiles.profiles.length === 0 || points.points.length === 0) {
     ElMessage.error("profiles/points 为空，请先配置并保存");
     return;
   }
 
-  last.value = await commExportXlsx({ outPath: outPath.value.trim(), profiles, points });
+  last.value = await commExportXlsx({ outPath: outPath.value.trim(), profiles, points }, projectId.value);
   lastDelivery.value = null;
   ElMessage.success(`已导出：${last.value.outPath}`);
 }
 
 async function exportDeliveryNow() {
-  const profiles: ProfilesV1 = await commProfilesLoad();
-  const points: PointsV1 = await commPointsLoad();
+  const profiles: ProfilesV1 = await commProfilesLoad(projectId.value);
+  const points: PointsV1 = await commPointsLoad(projectId.value);
   if (profiles.profiles.length === 0 || points.points.length === 0) {
     ElMessage.error("profiles/points 为空，请先配置并保存");
     return;
@@ -74,15 +78,18 @@ async function exportDeliveryNow() {
     }
   }
 
-  lastDelivery.value = await commExportDeliveryXlsx({
-    outPath: outPath.value.trim(),
-    includeResults: includeResults.value,
-    resultsSource: resultsSource.value,
-    results,
-    stats,
-    profiles,
-    points,
-  });
+  lastDelivery.value = await commExportDeliveryXlsx(
+    {
+      outPath: outPath.value.trim(),
+      includeResults: includeResults.value,
+      resultsSource: resultsSource.value,
+      results,
+      stats,
+      profiles,
+      points,
+    },
+    projectId.value
+  );
   last.value = null;
   ElMessage.success(`已交付导出：${lastDelivery.value.outPath}`);
 }

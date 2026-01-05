@@ -1,3 +1,6 @@
+// 说明:
+// - 覆盖 importProgram.textPaste 的参数解析与错误语义。
+// - 确保缺失关键字段时返回 InvalidArgument。
 using System.Text.Json;
 using Autothink.UiaAgent.Flows.Autothink;
 using Autothink.UiaAgent.Rpc.Contracts;
@@ -5,6 +8,9 @@ using Xunit;
 
 namespace Autothink.UiaAgent.Tests;
 
+/// <summary>
+/// importProgram.textPaste 参数校验的单元测试。
+/// </summary>
 public sealed class AutothinkImportProgramTextPasteArgsTests
 {
     [Fact]

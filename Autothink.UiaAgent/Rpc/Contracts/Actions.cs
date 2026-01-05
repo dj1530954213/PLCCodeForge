@@ -1,3 +1,6 @@
+// 说明:
+// - 原子动作相关的 RPC 契约：Find/Click/SetText/SendKeys/WaitUntil 等。
+// - 这些类型被 Agent 与调用方共享，属于协议层稳定接口。
 namespace Autothink.UiaAgent.Rpc.Contracts;
 
 /// <summary>

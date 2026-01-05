@@ -1,3 +1,6 @@
+// 说明:
+// - ElementRef 是元素引用的序列化形式，用于跨 RPC 调用复用目标元素。
+// - 该引用可能失效，调用方需按错误类型重试/重新查找。
 namespace Autothink.UiaAgent.Rpc.Contracts;
 
 /// <summary>

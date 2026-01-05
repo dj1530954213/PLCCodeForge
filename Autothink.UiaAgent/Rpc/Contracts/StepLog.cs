@@ -1,3 +1,6 @@
+// 说明:
+// - StepLog 是现场诊断证据链：记录每个关键动作/等待的时间线与结果。
+// - Runner 与验收环节依赖 StepLog 做证据提交与问题定位。
 namespace Autothink.UiaAgent.Rpc.Contracts;
 
 /// <summary>

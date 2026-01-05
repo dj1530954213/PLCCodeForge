@@ -5,6 +5,48 @@ use serde::{Deserialize, Serialize};
 use super::union_spec_v1::AddressBase;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CommRunErrorKind {
+    #[serde(rename = "ConfigError")]
+    ConfigError,
+    #[serde(rename = "RunNotFound")]
+    RunNotFound,
+    #[serde(rename = "InternalError")]
+    InternalError,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CommRunErrorDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub missing_fields: Option<Vec<CommMissingField>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CommMissingField {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hmi_name: Option<String>,
+    pub field: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommRunError {
+    pub kind: CommRunErrorKind,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<CommRunErrorDetails>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ImportUnionErrorKind {
     #[serde(rename = "UnionXlsxReadError")]
     UnionXlsxReadError,

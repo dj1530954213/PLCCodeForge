@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "autothinkMainWindow": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "AutoThink", "IgnoreCase": true, "Index": 0 }
+      ]
+    },
+    "workspacePane": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "AutoThink", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Pane", "NameContains": "工作区", "IgnoreCase": true, "Index": 0 }
+      ]
+    },
+    "modbusSlaveWindow": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "AutoThink", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Pane", "NameContains": "工作区", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 }
+      ]
+    },
+    "modbusEditor": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "AutoThink", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Pane", "NameContains": "工作区", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "MODBUSSLAVE_TCP", "IgnoreCase": true, "Index": 0 },
+        { "Search": "Descendants", "ControlType": "Edit", "Index": 0 }
+      ]
+    }
+  }
+}

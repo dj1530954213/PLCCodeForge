@@ -1,3 +1,5 @@
+// 说明:
+// - 覆盖 RunFlow 分发逻辑：未知 flow、未实现 flow 的错误语义与 StepLog 结构。
 using Autothink.UiaAgent.Rpc;
 using Autothink.UiaAgent.Rpc.Contracts;
 using Autothink.UiaAgent.Flows;
@@ -5,6 +7,9 @@ using Xunit;
 
 namespace Autothink.UiaAgent.Tests;
 
+/// <summary>
+/// RunFlow 分发/路由的单元测试。
+/// </summary>
 public sealed class RunFlowDispatchTests
 {
     [Fact]

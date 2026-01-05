@@ -295,7 +295,7 @@ fn should_verify_digest(expected: &str) -> bool {
 }
 
 pub(crate) fn create_evidence_pack(
-    base_dir: &std::path::Path,
+    output_dir: &std::path::Path,
     request: &CommEvidencePackRequest,
     app_name: &str,
     app_version: &str,
@@ -311,7 +311,6 @@ pub(crate) fn create_evidence_pack(
     let zip_enabled = request.zip.unwrap_or(true);
 
     let now = chrono::Utc::now();
-    let output_dir = path_resolver::resolve_output_dir(base_dir);
     let evidence_dir = path_resolver::evidence_dir(&output_dir, now);
     std::fs::create_dir_all(&evidence_dir).map_err(|e| e.to_string())?;
 
@@ -1788,7 +1787,7 @@ mod tests {
             }),
             conflict_report: None,
             meta: Some(json!({
-                "run": { "driver": "mock", "includeResults": true, "resultsSource": "runLatest", "durationMs": 1234 },
+                "run": { "driver": "modbus_tcp", "includeResults": true, "resultsSource": "runLatest", "durationMs": 1234 },
                 "counts": { "profiles": 1, "points": 1, "results": 1, "decisions": { "reusedKeyV2": 0, "reusedKeyV2NoDevice": 0, "reusedKeyV1": 0, "createdNew": 1 }, "conflicts": 0 }
             })),
             exported_xlsx_path: Some(xlsx_path.to_string_lossy().to_string()),
@@ -1810,9 +1809,14 @@ mod tests {
             zip: Some(true),
         };
 
-        let resp =
-            create_evidence_pack(&base_dir, &request, "com.example.app", "0.1.0", "deadbeef")
-                .unwrap();
+        let resp = create_evidence_pack(
+            &output_dir,
+            &request,
+            "com.example.app",
+            "0.1.0",
+            "deadbeef",
+        )
+        .unwrap();
 
         assert!(!resp.evidence_dir.is_empty());
         assert!(std::path::Path::new(&resp.evidence_dir).exists());
@@ -1994,7 +1998,7 @@ mod tests {
             }),
             conflict_report: None,
             meta: Some(json!({
-                "run": { "driver": "mock", "includeResults": true, "resultsSource": "runLatest", "durationMs": 1234 },
+                "run": { "driver": "modbus_tcp", "includeResults": true, "resultsSource": "runLatest", "durationMs": 1234 },
                 "counts": { "profiles": 1, "points": 1, "results": 1, "decisions": { "reusedKeyV2": 0, "reusedKeyV2NoDevice": 0, "reusedKeyV1": 0, "createdNew": 1 }, "conflicts": 0 }
             })),
             exported_xlsx_path: Some(xlsx_path.to_string_lossy().to_string()),
@@ -2016,9 +2020,14 @@ mod tests {
             zip: Some(true),
         };
 
-        let resp =
-            create_evidence_pack(&base_dir, &request, "com.example.app", "0.1.0", "deadbeef")
-                .unwrap();
+        let resp = create_evidence_pack(
+            &output_dir,
+            &request,
+            "com.example.app",
+            "0.1.0",
+            "deadbeef",
+        )
+        .unwrap();
 
         let dir_verify = verify_evidence_pack_v1(std::path::Path::new(&resp.evidence_dir));
         assert!(dir_verify.ok);

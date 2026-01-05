@@ -1,3 +1,6 @@
+// 说明:
+// - UiaRpcService 是对外 RPC 入口层：将请求转换为 UIA 操作与 Flow 执行。
+// - 在此层完成参数校验、错误语义映射与 StepLog 记录。
 using System.Diagnostics;
 using System.Text.Json;
 using Autothink.UiaAgent.Flows;
@@ -70,8 +73,7 @@ internal sealed class UiaRpcService
 
         MarkSuccess(validateStep);
 
-        // Dispatch by flow name first so callers can get InvalidArgument/NotImplemented
-        // without requiring a valid session in the current process.
+        // 业务语义优先：先判断 FlowName 是否存在/实现，避免因会话不存在而掩盖真实错误。
         if (!FlowNames.IsKnown(request.FlowName))
         {
             string available = string.Join(", ", FlowRegistry.KnownFlowNames);
@@ -137,6 +139,7 @@ internal sealed class UiaRpcService
             ? null
             : request.Args;
 
+        // ArgsJson 为跨端兼容的回退通道，优先解析 ArgsJson 以避免 JsonElement 传输问题。
         if (args is null && !string.IsNullOrWhiteSpace(request.ArgsJson))
         {
             StepLogEntry parseArgs = StartStep(
@@ -168,6 +171,7 @@ internal sealed class UiaRpcService
         }
 
         var timeout = TimeSpan.FromMilliseconds(request.TimeoutMs);
+        // FlowContext 复用同一份 StepLog，确保证据链完整可回放。
         var ctx = new FlowContext(request.SessionId, session, timeout, result.StepLog);
 
         try
@@ -224,6 +228,7 @@ internal sealed class UiaRpcService
             var timeout = TimeSpan.FromMilliseconds(request.TimeoutMs);
 
             StepLogEntry attachStep = StartStep(result.StepLog, stepId: "Attach", action: "Attach target process");
+            // 业务约定：优先按 ProcessId 附加，否则按 ProcessName + 主窗口标题筛选。
             FlaUI.Core.Application app = AttachApplication(request, timeout, out int processId, out string? mainTitle);
 
             session = UiaSessionRegistry.Create(app);
@@ -381,6 +386,7 @@ internal sealed class UiaRpcService
         string? lastFailure = null;
         Dictionary<string, string>? lastDetails = null;
 
+        // 以轮询方式等待元素出现，避免 UIA/窗口刷新带来的瞬态失败。
         bool ok = Waiter.PollUntil(
             predicate: () =>
             {
@@ -592,6 +598,7 @@ internal sealed class UiaRpcService
                 // ignore
             }
 
+            // 统一解析为“文本/单键/组合键”，避免调用方直接传虚拟键码。
             if (!SendKeysParser.TryParse(request.Keys, out ParsedSendKeys? parsed, out string? parseError) || parsed is null)
             {
                 return Fail(result, sendStep, RpcErrorKinds.InvalidArgument, "Failed to parse keys", new Dictionary<string, string>(StringComparer.Ordinal)
@@ -705,6 +712,7 @@ internal sealed class UiaRpcService
         {
             Window mainWindow = session.GetMainWindow(TimeSpan.FromMilliseconds(2_000));
 
+            // WaitCondition 是“可观测条件”，失败统一归类为 TimeoutError。
             bool satisfied = Waiter.PollUntil(
                 predicate: () => EvaluateWaitCondition(mainWindow, session.Automation, request.Condition),
                 timeout: timeout,
@@ -903,6 +911,7 @@ internal sealed class UiaRpcService
             return false;
         }
 
+        // ElementRef 通过 selector 重新定位：当 UI 刷新后，旧引用可能失效（StaleElement）。
         bool ok = ElementFinder.TryFind(mainWindow, session.Automation, elementRef.Selector, out AutomationElement? found, out string? failureKind, out Dictionary<string, string>? details);
         if (!ok || found is null)
         {

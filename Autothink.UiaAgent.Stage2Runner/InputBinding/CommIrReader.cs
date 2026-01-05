@@ -1,7 +1,13 @@
+// 说明:
+// - 读取 CommIR v1 输入清单并抽取 variables/program 等路径。
+// - 该解析逻辑只用于 Runner 的“输入绑定层”，不影响 RPC 契约。
 using System.Text.Json;
 
 namespace Autothink.UiaAgent.Stage2Runner;
 
+/// <summary>
+/// 从 CommIR 中解析出的关键输入路径集合。
+/// </summary>
 internal sealed class CommIrInputs
 {
     public string? VariablesFilePath { get; set; }
@@ -17,6 +23,9 @@ internal sealed class CommIrInputs
     public string? ProjectName { get; set; }
 }
 
+/// <summary>
+/// 解析结果：包含已解析输入与警告信息。
+/// </summary>
 internal sealed class CommIrReadResult
 {
     public CommIrInputs Inputs { get; set; } = new();
@@ -24,6 +33,9 @@ internal sealed class CommIrReadResult
     public List<string> Warnings { get; set; } = new();
 }
 
+/// <summary>
+/// CommIR 解析器：为 Runner 解析 CommIR v1 结构并做路径映射。
+/// </summary>
 internal static class CommIrReader
 {
     public static CommIrReadResult Read(string commIrPath)

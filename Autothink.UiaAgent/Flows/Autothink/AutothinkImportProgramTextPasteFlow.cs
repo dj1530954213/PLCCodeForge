@@ -1,3 +1,6 @@
+// 说明:
+// - autothink.importProgram.textPaste：把程序文本导入编辑区（剪贴板 + Ctrl+V 为主，必要时降级输入）。
+// - 通过 selector + 可观测验证（编辑区非空/元素存在）来提高稳定性。
 using System.Text.Json;
 using Autothink.UiaAgent.Flows;
 using Autothink.UiaAgent.Rpc.Contracts;
@@ -8,6 +11,9 @@ using FlaUI.Core.WindowsAPI;
 
 namespace Autothink.UiaAgent.Flows.Autothink;
 
+/// <summary>
+/// AUTOTHINK 程序文本导入流程：以粘贴为主路径，必要时回退键入。
+/// </summary>
 internal sealed class AutothinkImportProgramTextPasteFlow : IFlow
 {
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(200);
@@ -34,6 +40,11 @@ internal sealed class AutothinkImportProgramTextPasteFlow : IFlow
 
         var result = new RpcResult<RunFlowResponse> { StepLog = context.StepLog };
 
+        // 业务步骤：
+        // 1) 校验参数（文本/选择器/验证模式）。
+        // 2) 获取/置前主窗口（必要时处理弹窗）。
+        // 3) 聚焦编辑区 -> 写入剪贴板 -> Ctrl+V 粘贴。
+        // 4) 按 verifyMode 等待可观测条件；必要时回退键入。
         StepLogEntry validateStep = context.StartStep(stepId: "ValidateArgs", action: "Validate args");
 
         if (args is null)

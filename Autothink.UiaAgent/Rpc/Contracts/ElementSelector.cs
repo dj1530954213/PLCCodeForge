@@ -1,3 +1,6 @@
+// 说明:
+// - ElementSelector 是 UIA 查找的路径表达式，也是 selector 资产的核心结构。
+// - 对外作为 JSON 传输，与 Runner/前端共享。
 namespace Autothink.UiaAgent.Rpc.Contracts;
 
 /// <summary>

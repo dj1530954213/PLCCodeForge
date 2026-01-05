@@ -1,8 +1,13 @@
+// 说明:
+// - 覆盖 ControlTypeMap 的字符串解析正确性。
 using Autothink.UiaAgent.Uia;
 using Xunit;
 
 namespace Autothink.UiaAgent.Tests;
 
+/// <summary>
+/// ControlTypeMap 的解析测试。
+/// </summary>
 public sealed class ControlTypeMapTests
 {
     [Fact]

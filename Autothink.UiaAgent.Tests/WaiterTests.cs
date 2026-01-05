@@ -1,8 +1,13 @@
 using Autothink.UiaAgent.Uia;
 using Xunit;
 
+// 说明:
+// - 覆盖 Waiter 的轮询等待语义与超时行为。
 namespace Autothink.UiaAgent.Tests;
 
+/// <summary>
+/// Waiter 轮询等待测试。
+/// </summary>
 public sealed class WaiterTests
 {
     [Fact]

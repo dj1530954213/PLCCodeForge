@@ -97,12 +97,13 @@ async fn tcp_quality_ok_for_two_points_when_enabled() {
     let plan = build_read_plan(&[profile.clone()], &points, PlanOptions::default()).unwrap();
     let driver = ModbusTcpDriver::new();
 
+    let mut client = driver.connect(&profile).await.unwrap();
     for (i, job) in plan.jobs.iter().enumerate() {
         println!(
             "tcp job[{i}] area={:?} startAddress={} length={}",
             job.read_area, job.start_address, job.length
         );
-        let raw = driver.read(&profile, job).await;
+        let raw = driver.read_with_client(&mut client, job).await;
         println!("tcp raw job[{i}] = {raw:?}");
     }
 
@@ -213,12 +214,13 @@ async fn rtu_quality_ok_for_one_point_when_enabled() {
     let plan = build_read_plan(&[profile.clone()], &points, PlanOptions::default()).unwrap();
     let driver = ModbusRtuDriver::new();
 
+    let mut client = driver.connect(&profile).await.unwrap();
     for (i, job) in plan.jobs.iter().enumerate() {
         println!(
             "rtu job[{i}] area={:?} startAddress={} length={}",
             job.read_area, job.start_address, job.length
         );
-        let raw = driver.read(&profile, job).await;
+        let raw = driver.read_with_client(&mut client, job).await;
         println!("rtu raw job[{i}] = {raw:?}");
     }
 

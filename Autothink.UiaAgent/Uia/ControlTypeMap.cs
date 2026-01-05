@@ -1,9 +1,15 @@
+// 说明:
+// - 控件类型映射：把配置中的字符串（如 "Button"）转换为 FlaUI ControlType。
+// - 供 selector 解析与 ElementFinder 使用，提升可读性与一致性。
 using System.Collections.Concurrent;
 using System.Reflection;
 using FlaUI.Core.Definitions;
 
 namespace Autothink.UiaAgent.Uia;
 
+/// <summary>
+/// ControlType 映射表：从字符串名称解析为 FlaUI 的 ControlType。
+/// </summary>
 internal static class ControlTypeMap
 {
     private static readonly ConcurrentDictionary<string, ControlType> map = new(StringComparer.OrdinalIgnoreCase);
