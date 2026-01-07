@@ -16,7 +16,10 @@ pub enum DecodedValue {
     UInt16(u16),
     Int32(i32),
     UInt32(u32),
+    Int64(i64),
+    UInt64(u64),
     Float32(f32),
+    Float64(f64),
 }
 
 impl DecodedValue {
@@ -33,7 +36,10 @@ impl DecodedValue {
             DecodedValue::UInt16(value) => format!("{}", (*value as f64) * scale),
             DecodedValue::Int32(value) => format!("{}", (*value as f64) * scale),
             DecodedValue::UInt32(value) => format!("{}", (*value as f64) * scale),
+            DecodedValue::Int64(value) => format!("{}", (*value as f64) * scale),
+            DecodedValue::UInt64(value) => format!("{}", (*value as f64) * scale),
             DecodedValue::Float32(value) => format!("{}", (*value as f64) * scale),
+            DecodedValue::Float64(value) => format!("{}", value * scale),
         }
     }
 }
@@ -92,9 +98,21 @@ pub fn decode_from_registers(
             let bytes = read_u32_bytes(registers, byte_order)?;
             Ok(DecodedValue::UInt32(u32::from_be_bytes(bytes)))
         }
+        DataType::Int64 => {
+            let bytes = read_u64_bytes(registers, byte_order)?;
+            Ok(DecodedValue::Int64(i64::from_be_bytes(bytes)))
+        }
+        DataType::UInt64 => {
+            let bytes = read_u64_bytes(registers, byte_order)?;
+            Ok(DecodedValue::UInt64(u64::from_be_bytes(bytes)))
+        }
         DataType::Float32 => {
             let bytes = read_u32_bytes(registers, byte_order)?;
             Ok(DecodedValue::Float32(f32::from_be_bytes(bytes)))
+        }
+        DataType::Float64 => {
+            let bytes = read_u64_bytes(registers, byte_order)?;
+            Ok(DecodedValue::Float64(f64::from_be_bytes(bytes)))
         }
         DataType::Unknown => Err(DecodeError::UnsupportedRegisterDataType(DataType::Unknown)),
     }
@@ -123,6 +141,32 @@ fn read_u32_bytes(registers: &[u16], byte_order: ByteOrder32) -> Result<[u8; 4],
         ByteOrder32::BADC => [raw[1], raw[0], raw[3], raw[2]],
         ByteOrder32::CDAB => [raw[2], raw[3], raw[0], raw[1]],
         ByteOrder32::DCBA => [raw[3], raw[2], raw[1], raw[0]],
+        ByteOrder32::Unknown => raw,
+    })
+}
+
+fn read_u64_bytes(registers: &[u16], byte_order: ByteOrder32) -> Result<[u8; 8], DecodeError> {
+    let registers = require_registers(registers, 4)?;
+
+    let r0 = registers[0].to_be_bytes();
+    let r1 = registers[1].to_be_bytes();
+    let r2 = registers[2].to_be_bytes();
+    let r3 = registers[3].to_be_bytes();
+    let raw = [r0[0], r0[1], r1[0], r1[1], r2[0], r2[1], r3[0], r3[1]];
+
+    // For 64-bit types, we apply the same byte order pattern as 32-bit
+    // but extend it to 8 bytes (treating it as two 32-bit words)
+    Ok(match byte_order {
+        ByteOrder32::ABCD => raw,
+        ByteOrder32::BADC => [
+            raw[1], raw[0], raw[3], raw[2], raw[5], raw[4], raw[7], raw[6],
+        ],
+        ByteOrder32::CDAB => [
+            raw[4], raw[5], raw[6], raw[7], raw[0], raw[1], raw[2], raw[3],
+        ],
+        ByteOrder32::DCBA => [
+            raw[7], raw[6], raw[5], raw[4], raw[3], raw[2], raw[1], raw[0],
+        ],
         ByteOrder32::Unknown => raw,
     })
 }

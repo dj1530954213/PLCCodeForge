@@ -1,4 +1,5 @@
 import type { ByteOrder32, CommPoint, DataType } from "../api";
+import { compileScaleExpr } from "./scaleExpr";
 
 /**
  * 批量编辑请求接口
@@ -159,24 +160,13 @@ function evaluateScaleExpression(expression: string, currentValue: number): Scal
     return { ok: false, error: '表达式不能为空' };
   }
 
-  // 如果表达式不包含占位符，尝试作为固定值解析
-  if (!trimmed.includes('{{x}}')) {
-    const value = Number(trimmed);
-    if (Number.isFinite(value)) {
-      return { ok: true, value };
-    }
-    return { ok: false, error: '无效的数字格式' };
+  const compiled = compileScaleExpr(trimmed);
+  if (!compiled.ok) {
+    return { ok: false, error: compiled.message };
   }
 
-  // 替换占位符并计算
-  const replaced = trimmed.replace(/\{\{x\}\}/g, String(currentValue));
-  
   try {
-    // 使用 Function 构造器安全地评估表达式
-    // 只允许数学运算，不允许访问其他对象
-    const func = new Function('return (' + replaced + ')');
-    const result = func();
-    
+    const result = compiled.apply(currentValue);
     if (Number.isFinite(result)) {
       return { ok: true, value: result };
     }

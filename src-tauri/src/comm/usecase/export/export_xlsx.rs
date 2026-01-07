@@ -390,7 +390,10 @@ fn data_type_to_str(data_type: &DataType) -> &'static str {
         DataType::UInt16 => "UInt16",
         DataType::Int32 => "Int32",
         DataType::UInt32 => "UInt32",
+        DataType::Int64 => "Int64",
+        DataType::UInt64 => "UInt64",
         DataType::Float32 => "Float32",
+        DataType::Float64 => "Float64",
         DataType::Unknown => "",
     }
 }

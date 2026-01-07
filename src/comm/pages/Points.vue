@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import Grid, { VGridVueEditor, type ColumnRegular, type Editors } from "@revolist/vue3-datagrid";
@@ -7,13 +7,18 @@ import Grid, { VGridVueEditor, type ColumnRegular, type Editors } from "@revolis
 import TextEditor from "../components/revogrid/TextEditor.vue";
 import SelectEditor from "../components/revogrid/SelectEditor.vue";
 import NumberEditor from "../components/revogrid/NumberEditor.vue";
+import BatchEditDialog from "../components/BatchEditDialog.vue";
 
-import { formatHumanAddressFrom0Based, nextAddress, parseHumanAddress, spanForArea } from "../services/address";
+import { COMM_BYTE_ORDERS_32, COMM_DATA_TYPES } from "../constants";
+import { formatHumanAddressFrom0Based, parseHumanAddress, spanForArea, inferNextAddress } from "../services/address";
 import { buildBatchPointsTemplate, previewBatchPointsTemplate } from "../services/batchAdd";
 import { computeFillAddressEdits, computeFillDownEdits } from "../services/fill";
-import { compileScaleExpr } from "../services/scaleExpr";
+import { UndoManager, createBatchAddUndoAction, createBatchEditUndoAction, createDeleteRowsUndoAction } from "../services/undoRedo";
+import { useKeyboardShortcuts, createStandardShortcuts } from "../composables/useKeyboardShortcuts";
+import { computeBatchEdits, applyBatchEdits, type BatchEditRequest } from "../services/batchEdit";
 
 import type {
+  BatchInsertMode,
   ByteOrder32,
   CommPoint,
   CommRunError,
@@ -39,8 +44,8 @@ import {
 const route = useRoute();
 const projectId = computed(() => String(route.params.projectId ?? ""));
 
-const DATA_TYPES: DataType[] = ["Bool", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Float32", "Float64"];
-const BYTE_ORDERS: ByteOrder32[] = ["ABCD", "BADC", "CDAB", "DCBA"];
+const DATA_TYPES: DataType[] = COMM_DATA_TYPES;
+const BYTE_ORDERS: ByteOrder32[] = COMM_BYTE_ORDERS_32;
 
 type RunUiState = "idle" | "starting" | "running" | "stopping" | "error";
 type LogLevel = "info" | "success" | "warning" | "error";
@@ -69,7 +74,32 @@ const points = ref<PointsV1>({ schemaVersion: 1, points: [] });
 const activeChannelName = ref<string>("");
 const gridRows = ref<PointRow[]>([]);
 
-const selectedCount = computed(() => gridRows.value.reduce((acc, r) => acc + (r.__selected ? 1 : 0), 0));
+const selectedRangeRows = ref<{ rowStart: number; rowEnd: number } | null>(null);
+
+const explicitSelectedKeys = computed<string[]>(() => gridRows.value.filter((r) => r.__selected).map((r) => r.pointKey));
+
+const rangeSelectedKeys = computed<string[]>(() => {
+  const span = selectedRangeRows.value;
+  if (!span) return [];
+  const start = Math.max(0, Math.min(span.rowStart, span.rowEnd));
+  const end = Math.min(gridRows.value.length - 1, Math.max(span.rowStart, span.rowEnd));
+  if (end < 0 || start > end) return [];
+  const out: string[] = [];
+  for (let i = start; i <= end; i++) {
+    const row = gridRows.value[i];
+    if (row) out.push(row.pointKey);
+  }
+  return out;
+});
+
+const effectiveSelectedKeys = computed<string[]>(() =>
+  explicitSelectedKeys.value.length > 0 ? explicitSelectedKeys.value : rangeSelectedKeys.value
+);
+
+const effectiveSelectedKeySet = computed(() => new Set(effectiveSelectedKeys.value));
+const effectiveSelectedRows = computed(() => gridRows.value.filter((r) => effectiveSelectedKeySet.value.has(r.pointKey)));
+
+const selectedCount = computed(() => effectiveSelectedKeys.value.length);
 
 const showAllValidation = ref(false);
 const touchedRowKeys = ref<Record<string, boolean>>({});
@@ -130,6 +160,34 @@ function makeUiConfigError(message: string): CommRunError {
 function gridEl(): any | null {
   const v = gridRef.value as any;
   return v?.$el ?? v ?? null;
+}
+
+let detachGridSelectionListeners: (() => void) | null = null;
+function attachGridSelectionListeners() {
+  if (detachGridSelectionListeners) return;
+  const el = gridEl();
+  if (!el?.addEventListener) return;
+
+  const onSetRange = (ev: any) => {
+    const d = ev?.detail;
+    if (!d || typeof d.y !== "number" || typeof d.y1 !== "number") return;
+    const rowStart = Math.min(d.y, d.y1);
+    const rowEnd = Math.max(d.y, d.y1);
+    if (rowEnd < 0) return;
+    selectedRangeRows.value = { rowStart: Math.max(0, rowStart), rowEnd: Math.max(0, rowEnd) };
+  };
+
+  const onClearRegion = () => {
+    selectedRangeRows.value = null;
+  };
+
+  el.addEventListener("setrange", onSetRange as any);
+  el.addEventListener("clearregion", onClearRegion as any);
+
+  detachGridSelectionListeners = () => {
+    el.removeEventListener("setrange", onSetRange as any);
+    el.removeEventListener("clearregion", onClearRegion as any);
+  };
 }
 
 function profileLabel(p: ConnectionProfile): string {
@@ -203,29 +261,6 @@ const gridEditors: Editors = {
 };
 
 const columns = computed<ColumnRegular[]>(() => [
-  {
-    prop: COL_ROW_SELECTED,
-    name: "",
-    size: 44,
-    readonly: true,
-    cellTemplate: (h: any, props: any) => {
-      const row = props?.model as PointRow | undefined;
-      if (!row) return "";
-      return h("input", {
-        type: "checkbox",
-        class: "comm-row-checkbox",
-        checked: Boolean(row.__selected),
-        style: { display: "block", margin: "0 auto" },
-        onClick: (e: MouseEvent) => {
-          e.stopPropagation();
-        },
-        onChange: (e: Event) => {
-          const el = e.target as HTMLInputElement | null;
-          row.__selected = Boolean(el?.checked);
-        },
-      });
-    },
-  },
   { prop: "hmiName", name: "变量名称（HMI）*", size: 220, editor: EDITOR_TEXT, cellProperties: rowCellProps("hmiName") },
   { prop: "modbusAddress", name: "Modbus 地址", size: 140, editor: EDITOR_TEXT, cellProperties: rowCellProps("modbusAddress") },
   {
@@ -269,9 +304,14 @@ function makeRowFromPoint(p: CommPoint): PointRow {
     }
   }
   const runtime = runtimeByPointKey.value[p.pointKey];
+  
+  // 保留现有的选中状态
+  const existingRow = gridRows.value.find(r => r.pointKey === p.pointKey);
+  const isSelected = existingRow?.__selected ?? false;
+  
   return {
     ...p,
-    __selected: false,
+    __selected: isSelected,
     modbusAddress: addr,
     quality: runtime?.quality ?? "",
     valueDisplay: runtime?.valueDisplay ?? "",
@@ -335,6 +375,7 @@ async function loadAll() {
     points.value = project.points ?? { schemaVersion: 1, points: [] };
     showAllValidation.value = false;
     touchedRowKeys.value = {};
+    selectedRangeRows.value = null;
     markPointsChanged();
 
     suppressChannelWatch = true;
@@ -359,7 +400,7 @@ async function loadAll() {
         byteOrder: t.byteOrder ?? batchAddTemplate.value.byteOrder,
         hmiNameTemplate: String(t.hmiNameTemplate ?? batchAddTemplate.value.hmiNameTemplate),
         scaleTemplate: String(t.scaleTemplate ?? batchAddTemplate.value.scaleTemplate),
-        insertMode: (t.insertMode as any) === "afterSelection" ? "afterSelection" : "append",
+        insertMode: t.insertMode === "afterSelection" ? "afterSelection" : "append",
       };
     }
 
@@ -384,8 +425,6 @@ async function savePoints() {
   showAllValidation.value = false;
   touchedRowKeys.value = {};
 }
-
-type BatchInsertMode = "append" | "afterSelection";
 
 const batchAddDrawerOpen = ref(false);
 const batchAddTemplate = ref<{
@@ -434,12 +473,15 @@ function openBatchAddDialog() {
     return;
   }
 
-  let suggestedStart = formatHumanAddressFrom0Based(profile.readArea, profile.startAddress);
   const lastRow = gridRows.value[gridRows.value.length - 1];
-  if (lastRow?.modbusAddress?.trim()) {
-    const next = nextAddress(lastRow.modbusAddress, lastRow.dataType);
-    if (next.ok) suggestedStart = next.nextHumanAddr;
-  }
+  
+  // 使用智能地址推断
+  const suggestedStart = inferNextAddress(
+    lastRow?.modbusAddress,
+    lastRow?.dataType,
+    profile.readArea,
+    profile.startAddress
+  );
 
   batchAddTemplate.value = {
     count: Math.max(1, Math.min(500, Math.floor(batchAddTemplate.value.count || 10))),
@@ -498,7 +540,19 @@ async function confirmBatchAdd() {
     return idx + 1;
   })();
 
+  // 创建撤销操作：先建 action（捕获 before），再修改数据，最后 push（捕获 after）。
+  const undoAction = createBatchAddUndoAction(
+    () => points.value.points,
+    (newPoints: CommPoint[]) => {
+      points.value.points = newPoints;
+    },
+    built.points.map((p) => p.pointKey),
+    `添加了 ${built.points.length} 个点位`
+  );
+
   points.value.points.splice(insertIndex, 0, ...built.points);
+  undoManager.push(undoAction);
+  
   markPointsChanged();
   batchAddDrawerOpen.value = false;
   await rebuildPlan();
@@ -546,9 +600,16 @@ async function getSelectedRange(): Promise<{ rowStart: number; rowEnd: number; c
 }
 
 async function removeSelectedRows() {
-  const selected = gridRows.value.filter((r) => r.__selected);
+  let selected = effectiveSelectedRows.value;
   if (selected.length === 0) {
-    ElMessage.warning("请先勾选要删除的行");
+    const sel = await getSelectedRange();
+    if (sel) {
+      selectedRangeRows.value = { rowStart: sel.rowStart, rowEnd: sel.rowEnd };
+      selected = effectiveSelectedRows.value;
+    }
+  }
+  if (selected.length === 0) {
+    ElMessage.warning("请先选中行（点击行号）或框选一段行区域");
     return;
   }
   const count = selected.length;
@@ -560,7 +621,19 @@ async function removeSelectedRows() {
   });
 
   const selectedKeys = new Set(selected.map((r) => r.pointKey));
+  
+  // 创建撤销操作：先建 action（捕获 before），再修改数据，最后 push（捕获 after）。
+  const undoAction = createDeleteRowsUndoAction(
+    () => points.value.points,
+    (newPoints: CommPoint[]) => {
+      points.value.points = newPoints;
+    },
+    Array.from(selectedKeys),
+    `删除了 ${count} 行`
+  );
+  
   points.value.points = points.value.points.filter((p) => !selectedKeys.has(p.pointKey));
+  undoManager.push(undoAction);
   markPointsChanged();
   await rebuildPlan();
   ElMessage.success(`已删除 ${count} 行`);
@@ -681,60 +754,75 @@ async function fillAddressFromSelection() {
   ElMessage.success(`已填充地址：${rowEnd - rowStart + 1} 行`);
 }
 
-async function applyBatch() {
-  const selected = gridRows.value
-    .map((row, rowIndex) => ({ row, rowIndex }))
-    .filter((v) => v.row.__selected);
-  if (selected.length === 0) {
-    ElMessage.warning("请先勾选要批量设置的行");
-    return;
-  }
+// 撤销管理器
+const undoManager = new UndoManager(20);
 
-  const grid = gridEl();
-  if (!grid) return;
-  const dataTypeCol = colIndexByProp.value["dataType"];
-  const byteOrderCol = colIndexByProp.value["byteOrder"];
-  const scaleCol = colIndexByProp.value["scale"];
+// 批量编辑对话框
+const batchEditDialogVisible = ref(false);
 
-  const compiled = batchScaleExpr.value.trim() ? compileScaleExpr(batchScaleExpr.value) : null;
-  if (compiled && !compiled.ok) {
-    ElMessage.error(`缩放表达式错误：${compiled.message}`);
-    return;
-  }
-
-  let changed = 0;
-  for (const { row, rowIndex } of selected) {
-    if (batchDataType.value) {
-      await grid.setDataAt({ row: rowIndex, col: dataTypeCol, rowType: "rgRow", colType: "rgCol", val: batchDataType.value });
-      changed += 1;
-    }
-    if (batchByteOrder.value) {
-      await grid.setDataAt({ row: rowIndex, col: byteOrderCol, rowType: "rgRow", colType: "rgCol", val: batchByteOrder.value });
-      changed += 1;
-    }
-    if (compiled?.ok) {
-      const oldScale = Number(row.scale);
-      try {
-        const next = compiled.apply(Number.isFinite(oldScale) ? oldScale : 0);
-        await grid.setDataAt({ row: rowIndex, col: scaleCol, rowType: "rgRow", colType: "rgCol", val: next });
-        changed += 1;
-      } catch (e: unknown) {
-        ElMessage.error(String((e as any)?.message ?? e ?? "缩放表达式计算失败"));
+function openBatchEditDialog() {
+  if (selectedCount.value === 0) {
+    void (async () => {
+      const sel = await getSelectedRange();
+      if (sel) {
+        selectedRangeRows.value = { rowStart: sel.rowStart, rowEnd: sel.rowEnd };
+      }
+      if (selectedCount.value === 0) {
+        ElMessage.warning("请先选中行（点击行号）或框选一段行区域");
         return;
       }
-    }
+      batchEditDialogVisible.value = true;
+    })();
+    return;
   }
-
-  const touched = selected.map((v) => v.row.pointKey);
-  await syncFromGridAndMapAddresses(touched);
-  markPointsChanged();
-
-  ElMessage.success(`已批量修改 ${selected.length} 行（${changed} 单元格）`);
+  batchEditDialogVisible.value = true;
 }
 
-const batchDataType = ref<DataType | "">("");
-const batchByteOrder = ref<ByteOrder32 | "">("");
-const batchScaleExpr = ref<string>("");
+async function handleBatchEditConfirm(request: BatchEditRequest) {
+  const result = computeBatchEdits(points.value.points, request);
+
+  if (result.totalChanges === 0) {
+    ElMessage.info("没有需要修改的字段");
+    return;
+  }
+
+  // 创建撤销操作：先建 action（捕获 before），再修改数据，最后 push（捕获 after）。
+  const undoAction = createBatchEditUndoAction(
+    () => points.value.points,
+    (newPoints: CommPoint[]) => {
+      points.value.points = newPoints;
+    },
+    `批量编辑：${result.affectedPoints} 行 / ${result.totalChanges} 个字段`
+  );
+
+  applyBatchEdits(points.value.points, result);
+  undoManager.push(undoAction);
+
+  markPointsChanged();
+  await rebuildPlan();
+
+  ElMessage.success(`已批量编辑 ${result.affectedPoints} 行 / ${result.totalChanges} 个字段`);
+}
+
+function handleUndo() {
+  if (!undoManager.canUndo()) {
+    ElMessage.warning('没有可撤销的操作');
+    return;
+  }
+  undoManager.undo();
+  void rebuildPlan();
+  ElMessage.success('已撤销');
+}
+
+function handleRedo() {
+  if (!undoManager.canRedo()) {
+    ElMessage.warning('没有可重做的操作');
+    return;
+  }
+  undoManager.redo();
+  void rebuildPlan();
+  ElMessage.success('已重做');
+}
 
 async function syncFromGridAndMapAddresses(touchedKeys?: string[]) {
   const grid = gridEl();
@@ -1001,8 +1089,46 @@ function onAfterEdit(e: any) {
   markPointsChanged();
 }
 
+function getRowClass(row: any): string {
+  const pointRow = row?.model as PointRow | undefined;
+  return pointRow && effectiveSelectedKeySet.value.has(pointRow.pointKey) ? 'row-selected' : '';
+}
+
+function onRowHeaderClick(e: any) {
+  const rowIndex = e?.detail?.index;
+  if (typeof rowIndex !== 'number' || rowIndex < 0 || rowIndex >= gridRows.value.length) {
+    return;
+  }
+  
+  const row = gridRows.value[rowIndex];
+  if (!row) return;
+  
+  // 支持 Ctrl/Cmd 多选
+  const isMultiSelect = e?.detail?.originalEvent?.ctrlKey || e?.detail?.originalEvent?.metaKey;
+  
+  if (!isMultiSelect) {
+    // 单选模式：清除其他行的选中状态
+    gridRows.value.forEach((r, idx) => {
+      if (idx !== rowIndex) {
+        r.__selected = false;
+      }
+    });
+  }
+  
+  // 切换当前行的选中状态
+  row.__selected = !row.__selected;
+  
+  // 触发响应式更新 - 创建新数组引用
+  gridRows.value = [...gridRows.value];
+}
+
+onMounted(() => {
+  attachGridSelectionListeners();
+});
+
 watch(activeChannelName, async (v) => {
   if (suppressChannelWatch) return;
+  selectedRangeRows.value = null;
   const pid = projectId.value.trim();
   if (pid) {
     commProjectUiStatePatchV1(pid, { activeChannelName: v }).catch((e: unknown) => {
@@ -1021,8 +1147,19 @@ watch(pollMs, (v) => {
 
 watch(projectId, loadAll, { immediate: true });
 
+// 注册键盘快捷键
+useKeyboardShortcuts(createStandardShortcuts({
+  onBatchAdd: openBatchAddDialog,
+  onBatchEdit: openBatchEditDialog,
+  onDelete: removeSelectedRows,
+  onUndo: handleUndo,
+  onRedo: handleRedo,
+  onSave: savePoints,
+}));
+
 onBeforeUnmount(() => {
   clearTimer();
+  detachGridSelectionListeners?.();
 });
 </script>
 
@@ -1046,6 +1183,7 @@ onBeforeUnmount(() => {
       style="margin-bottom: 12px"
     />
 
+    <div class="comm-toolbar-layer">
     <el-space wrap style="margin-bottom: 12px">
       <el-select
         v-model="activeChannelName"
@@ -1075,18 +1213,11 @@ onBeforeUnmount(() => {
     </el-space>
 
     <el-space wrap style="margin-bottom: 12px">
-      <el-button type="primary" @click="openBatchAddDialog">批量新增</el-button>
-      <el-button type="danger" :disabled="selectedCount === 0" @click="removeSelectedRows">删除选中行（{{ selectedCount }}）</el-button>
-      <el-select v-model="batchDataType" placeholder="数据类型（批量）" style="width: 180px">
-        <el-option label="数据类型（不修改）" value="" />
-        <el-option v-for="opt in DATA_TYPES" :key="opt" :label="opt" :value="opt" />
-      </el-select>
-      <el-select v-model="batchByteOrder" placeholder="字节序（批量）" style="width: 160px">
-        <el-option label="字节序（不修改）" value="" />
-        <el-option v-for="opt in BYTE_ORDERS" :key="opt" :label="opt" :value="opt" />
-      </el-select>
-      <el-input v-model="batchScaleExpr" placeholder="缩放表达式：2 或 {{x}}*10 或 ({{x}}+1)*0.5" style="width: 360px" />
-      <el-button type="primary" :disabled="selectedCount === 0" @click="applyBatch">Apply（对选中行）</el-button>
+      <el-button type="primary" @click="openBatchAddDialog">批量新增 (Ctrl+B)</el-button>
+      <el-button type="primary" :disabled="gridRows.length === 0" @click="openBatchEditDialog">批量编辑 (Ctrl+E)</el-button>
+      <el-button type="danger" :disabled="gridRows.length === 0" @click="removeSelectedRows">删除选中行（{{ selectedCount }}）(Del)</el-button>
+      <el-button :disabled="!undoManager.canUndo()" @click="handleUndo">撤销 (Ctrl+Z)</el-button>
+      <el-button :disabled="!undoManager.canRedo()" @click="handleRedo">重做 (Ctrl+Y)</el-button>
     </el-space>
 
     <el-divider />
@@ -1118,7 +1249,9 @@ onBeforeUnmount(() => {
         <el-table-column prop="reason" label="reason" min-width="160" />
       </el-table>
     </el-card>
+    </div>
 
+    <div class="comm-grid-layer">
     <Grid
       ref="gridRef"
       :source="gridRows"
@@ -1129,9 +1262,12 @@ onBeforeUnmount(() => {
       :canFocus="true"
       :resize="true"
       :rowHeaders="true"
+      :rowClass="getRowClass"
       style="height: 560px"
       @afteredit="onAfterEdit"
+      @rowheaderclick="onRowHeaderClick"
     />
+    </div>
 
     <el-collapse v-model="advancedOpen" style="margin-top: 12px">
       <el-collapse-item name="tools" title="高级/工具（Fill/Plan/诊断）">
@@ -1226,10 +1362,29 @@ onBeforeUnmount(() => {
         <el-button type="primary" @click="confirmBatchAdd">生成并插入</el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量编辑对话框 -->
+    <BatchEditDialog
+      v-model="batchEditDialogVisible"
+      :selected-count="selectedCount"
+      :selected-rows="effectiveSelectedRows"
+      @confirm="handleBatchEditConfirm"
+    />
   </el-card>
 </template>
 
 <style scoped>
+.comm-toolbar-layer {
+  position: relative;
+  z-index: 9999;
+}
+
+.comm-grid-layer {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
+
 :deep(.comm-cell-error) {
   background: transparent;
   box-shadow: inset 0 0 0 1px rgba(245, 108, 108, 0.85);
@@ -1248,5 +1403,31 @@ onBeforeUnmount(() => {
 
 :deep(.comm-rg-editor:focus) {
   border-color: var(--el-color-primary);
+}
+
+/* 行头样式 - 可点击 */
+:deep(.rgHeaderCell[data-type="rowHeaders"]) {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+:deep(.rgHeaderCell[data-type="rowHeaders"]:hover) {
+  background-color: rgba(64, 158, 255, 0.15);
+}
+
+/* 选中行的样式 */
+:deep(.row-selected) {
+  background-color: rgba(64, 158, 255, 0.08) !important;
+}
+
+:deep(.row-selected .rgHeaderCell[data-type="rowHeaders"]) {
+  background-color: rgba(64, 158, 255, 0.25) !important;
+  font-weight: 600;
+  color: var(--el-color-primary);
+}
+
+:deep(.row-selected .rgCell) {
+  background-color: rgba(64, 158, 255, 0.08) !important;
 }
 </style>

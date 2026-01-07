@@ -1,0 +1,71 @@
+{
+  "programText": "(* TEST ST CODE *)\n",
+  "searchRoot": "mainWindow",
+  "findTimeoutMs": 5000,
+  "verifyMode": "editorNotEmpty",
+  "verifyTimeoutMs": 5000,
+  "afterPasteWaitMs": 500,
+  "preferClipboard": true,
+  "fallbackToType": true,
+  "clipboardHealthCheck": true,
+  "editorRootSelector": {
+    "Path": [
+      {
+        "Search": "Descendants",
+        "ControlType": "Pane",
+        "NameContains": "工作区",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Window",
+        "NameContains": "PRG).st",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Pane",
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Pane",
+        "Index": 1
+      }
+    ]
+  },
+  "editorSelector": {
+    "Path": [
+      {
+        "Search": "Descendants",
+        "ControlType": "Pane",
+        "NameContains": "工作区",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Window",
+        "NameContains": "PRG).st",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Pane",
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Pane",
+        "Index": 1
+      }
+    ]
+  }
+}

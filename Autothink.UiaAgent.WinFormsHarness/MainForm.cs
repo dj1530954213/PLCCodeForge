@@ -913,7 +913,7 @@ internal sealed class MainForm : Form
         if (result.Value is not null)
         {
             this.AppendLog("Value:");
-            this.AppendLog(JsonSerializer.Serialize(result.Value, new JsonSerializerOptions { WriteIndented = true }));
+            this.AppendLog(SafeSerializeValue(result.Value));
         }
 
         this.AppendStepLog(result.StepLog);
@@ -943,6 +943,51 @@ internal sealed class MainForm : Form
         }
 
         this.logTextBox.AppendText(text + Environment.NewLine);
+    }
+
+    private static string SafeSerializeValue<T>(T value)
+    {
+        try
+        {
+            if (value is RunFlowResponse flowResponse)
+            {
+                return SerializeRunFlowResponse(flowResponse);
+            }
+
+            return JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (Exception ex)
+        {
+            return $"<value serialization failed: {ex.GetType().Name}: {ex.Message}>";
+        }
+    }
+
+    private static string SerializeRunFlowResponse(RunFlowResponse response)
+    {
+        if (response.Data is null)
+        {
+            return "{\n  \"Data\": null\n}";
+        }
+
+        try
+        {
+            JsonElement element = response.Data.Value;
+            string payload;
+            try
+            {
+                payload = element.GetRawText();
+            }
+            catch
+            {
+                payload = element.ToString() ?? "null";
+            }
+
+            return "{\n  \"Data\": " + payload + "\n}";
+        }
+        catch (Exception ex)
+        {
+            return $"<flow response serialization failed: {ex.GetType().Name}: {ex.Message}>";
+        }
     }
     private static GroupBox CreateGroupBox(string title)
     {

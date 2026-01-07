@@ -1,4 +1,5 @@
 import type { DataType, RegisterArea } from "../api";
+import { getRegisterSpan, isValidForArea } from "./dataTypes";
 
 export type HumanAddress = {
   area: RegisterArea;
@@ -56,21 +57,9 @@ export function parseHumanAddress(input: string): ParseHumanAddressResult {
 // - Holding/Input: 16-bit types => 1 register; 32-bit types => 2 registers; 64-bit types => 4 registers
 // - Coil/Discrete: Bool => 1 coil; others unsupported (null)
 export function spanForArea(area: RegisterArea, dataType: DataType): number | null {
-  if (area === "Holding" || area === "Input") {
-    if (dataType === "Int16" || dataType === "UInt16") return 1;
-    if (dataType === "Int32" || dataType === "UInt32" || dataType === "Float32") return 2;
-    if (dataType === "Int64" || dataType === "UInt64" || dataType === "Float64") return 4;
-    return null;
-  }
-  if (area === "Coil" || area === "Discrete") {
-    if (dataType === "Bool") return 1;
-    return null;
-  }
-  return null;
-}
-
-export function dtypeRegisterSpan(dataType: DataType): 1 | 2 {
-  return dataType === "Int32" || dataType === "UInt32" || dataType === "Float32" ? 2 : 1;
+  if (!isValidForArea(dataType, area)) return null;
+  const span = getRegisterSpan(dataType);
+  return span > 0 ? span : null;
 }
 
 export function nextAddress(

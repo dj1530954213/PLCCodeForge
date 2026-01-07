@@ -49,8 +49,16 @@
       "Path": [
         {
           "Search": "Descendants",
+          "ControlType": "Window",
+          "Name": "添加程序单元",
+          "IgnoreCase": true,
+          "NormalizeWhitespace": true,
+          "Index": 0
+        },
+        {
+          "Search": "Descendants",
           "ControlType": "RadioButton",
-          "NameContains": "结构化文本",
+          "Name": "结构化文本ST",
           "IgnoreCase": true,
           "NormalizeWhitespace": true,
           "Index": 0

@@ -1,0 +1,278 @@
+{
+  "programText": "(* TEST ST CODE *)\n",
+  "searchRoot": "mainWindow",
+  "findTimeoutMs": 5000,
+  "verifyMode": "editorNotEmpty",
+  "verifyTimeoutMs": 5000,
+  "afterPasteWaitMs": 500,
+  "preferClipboard": true,
+  "fallbackToType": true,
+  "clipboardHealthCheck": true,
+  "openProgramSteps": [
+    {
+      "action": "RightClick",
+      "selector": {
+        "Path": [
+          {
+            "Search": "Descendants",
+            "ControlType": "TreeItem",
+            "NameContains": "程序块",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          }
+        ]
+      }
+    },
+    {
+      "action": "SendKeys",
+      "keys": "DOWN"
+    },
+    {
+      "action": "SendKeys",
+      "keys": "ENTER"
+    },
+    {
+      "action": "WaitUntil",
+      "condition": {
+        "kind": "ElementExists",
+        "selector": {
+          "Path": [
+            {
+              "Search": "Descendants",
+              "ControlType": "Window",
+              "Name": "添加程序单元",
+              "IgnoreCase": true,
+              "NormalizeWhitespace": true,
+              "Index": 0
+            },
+            {
+              "Search": "Descendants",
+              "ControlType": "RadioButton",
+              "Name": "结构化文本ST",
+              "IgnoreCase": true,
+              "NormalizeWhitespace": true,
+              "Index": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "action": "Click",
+      "selector": {
+        "Path": [
+          {
+            "Search": "Descendants",
+            "ControlType": "Window",
+            "Name": "添加程序单元",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          },
+          {
+            "Search": "Descendants",
+            "ControlType": "RadioButton",
+            "Name": "结构化文本ST",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          }
+        ]
+      }
+    },
+    {
+      "action": "SetText",
+      "mode": "Replace",
+      "text": "TEST",
+      "selector": {
+        "Path": [
+          {
+            "Search": "Descendants",
+            "ControlType": "Window",
+            "Name": "添加程序单元",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          },
+          {
+            "Search": "Descendants",
+            "ControlType": "Edit",
+            "Index": 0
+          }
+        ]
+      }
+    },
+    {
+      "action": "Click",
+      "selector": {
+        "Path": [
+          {
+            "Search": "Descendants",
+            "ControlType": "Window",
+            "Name": "添加程序单元",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          },
+          {
+            "Search": "Descendants",
+            "ControlType": "Button",
+            "Name": "确定",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          }
+        ]
+      }
+    },
+    {
+      "action": "WaitUntil",
+      "condition": {
+        "kind": "ElementNotExists",
+        "selector": {
+          "Path": [
+            {
+              "Search": "Descendants",
+              "ControlType": "Window",
+              "Name": "添加程序单元",
+              "IgnoreCase": true,
+              "NormalizeWhitespace": true,
+              "Index": 0
+            }
+          ]
+        }
+      }
+    }
+    ,
+    {
+      "action": "WaitUntil",
+      "condition": {
+        "kind": "ElementExists",
+        "selector": {
+          "Path": [
+            {
+              "Search": "Descendants",
+              "ControlType": "Pane",
+              "NameContains": "工作区",
+              "IgnoreCase": true,
+              "NormalizeWhitespace": true,
+              "Index": 0
+            },
+            {
+              "Search": "Children",
+              "ControlType": "Window",
+              "NameContains": "PRG).st",
+              "IgnoreCase": true,
+              "NormalizeWhitespace": true,
+              "Index": 0
+            },
+            {
+              "Search": "Children",
+              "ControlType": "Pane",
+              "Index": 0
+            },
+            {
+              "Search": "Children",
+              "ControlType": "Pane",
+              "Index": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "action": "Click",
+      "selector": {
+        "Path": [
+          {
+            "Search": "Descendants",
+            "ControlType": "Pane",
+            "NameContains": "工作区",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          },
+          {
+            "Search": "Children",
+            "ControlType": "Window",
+            "NameContains": "PRG).st",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          },
+          {
+            "Search": "Children",
+            "ControlType": "Pane",
+            "Index": 0
+          },
+          {
+            "Search": "Children",
+            "ControlType": "Pane",
+            "Index": 1
+          }
+        ]
+      }
+    }
+  ],
+  "editorRootSelector": {
+    "Path": [
+      {
+        "Search": "Descendants",
+        "ControlType": "Pane",
+        "NameContains": "工作区",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Window",
+        "NameContains": "PRG).st",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Pane",
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Pane",
+        "Index": 1
+      }
+    ]
+  },
+  "editorSelector": {
+    "Path": [
+      {
+        "Search": "Descendants",
+        "ControlType": "Pane",
+        "NameContains": "工作区",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Window",
+        "NameContains": "PRG).st",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Pane",
+        "Index": 0
+      },
+      {
+        "Search": "Children",
+        "ControlType": "Pane",
+        "Index": 1
+      }
+    ]
+  }
+}

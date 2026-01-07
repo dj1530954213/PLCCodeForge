@@ -1,11 +1,12 @@
 {
-  "filePath": "C:\\\\temp\\\\dummy.xlsx",
+  "filePath": "TEST",
   "searchRoot": "mainWindow",
   "findTimeoutMs": 3000,
   "waitTimeoutMs": 3000,
   "openImportDialogSteps": [
     {
       "action": "RightClick",
+      "searchRoot": "mainWindow",
       "selector": {
         "Path": [
           {
@@ -29,14 +30,23 @@
     },
     {
       "action": "WaitUntil",
+      "searchRoot": "mainWindow",
       "condition": {
         "kind": "ElementExists",
         "selector": {
           "Path": [
             {
               "Search": "Descendants",
+              "ControlType": "Window",
+              "Name": "添加程序单元",
+              "IgnoreCase": true,
+              "NormalizeWhitespace": true,
+              "Index": 0
+            },
+            {
+              "Search": "Descendants",
               "ControlType": "RadioButton",
-              "NameContains": "结构化文本",
+              "Name": "结构化文本ST",
               "IgnoreCase": true,
               "NormalizeWhitespace": true,
               "Index": 0
@@ -47,12 +57,21 @@
     },
     {
       "action": "Click",
+      "searchRoot": "mainWindow",
       "selector": {
         "Path": [
           {
             "Search": "Descendants",
+            "ControlType": "Window",
+            "Name": "添加程序单元",
+            "IgnoreCase": true,
+            "NormalizeWhitespace": true,
+            "Index": 0
+          },
+          {
+            "Search": "Descendants",
             "ControlType": "RadioButton",
-            "NameContains": "结构化文本",
+            "Name": "结构化文本ST",
             "IgnoreCase": true,
             "NormalizeWhitespace": true,
             "Index": 0
@@ -65,8 +84,15 @@
     "Path": [
       {
         "Search": "Descendants",
+        "ControlType": "Window",
+        "Name": "添加程序单元",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
+        "Index": 0
+      },
+      {
+        "Search": "Descendants",
         "ControlType": "Edit",
-        "NameContains": "__missing__",
         "Index": 0
       }
     ]
@@ -75,20 +101,32 @@
     "Path": [
       {
         "Search": "Descendants",
+        "ControlType": "Window",
+        "Name": "添加程序单元",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
+        "Index": 0
+      },
+      {
+        "Search": "Descendants",
         "ControlType": "Button",
-        "NameContains": "__missing__",
+        "Name": "确定",
+        "IgnoreCase": true,
+        "NormalizeWhitespace": true,
         "Index": 0
       }
     ]
   },
   "completedCondition": {
-    "kind": "ElementExists",
+    "kind": "ElementNotExists",
     "selector": {
       "Path": [
         {
           "Search": "Descendants",
-          "ControlType": "Text",
-          "NameContains": "__missing__",
+          "ControlType": "Window",
+          "Name": "添加程序单元",
+          "IgnoreCase": true,
+          "NormalizeWhitespace": true,
           "Index": 0
         }
       ]

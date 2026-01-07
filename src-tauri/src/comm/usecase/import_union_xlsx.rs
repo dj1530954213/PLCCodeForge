@@ -1298,6 +1298,7 @@ pub fn import_union_xlsx_with_options(
             DataType::Bool => 1,
             DataType::Int16 | DataType::UInt16 => 1,
             DataType::Int32 | DataType::UInt32 | DataType::Float32 => 2,
+            DataType::Int64 | DataType::UInt64 | DataType::Float64 => 4,
             DataType::Unknown => 1,
         };
 

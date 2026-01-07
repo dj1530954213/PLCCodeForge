@@ -22,9 +22,26 @@ pub enum DataType {
     UInt16,
     Int32,
     UInt32,
+    Int64,
+    UInt64,
     Float32,
+    Float64,
     #[serde(other)]
     Unknown,
+}
+
+impl DataType {
+    /// Returns the number of 16-bit registers required for this data type.
+    /// Returns None for Bool (which uses bits, not registers) and Unknown.
+    pub fn register_span(&self) -> Option<usize> {
+        match self {
+            DataType::Bool => None,
+            DataType::Int16 | DataType::UInt16 => Some(1),
+            DataType::Int32 | DataType::UInt32 | DataType::Float32 => Some(2),
+            DataType::Int64 | DataType::UInt64 | DataType::Float64 => Some(4),
+            DataType::Unknown => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

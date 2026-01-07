@@ -13,7 +13,7 @@
 ## 改动清单
 ### 前端
 - `src/comm/services/address.ts`
-  - 新增 Modbus 人类地址解析/格式化与跨度计算（`parseHumanAddress/formatHumanAddressFrom0Based/spanForArea/dtypeRegisterSpan/nextAddress`）。
+  - 新增 Modbus 人类地址解析/格式化与跨度计算（`parseHumanAddress/formatHumanAddressFrom0Based/spanForArea/nextAddress`）。
 - `src/comm/services/batchAdd.ts`
   - 新增批量新增点位的纯函数 `buildBatchPoints`（地址推进 + 默认值写入 + 越界校验）。
 - `src/comm/services/fill.ts`
@@ -111,4 +111,3 @@
 ## 风险与未决项
 - `comm_project_load_v1` 会读写较多内容（包含 connections + points），如果点位规模很大，建议后续在前端用 debounce 保存、并在后端做增量写入/分片。
 - 当前 Fill Address 会覆盖选区地址列并二次确认；若后续需要 undo，可评估 RevoGrid 的 undo/redo 插件能力。
-
