@@ -202,14 +202,10 @@
             "Index": 0
           },
           {
-            "Search": "Children",
+            "Search": "Descendants",
             "ControlType": "Pane",
+            "ClassName": "Scintilla",
             "Index": 0
-          },
-          {
-            "Search": "Children",
-            "ControlType": "Pane",
-            "Index": 1
           }
         ]
       }
@@ -234,14 +230,10 @@
         "Index": 0
       },
       {
-        "Search": "Children",
+        "Search": "Descendants",
         "ControlType": "Pane",
+        "ClassName": "Scintilla",
         "Index": 0
-      },
-      {
-        "Search": "Children",
-        "ControlType": "Pane",
-        "Index": 1
       }
     ]
   },
@@ -264,14 +256,10 @@
         "Index": 0
       },
       {
-        "Search": "Children",
+        "Search": "Descendants",
         "ControlType": "Pane",
+        "ClassName": "Scintilla",
         "Index": 0
-      },
-      {
-        "Search": "Children",
-        "ControlType": "Pane",
-        "Index": 1
       }
     ]
   }
