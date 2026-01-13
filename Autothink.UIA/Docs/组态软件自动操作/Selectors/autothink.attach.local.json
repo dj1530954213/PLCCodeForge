@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "mainWindow": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "NameContains": "DemoTarget", "IgnoreCase": true, "Index": 0 }
+      ]
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "importVariablesMenuOrButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "openImportButton", "Index": 0 }
+      ]
+    },
+    "importDialog": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "AutomationId": "importDialog", "Index": 0 }
+      ]
+    },
+    "filePathEdit": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Edit", "AutomationId": "filePathEdit", "Index": 0 }
+      ]
+    },
+    "importOkButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "importOkButton", "Index": 0 }
+      ]
+    },
+    "importDoneIndicator": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "statusLabel", "Index": 0 }
+      ]
+    }
+  }
+}

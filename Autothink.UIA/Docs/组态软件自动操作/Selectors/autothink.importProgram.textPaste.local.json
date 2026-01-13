@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "importProgramMenuOrButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "importProgramButton", "Index": 0 }
+      ]
+    },
+    "programEditorRoot": {
+      "Path": [
+        { "Search": "Descendants", "AutomationId": "programEditor", "Index": 0 }
+      ]
+    },
+    "programEditorTextArea": {
+      "Path": [
+        { "Search": "Descendants", "AutomationId": "programEditor", "Index": 0 }
+      ]
+    },
+    "importProgramOkButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "importProgramOkButton", "Index": 0 }
+      ]
+    },
+    "programPastedIndicator": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "programPasteIndicator", "Index": 0 }
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "buildButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "buildButton", "Index": 0 }
+      ]
+    },
+    "buildStatus": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Text", "AutomationId": "statusLabel", "Index": 0 }
+      ]
+    }
+  }
+}

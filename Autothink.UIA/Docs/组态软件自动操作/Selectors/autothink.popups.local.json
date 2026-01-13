@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "selectors": {
+    "popupDialog": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Window", "AutomationId": "buildConfirmDialog", "Index": 0 }
+      ]
+    },
+    "popupOkButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "popupOkButton", "Index": 0 }
+      ]
+    },
+    "popupCancelButton": {
+      "Path": [
+        { "Search": "Descendants", "ControlType": "Button", "AutomationId": "popupCancelButton", "Index": 0 }
+      ]
+    }
+  }
+}
