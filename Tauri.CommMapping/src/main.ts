@@ -5,6 +5,7 @@ import { defineCustomElements } from "@revolist/revogrid/loader";
 
 import ElementPlus from "element-plus";
 import "element-plus/dist/index.css";
+import "./comm/styles/comm-theme.css";
 import { createPinia } from "pinia";
 import { router } from "./router";
 

@@ -110,116 +110,136 @@ setDefaultPath();
 </script>
 
 <template>
-  <el-card>
-    <template #header>
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
-        <div style="font-weight: 600">
-          导出 <span v-if="activeDevice">（{{ activeDevice.deviceName }}）</span>
+  <div class="comm-subpage comm-subpage--export">
+    <header class="comm-hero comm-animate" style="--delay: 0ms">
+      <div class="comm-hero-title">
+        <div class="comm-title">导出与证据包</div>
+        <div class="comm-subtitle">
+          设备：{{ activeDevice?.deviceName ?? "未选择" }} <span v-if="activeDevice">· deviceId {{ activeDevice.deviceId }}</span>
         </div>
-        <el-tag v-if="activeDevice" type="info">deviceId={{ activeDevice.deviceId }}</el-tag>
       </div>
-    </template>
-
-    <el-form label-width="140px">
-      <el-form-item label="导出路径">
-        <el-input v-model="outPath" placeholder="可留空：deliveries/{批次}/{deviceName}/通讯地址表.xlsx" />
-      </el-form-item>
-      <el-form-item label="附加 Results（可选）">
-        <el-checkbox v-model="includeResults">写入采集结果 sheet（不影响三表冻结规范）</el-checkbox>
-      </el-form-item>
-      <el-form-item v-if="includeResults" label="Results 来源">
-        <el-select v-model="resultsSource" style="width: 240px">
-          <el-option label="appdata（默认：last_results.v1.json）" value="appdata" />
-          <el-option label="runLatest（从 runId 的 latest 获取）" value="runLatest" />
-        </el-select>
-      </el-form-item>
-      <el-form-item v-if="includeResults && resultsSource === 'runLatest'" label="runId（用于 latest）">
-        <el-input v-model="runIdForResults" placeholder="从 Run 页面复制 runId（UUID）" />
-      </el-form-item>
-      <el-form-item>
+      <div class="comm-hero-actions">
         <el-button @click="setDefaultPath">默认路径</el-button>
         <el-button type="primary" @click="exportNow">导出 XLSX</el-button>
-        <el-button type="success" @click="exportDeliveryNow">交付导出（通讯地址表.xlsx）</el-button>
-      </el-form-item>
-    </el-form>
+        <el-button type="success" @click="exportDeliveryNow">交付导出</el-button>
+      </div>
+    </header>
 
-    <el-divider />
+    <section class="comm-panel comm-animate" style="--delay: 80ms">
+      <div class="comm-panel-header">
+        <div class="comm-section-title">导出设置</div>
+        <div class="comm-inline-meta">交付版会输出通讯地址表.xlsx</div>
+      </div>
+      <el-form label-width="140px">
+        <el-form-item label="导出路径">
+          <el-input v-model="outPath" placeholder="可留空：deliveries/{批次}/{deviceName}/通讯地址表.xlsx" />
+        </el-form-item>
+        <el-form-item label="附加 Results（可选）">
+          <el-checkbox v-model="includeResults">写入采集结果 sheet（不影响三表冻结规范）</el-checkbox>
+        </el-form-item>
+        <el-form-item v-if="includeResults" label="Results 来源">
+          <el-select v-model="resultsSource" style="width: 240px">
+            <el-option label="appdata（默认：last_results.v1.json）" value="appdata" />
+            <el-option label="runLatest（从 runId 的 latest 获取）" value="runLatest" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="includeResults && resultsSource === 'runLatest'" label="runId（用于 latest）">
+          <el-input v-model="runIdForResults" placeholder="从 Run 页面复制 runId（UUID）" />
+        </el-form-item>
+      </el-form>
+    </section>
 
-    <el-alert
-      v-if="last"
-      type="success"
-      show-icon
-      :closable="false"
-      :title="`导出成功：${last.outPath}`"
-    />
+    <section class="comm-panel comm-animate" style="--delay: 120ms">
+      <div class="comm-panel-header">
+        <div class="comm-section-title">导出状态</div>
+        <div class="comm-inline-meta">最近导出路径与结果</div>
+      </div>
 
-    <el-alert
-      v-if="lastDelivery"
-      type="success"
-      show-icon
-      :closable="false"
-      :title="`交付导出成功：${lastDelivery.outPath}`"
-    />
+      <el-alert
+        v-if="last"
+        type="success"
+        show-icon
+        :closable="false"
+        :title="`导出成功：${last.outPath}`"
+        style="margin-bottom: 10px"
+      />
 
-    <el-alert
-      v-if="lastDelivery && deliveryResultsStatus"
-      :type="deliveryResultsStatus === 'written' ? 'success' : deliveryResultsStatus === 'missing' ? 'warning' : 'info'"
-      show-icon
-      :closable="false"
-      :title="`Results: ${deliveryResultsStatus}${deliveryResultsMessage ? ' - ' + deliveryResultsMessage : ''}`"
-      style="margin-top: 12px"
-    />
+      <el-alert
+        v-if="lastDelivery"
+        type="success"
+        show-icon
+        :closable="false"
+        :title="`交付导出成功：${lastDelivery.outPath}`"
+        style="margin-bottom: 10px"
+      />
 
-    <el-card v-if="last" style="margin-top: 12px">
-      <template #header>headers（验收证据）</template>
-      <el-row :gutter="12">
-        <el-col :span="8">
-              <el-card>
-                <template #header>TCP通讯地址表</template>
-              <pre>{{ JSON.stringify(last.headers.tcp, null, 2) }}</pre>
-            </el-card>
-          </el-col>
-          <el-col :span="8">
-            <el-card>
-              <template #header>485通讯地址表</template>
-              <pre>{{ JSON.stringify(last.headers.rtu, null, 2) }}</pre>
-            </el-card>
-          </el-col>
-          <el-col :span="8">
-            <el-card>
-              <template #header>通讯参数</template>
-              <pre>{{ JSON.stringify(last.headers.params, null, 2) }}</pre>
-            </el-card>
-          </el-col>
-        </el-row>
-      </el-card>
+      <el-alert
+        v-if="lastDelivery && deliveryResultsStatus"
+        :type="deliveryResultsStatus === 'written' ? 'success' : deliveryResultsStatus === 'missing' ? 'warning' : 'info'"
+        show-icon
+        :closable="false"
+        :title="`Results: ${deliveryResultsStatus}${deliveryResultsMessage ? ' - ' + deliveryResultsMessage : ''}`"
+      />
+    </section>
 
-    <el-card v-if="lastDelivery" style="margin-top: 12px">
-      <template #header>交付版 headers（验收证据）</template>
+    <section v-if="last" class="comm-panel comm-animate" style="--delay: 160ms">
+      <div class="comm-panel-header">
+        <div class="comm-section-title">headers（验收证据）</div>
+        <div class="comm-inline-meta">导出 XLSX 真实表头</div>
+      </div>
       <el-row :gutter="12">
         <el-col :span="8">
           <el-card>
             <template #header>TCP通讯地址表</template>
-            <pre>{{ JSON.stringify(lastDelivery.headers.tcp, null, 2) }}</pre>
+            <pre class="comm-code-block">{{ JSON.stringify(last.headers.tcp, null, 2) }}</pre>
           </el-card>
         </el-col>
         <el-col :span="8">
           <el-card>
             <template #header>485通讯地址表</template>
-            <pre>{{ JSON.stringify(lastDelivery.headers.rtu, null, 2) }}</pre>
+            <pre class="comm-code-block">{{ JSON.stringify(last.headers.rtu, null, 2) }}</pre>
           </el-card>
         </el-col>
         <el-col :span="8">
           <el-card>
             <template #header>通讯参数</template>
-            <pre>{{ JSON.stringify(lastDelivery.headers.params, null, 2) }}</pre>
+            <pre class="comm-code-block">{{ JSON.stringify(last.headers.params, null, 2) }}</pre>
           </el-card>
         </el-col>
       </el-row>
-    </el-card>
+    </section>
 
-    <el-card v-if="last" style="margin-top: 12px">
-      <template #header>warnings / diagnostics（可交付诊断）</template>
+    <section v-if="lastDelivery" class="comm-panel comm-animate" style="--delay: 200ms">
+      <div class="comm-panel-header">
+        <div class="comm-section-title">交付版 headers（验收证据）</div>
+        <div class="comm-inline-meta">交付版表头快照</div>
+      </div>
+      <el-row :gutter="12">
+        <el-col :span="8">
+          <el-card>
+            <template #header>TCP通讯地址表</template>
+            <pre class="comm-code-block">{{ JSON.stringify(lastDelivery.headers.tcp, null, 2) }}</pre>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card>
+            <template #header>485通讯地址表</template>
+            <pre class="comm-code-block">{{ JSON.stringify(lastDelivery.headers.rtu, null, 2) }}</pre>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card>
+            <template #header>通讯参数</template>
+            <pre class="comm-code-block">{{ JSON.stringify(lastDelivery.headers.params, null, 2) }}</pre>
+          </el-card>
+        </el-col>
+      </el-row>
+    </section>
+
+    <section v-if="last" class="comm-panel comm-animate" style="--delay: 240ms">
+      <div class="comm-panel-header">
+        <div class="comm-section-title">warnings / diagnostics（可交付诊断）</div>
+      </div>
       <el-alert
         v-if="exportWarnings.length > 0"
         type="warning"
@@ -227,7 +247,7 @@ setDefaultPath();
         :closable="false"
         :title="`warnings: ${exportWarnings.length}`"
       />
-      <pre v-if="exportWarnings.length > 0">{{ JSON.stringify(exportWarnings, null, 2) }}</pre>
+      <pre v-if="exportWarnings.length > 0" class="comm-code-block">{{ JSON.stringify(exportWarnings, null, 2) }}</pre>
       <el-alert
         v-if="exportDiagnostics"
         type="info"
@@ -235,11 +255,13 @@ setDefaultPath();
         :closable="false"
         :title="`diagnostics: durationMs=${exportDiagnostics.durationMs}`"
       />
-      <pre v-if="exportDiagnostics">{{ JSON.stringify(exportDiagnostics, null, 2) }}</pre>
-    </el-card>
+      <pre v-if="exportDiagnostics" class="comm-code-block">{{ JSON.stringify(exportDiagnostics, null, 2) }}</pre>
+    </section>
 
-    <el-card v-if="lastDelivery" style="margin-top: 12px">
-      <template #header>交付版 warnings / diagnostics</template>
+    <section v-if="lastDelivery" class="comm-panel comm-animate" style="--delay: 280ms">
+      <div class="comm-panel-header">
+        <div class="comm-section-title">交付版 warnings / diagnostics</div>
+      </div>
       <el-alert
         v-if="deliveryWarnings.length > 0"
         type="warning"
@@ -247,7 +269,7 @@ setDefaultPath();
         :closable="false"
         :title="`warnings: ${deliveryWarnings.length}`"
       />
-      <pre v-if="deliveryWarnings.length > 0">{{ JSON.stringify(deliveryWarnings, null, 2) }}</pre>
+      <pre v-if="deliveryWarnings.length > 0" class="comm-code-block">{{ JSON.stringify(deliveryWarnings, null, 2) }}</pre>
       <el-alert
         v-if="deliveryDiagnostics"
         type="info"
@@ -255,7 +277,7 @@ setDefaultPath();
         :closable="false"
         :title="`diagnostics: durationMs=${deliveryDiagnostics.durationMs}`"
       />
-      <pre v-if="deliveryDiagnostics">{{ JSON.stringify(deliveryDiagnostics, null, 2) }}</pre>
-    </el-card>
-  </el-card>
+      <pre v-if="deliveryDiagnostics" class="comm-code-block">{{ JSON.stringify(deliveryDiagnostics, null, 2) }}</pre>
+    </section>
+  </div>
 </template>

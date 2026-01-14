@@ -18,7 +18,7 @@
           style="width: 100%"
         >
           <el-option
-            v-for="type in DATA_TYPES"
+            v-for="type in availableDataTypes"
             :key="type"
             :label="type"
             :value="type"
@@ -84,13 +84,13 @@ import {
   type BatchEditRequest,
 } from '../services/batchEdit';
 
-const DATA_TYPES: DataType[] = COMM_DATA_TYPES;
 const BYTE_ORDERS: ByteOrder32[] = COMM_BYTE_ORDERS_32;
 
 interface Props {
   modelValue: boolean;
   selectedCount: number;
   selectedRows: { pointKey: string }[];
+  dataTypeOptions?: DataType[];
 }
 
 interface Emits {
@@ -100,6 +100,13 @@ interface Emits {
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
+
+const availableDataTypes = computed(() => {
+  if (props.dataTypeOptions && props.dataTypeOptions.length > 0) {
+    return props.dataTypeOptions;
+  }
+  return COMM_DATA_TYPES;
+});
 
 const visible = computed({
   get: () => props.modelValue,

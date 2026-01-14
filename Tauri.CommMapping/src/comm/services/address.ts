@@ -10,19 +10,8 @@ export type ParseHumanAddressResult =
   | { ok: true; area: RegisterArea; start1Based: number; start0Based: number }
   | { ok: false; message: string };
 
-export function modbusHumanBase(area: RegisterArea): number {
-  switch (area) {
-    case "Coil":
-      return 1;
-    case "Discrete":
-      return 10001;
-    case "Input":
-      return 30001;
-    case "Holding":
-      return 40001;
-    default:
-      return 40001;
-  }
+export function modbusHumanBase(_area: RegisterArea): number {
+  return 1;
 }
 
 export function formatHumanAddress(addr: HumanAddress): string {
@@ -37,24 +26,21 @@ export function formatHumanAddressFrom0Based(area: RegisterArea, start0Based: nu
   return String(n);
 }
 
-export function parseHumanAddress(input: string): ParseHumanAddressResult {
+export function parseHumanAddress(input: string, area: RegisterArea): ParseHumanAddressResult {
   const raw = input.trim();
   if (!raw) return { ok: false, message: "地址不能为空" };
-  if (!/^[0-9]+$/.test(raw)) return { ok: false, message: "地址必须为纯数字（例如 40001）" };
+  if (!/^[0-9]+$/.test(raw)) return { ok: false, message: "地址必须为纯数字（例如 1）" };
 
   const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return { ok: false, message: "地址必须为正整数" };
+  if (!Number.isFinite(n) || n <= 0) return { ok: false, message: "地址必须为正整数（1-based）" };
 
-  const area: RegisterArea =
-    n >= 40001 ? "Holding" : n >= 30001 ? "Input" : n >= 10001 ? "Discrete" : "Coil";
-  const base = modbusHumanBase(area);
-  const start0Based = n - base;
-  const start1Based = start0Based + 1;
+  const start1Based = Math.floor(n);
+  const start0Based = start1Based - 1;
   return { ok: true, area, start0Based, start1Based };
 }
 
 // Span (unit length) derived from dataType, for Modbus address advancement.
-// - Holding/Input: 16-bit types => 1 register; 32-bit types => 2 registers; 64-bit types => 4 registers
+// - Holding/Input: 16-bit types => 1 register; 32-bit types => 2 registers
 // - Coil/Discrete: Bool => 1 coil; others unsupported (null)
 export function spanForArea(area: RegisterArea, dataType: DataType): number | null {
   if (!isValidForArea(dataType, area)) return null;
@@ -64,9 +50,10 @@ export function spanForArea(area: RegisterArea, dataType: DataType): number | nu
 
 export function nextAddress(
   currentHumanAddr: string,
-  dataType: DataType
+  dataType: DataType,
+  area: RegisterArea
 ): { ok: true; nextHumanAddr: string } | { ok: false; message: string } {
-  const parsed = parseHumanAddress(currentHumanAddr);
+  const parsed = parseHumanAddress(currentHumanAddr, area);
   if (!parsed.ok) return parsed;
   const span = spanForArea(parsed.area, dataType);
   if (span === null) {
@@ -81,7 +68,7 @@ export function nextAddress(
  * 根据上一行的地址和数据类型，自动计算下一个可用地址
  * 遵循SRP：只负责地址推断逻辑
  * 
- * @param lastRowAddress 上一行的Modbus地址（人类可读格式，如"40001"）
+ * @param lastRowAddress 上一行的地址（人类可读格式，1-based）
  * @param lastRowDataType 上一行的数据类型
  * @param profileArea 连接配置的寄存器区域
  * @param profileStartAddress 连接配置的起始地址（0-based）
@@ -99,7 +86,7 @@ export function inferNextAddress(
   }
 
   // 尝试计算下一个地址
-  const nextResult = nextAddress(lastRowAddress, lastRowDataType);
+  const nextResult = nextAddress(lastRowAddress, lastRowDataType, profileArea);
   if (nextResult.ok) {
     return nextResult.nextHumanAddr;
   }

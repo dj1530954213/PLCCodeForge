@@ -168,52 +168,56 @@ watch([projectId, activeDeviceId], () => void load(true), { immediate: true });
 </script>
 
 <template>
-  <el-card>
-    <template #header>
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
-        <div style="font-weight: 600">
-          连接配置 <span v-if="activeDevice">（{{ activeDevice.deviceName }}）</span>
+  <div class="comm-subpage comm-subpage--connection">
+    <header class="comm-hero comm-animate" style="--delay: 0ms">
+      <div class="comm-hero-title">
+        <div class="comm-title">连接配置</div>
+        <div class="comm-subtitle">
+          设备：{{ activeDevice?.deviceName ?? "未选择" }} <span v-if="activeDevice">· deviceId {{ activeDevice.deviceId }}</span>
         </div>
-        <el-tag v-if="activeDevice" type="info">deviceId={{ activeDevice.deviceId }}</el-tag>
       </div>
-    </template>
+      <div class="comm-hero-actions">
+        <el-button type="primary" @click="openAddTcp">新增 TCP</el-button>
+        <el-button type="primary" @click="openAdd485">新增 485</el-button>
+        <el-button @click="load(false)">加载</el-button>
+        <el-button @click="save">保存</el-button>
+      </div>
+    </header>
 
-    <el-space wrap>
-      <el-button type="primary" @click="openAddTcp">新增 TCP</el-button>
-      <el-button type="primary" @click="openAdd485">新增 485</el-button>
-      <el-button @click="load(false)">加载</el-button>
-      <el-button @click="save">保存</el-button>
-    </el-space>
+    <section class="comm-panel comm-animate" style="--delay: 80ms">
+      <div class="comm-panel-header">
+        <div class="comm-section-title">通道列表</div>
+        <div class="comm-inline-meta">MVP：单设备单通道</div>
+      </div>
 
-    <el-divider />
+      <el-alert
+        v-if="model.profiles.length > 1"
+        type="warning"
+        show-icon
+        :closable="false"
+        title="当前设备仅支持单通道，保存时将仅保留第一个连接"
+        style="margin-bottom: 12px"
+      />
 
-    <el-alert
-      v-if="model.profiles.length > 1"
-      type="warning"
-      show-icon
-      :closable="false"
-      title="当前设备仅支持单通道，保存时将仅保留第一个连接"
-      style="margin-bottom: 12px"
-    />
-
-    <el-table :data="model.profiles" style="width: 100%">
-      <el-table-column label="协议类型" width="90">
-        <template #default="{ row }">{{ row.protocolType }}</template>
-      </el-table-column>
-      <el-table-column prop="channelName" label="通道名称" min-width="160" />
-      <el-table-column prop="readArea" label="读取区域" width="100" />
-      <el-table-column label="起始地址(1-based)" width="140">
-        <template #default="{ row }">{{ row.startAddress + 1 }}</template>
-      </el-table-column>
-      <el-table-column prop="length" label="长度" width="80" />
-      <el-table-column label="操作" width="160">
-        <template #default="{ $index }">
-          <el-button size="small" @click="openEdit($index)">编辑</el-button>
-          <el-button size="small" type="danger" @click="removeAt($index)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-  </el-card>
+      <el-table :data="model.profiles" style="width: 100%">
+        <el-table-column label="协议类型" width="90">
+          <template #default="{ row }">{{ row.protocolType }}</template>
+        </el-table-column>
+        <el-table-column prop="channelName" label="通道名称" min-width="160" />
+        <el-table-column prop="readArea" label="读取区域" width="100" />
+        <el-table-column label="起始地址(1-based)" width="140">
+          <template #default="{ row }">{{ row.startAddress + 1 }}</template>
+        </el-table-column>
+        <el-table-column prop="length" label="长度" width="80" />
+        <el-table-column label="操作" width="160">
+          <template #default="{ $index }">
+            <el-button size="small" @click="openEdit($index)">编辑</el-button>
+            <el-button size="small" type="danger" @click="removeAt($index)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+  </div>
 
   <el-dialog v-model="dialogOpen" width="720px">
     <template #header>

@@ -1,5 +1,5 @@
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,26 +7,45 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Node/Vite/Tauri frontend
+**/node_modules/
+**/.vite/
+**/dist/
+**/dist-ssr/
+**/coverage/
 *.local
 Docs/组态软件自动操作/Selectors/*.local.json
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sw?
+# Rust
+**/target/
+**/*.rs.bk
 
-bin/
-obj/
-.vs/
+# .NET / Visual Studio
+**/bin/
+**/obj/
+**/TestResults/
+**/.vs/
 *.user
 *.rsuser
 *.userosscache
+*.suo
 *.sln.docstates
+*.ntvs*
+*.njsproj
+*.sw?
+*.VC.db
+*.VC.VC.opendb
+
+# C++ build directories
+**/Debug/
+**/Release/
+**/x64/
+**/x86/
+**/Win32/
+
+# Editor and OS files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

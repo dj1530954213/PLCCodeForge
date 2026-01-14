@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import Grid, { VGridVueEditor, type ColumnRegular, type Editors } from "@revolist/vue3-datagrid";
+import type { ColumnAutoSizeMode } from "@revolist/revogrid";
 
 import TextEditor from "../components/revogrid/TextEditor.vue";
 import SelectEditor from "../components/revogrid/SelectEditor.vue";
@@ -15,6 +16,7 @@ import { computeFillAddressEdits, computeFillDownEdits, type SelectionRange } fr
 import { UndoManager, createBatchAddUndoAction, createBatchEditUndoAction, createDeleteRowsUndoAction } from "../services/undoRedo";
 import { useKeyboardShortcuts, createStandardShortcuts } from "../composables/useKeyboardShortcuts";
 import { computeBatchEdits, applyBatchEdits, type BatchEditRequest } from "../services/batchEdit";
+import { getSupportedDataTypes } from "../services/dataTypes";
 
 import type {
   BatchInsertMode,
@@ -27,6 +29,7 @@ import type {
   PointsV1,
   ProfilesV1,
   Quality,
+  RegisterArea,
   SampleResult,
 } from "../api";
 import {
@@ -43,7 +46,6 @@ import { useCommDeviceContext } from "../composables/useDeviceContext";
 
 const { projectId, project, activeDeviceId, activeDevice } = useCommDeviceContext();
 
-const DATA_TYPES: DataType[] = COMM_DATA_TYPES;
 const BYTE_ORDERS: ByteOrder32[] = COMM_BYTE_ORDERS_32;
 
 type RunUiState = "idle" | "starting" | "running" | "stopping" | "error";
@@ -77,6 +79,10 @@ type PointRow = CommPoint & {
 const gridRef = ref<any>(null);
 const profiles = ref<ProfilesV1>({ schemaVersion: 1, profiles: [] });
 const points = ref<PointsV1>({ schemaVersion: 1, points: [] });
+
+const gridAutoSizeColumn = {
+  mode: "autoSizeOnTextOverlap" as ColumnAutoSizeMode,
+};
 
 const activeChannelName = ref<string>("");
 const gridRows = ref<PointRow[]>([]);
@@ -178,6 +184,17 @@ const activeProfile = computed<ConnectionProfile | null>(() => {
   return profiles.value.profiles.find((p) => p.channelName === name) ?? null;
 });
 
+const dataTypeOptions = computed<DataType[]>(() => {
+  const profile = activeProfile.value;
+  return profile ? getSupportedDataTypes(profile.readArea) : COMM_DATA_TYPES;
+});
+
+function resolveDataTypeForArea(area: RegisterArea, preferred?: DataType | null): DataType {
+  const supported = getSupportedDataTypes(area);
+  if (preferred && supported.includes(preferred)) return preferred;
+  return supported[0] ?? preferred ?? "UInt16";
+}
+
 function normalizeHmiName(name: string): string {
   return String(name ?? "").trim();
 }
@@ -233,8 +250,8 @@ const addressConflictByPointKey = computed<Record<string, string>>(() => {
   for (const row of gridRows.value) {
     const addrRaw = row.modbusAddress.trim();
     if (!addrRaw) continue;
-    const parsed = parseHumanAddress(addrRaw);
-    if (!parsed.ok || parsed.area !== profile.readArea) continue;
+    const parsed = parseHumanAddress(addrRaw, profile.readArea);
+    if (!parsed.ok) continue;
     const span = spanForArea(profile.readArea, row.dataType);
     if (span === null) continue;
     const start = parsed.start0Based;
@@ -518,9 +535,9 @@ function attachGridSelectionListeners() {
 
 function profileLabel(p: ConnectionProfile): string {
   if (p.protocolType === "TCP") {
-    return `${p.channelName} / TCP / ${p.ip}:${p.port} / area=${p.readArea} / start=${p.startAddress + 1} len=${p.length}`;
+    return `${p.channelName} / TCP / ${p.ip}:${p.port} / area=${p.readArea} / start=${formatHumanAddressFrom0Based(p.readArea, p.startAddress)} len=${p.length}`;
   }
-  return `${p.channelName} / 485 / ${p.serialPort} / area=${p.readArea} / start=${p.startAddress + 1} len=${p.length}`;
+  return `${p.channelName} / 485 / ${p.serialPort} / area=${p.readArea} / start=${formatHumanAddressFrom0Based(p.readArea, p.startAddress)} len=${p.length}`;
 }
 
 function validateHmiName(row: PointRow): string | null {
@@ -528,31 +545,36 @@ function validateHmiName(row: PointRow): string | null {
 }
 
 function validateScale(row: PointRow): string | null {
-  return Number.isFinite(Number(row.scale)) ? null : "缩放倍数必须为有效数字";
+  const raw = String(row.scale ?? "").trim();
+  if (!raw) return "缩放倍数不能为空";
+  return Number.isFinite(Number(raw)) ? null : "缩放倍数必须为有效数字";
 }
 
 function validateModbusAddress(row: PointRow): string | null {
   const profile = activeProfile.value;
   if (!profile) return "请先选择连接";
 
-  const addrRaw = row.modbusAddress.trim();
-  if (!addrRaw) return null; // 兼容旧行为：空地址 => addressOffset=None，plan 会按顺排自动映射
-
-  const parsed = parseHumanAddress(addrRaw);
-  if (!parsed.ok) return parsed.message;
-  if (parsed.area !== profile.readArea) {
-    return `地址区域不匹配：profile.readArea=${profile.readArea}，输入=${parsed.area}`;
-  }
-
   const len = spanForArea(profile.readArea, row.dataType);
   if (len === null) return `dataType=${row.dataType} 与 readArea=${profile.readArea} 不匹配`;
 
+  const addrRaw = row.modbusAddress.trim();
+  if (!addrRaw) return null; // 兼容旧行为：空地址 => addressOffset=None，plan 会按顺排自动映射
+
+  const parsed = parseHumanAddress(addrRaw, profile.readArea);
+  if (!parsed.ok) return parsed.message;
+
   const start0 = parsed.start0Based;
-  if (start0 < profile.startAddress) return "地址小于连接起始地址";
+  if (start0 < profile.startAddress) {
+    return `地址小于连接起始地址 ${formatHumanAddressFrom0Based(profile.readArea, profile.startAddress)}`;
+  }
 
   const end0 = start0 + len;
   const channelEnd0 = profile.startAddress + profile.length;
-  if (end0 > channelEnd0) return `地址越界：end=${end0} > channelEnd=${channelEnd0}`;
+  if (end0 > channelEnd0) {
+    const endHuman = formatHumanAddressFrom0Based(profile.readArea, end0 - 1);
+    const limitHuman = formatHumanAddressFrom0Based(profile.readArea, channelEnd0 - 1);
+    return `地址越界：结束地址 ${endHuman} 超出连接范围 ${limitHuman}`;
+  }
   return null;
 }
 
@@ -626,7 +648,7 @@ const columns = computed<ColumnRegular[]>(() => [
   },
   {
     prop: "modbusAddress",
-    name: "Modbus 地址",
+    name: "起始地址(1-based)",
     size: 120,
     minSize: 110,
     editor: EDITOR_TEXT,
@@ -638,7 +660,7 @@ const columns = computed<ColumnRegular[]>(() => [
     size: 110,
     minSize: 100,
     editor: EDITOR_SELECT,
-    editorOptions: DATA_TYPES.map((v) => ({ label: v, value: v })),
+    editorOptions: dataTypeOptions.value.map((v) => ({ label: v, value: v })),
   },
   {
     prop: "byteOrder",
@@ -878,18 +900,18 @@ function findInsertAnchor(): { row: PointRow; rowIndex: number } | null {
 }
 
 function buildSinglePoint(profile: ConnectionProfile, baseRow?: PointRow | null): CommPoint {
-  const dataType = baseRow?.dataType ?? "UInt16";
+  const dataType = resolveDataTypeForArea(profile.readArea, baseRow?.dataType ?? "UInt16");
   const byteOrder = baseRow?.byteOrder ?? "ABCD";
   const scale = Number.isFinite(Number(baseRow?.scale)) ? Number(baseRow!.scale) : 1;
   const suggestedStart = inferNextAddress(
     baseRow?.modbusAddress,
-    baseRow?.dataType,
+    dataType,
     profile.readArea,
     profile.startAddress
   );
 
   let addressOffset: number | undefined;
-  const parsed = parseHumanAddress(suggestedStart);
+  const parsed = parseHumanAddress(suggestedStart, profile.readArea);
   if (parsed.ok && parsed.area === profile.readArea) {
     const offset = parsed.start0Based - profile.startAddress;
     if (offset >= 0) {
@@ -1042,11 +1064,13 @@ function openBatchAddDialog() {
   }
 
   const lastRow = gridRows.value[gridRows.value.length - 1];
+  const preferredType = lastRow?.dataType ?? batchAddTemplate.value.dataType;
+  const resolvedType = resolveDataTypeForArea(profile.readArea, preferredType);
   
   // 使用智能地址推断
   const suggestedStart = inferNextAddress(
     lastRow?.modbusAddress,
-    lastRow?.dataType,
+    resolvedType,
     profile.readArea,
     profile.startAddress
   );
@@ -1054,7 +1078,7 @@ function openBatchAddDialog() {
   batchAddTemplate.value = {
     count: Math.max(1, Math.min(500, Math.floor(batchAddTemplate.value.count || 10))),
     startAddressHuman: suggestedStart,
-    dataType: lastRow?.dataType ?? batchAddTemplate.value.dataType ?? "UInt16",
+    dataType: resolvedType,
     byteOrder: lastRow?.byteOrder ?? batchAddTemplate.value.byteOrder ?? "ABCD",
     hmiNameTemplate: batchAddTemplate.value.hmiNameTemplate?.trim() ? batchAddTemplate.value.hmiNameTemplate : "AI_{{i}}",
     scaleTemplate: String(
@@ -1316,7 +1340,11 @@ async function applyFillSeries(range: SelectionRange) {
       return;
     }
 
-    const computed = computeFillAddressEdits({ rows: gridRows.value, range: { rowStart, rowEnd } });
+    const computed = computeFillAddressEdits({
+      rows: gridRows.value,
+      range: { rowStart, rowEnd },
+      readArea: active.readArea,
+    });
     if (!computed.ok) {
       ElMessage.error(computed.message);
       return;
@@ -1324,13 +1352,9 @@ async function applyFillSeries(range: SelectionRange) {
 
     const channelEnd0 = active.startAddress + active.length;
     for (const e of computed.edits) {
-      const parsed = parseHumanAddress(e.value);
+      const parsed = parseHumanAddress(e.value, active.readArea);
       if (!parsed.ok) {
         ElMessage.error(parsed.message);
-        return;
-      }
-      if (parsed.area !== active.readArea) {
-        ElMessage.error(`地址区域不匹配：profile.readArea=${active.readArea}，输入=${parsed.area}`);
         return;
       }
       const row = gridRows.value[e.rowIndex];
@@ -1340,11 +1364,13 @@ async function applyFillSeries(range: SelectionRange) {
         return;
       }
       if (parsed.start0Based < active.startAddress) {
-        ElMessage.error("地址小于连接起始地址");
+        ElMessage.error(`地址小于连接起始地址 ${formatHumanAddressFrom0Based(active.readArea, active.startAddress)}`);
         return;
       }
       if (parsed.start0Based + len > channelEnd0) {
-        ElMessage.error(`地址越界：end=${parsed.start0Based + len} > channelEnd=${channelEnd0}`);
+        const endHuman = formatHumanAddressFrom0Based(active.readArea, parsed.start0Based + len - 1);
+        const limitHuman = formatHumanAddressFrom0Based(active.readArea, channelEnd0 - 1);
+        ElMessage.error(`地址越界：结束地址 ${endHuman} 超出连接范围 ${limitHuman}`);
         return;
       }
     }
@@ -1474,9 +1500,8 @@ async function syncFromGridAndMapAddresses(touchedKeys?: string[]) {
       continue;
     }
 
-    const parsed = parseHumanAddress(addrRaw);
+    const parsed = parseHumanAddress(addrRaw, profile.readArea);
     if (!parsed.ok) continue;
-    if (parsed.area !== profile.readArea) continue;
 
     const offset = parsed.start0Based - profile.startAddress;
     if (offset < 0) continue;
@@ -1643,6 +1668,11 @@ async function pollLatest() {
     pushLog("run_latest", "error", `${err.kind}: ${err.message}`);
     runUiState.value = "error";
     clearTimer();
+    if (runId.value) {
+      void commRunStopObs(id, projectId.value).catch(() => {
+        // ignore stop errors after latest failure
+      });
+    }
     return;
   }
 
@@ -1864,139 +1894,170 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <el-card>
-    <template #header>
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
-        <div style="font-weight: 600">
-          点位配置 + 实时采集 <span v-if="activeDevice">（{{ activeDevice.deviceName }}）</span>
+  <div class="comm-subpage comm-subpage--points">
+      <header class="comm-hero comm-animate" style="--delay: 0ms">
+        <div class="comm-hero-title">
+          <div class="comm-title">点位配置</div>
+          <div class="comm-subtitle">
+            实时采集 <span v-if="activeDevice">· {{ activeDevice.deviceName }}</span>
+          </div>
         </div>
-        <el-space wrap>
+        <div class="comm-hero-actions">
           <el-button @click="loadAll">加载</el-button>
-          <el-button @click="savePoints">保存</el-button>
-        </el-space>
+          <el-button type="primary" @click="savePoints">保存</el-button>
+        </div>
+      </header>
+
+      <el-alert
+        class="comm-hint-bar comm-animate"
+        type="info"
+        show-icon
+        :closable="false"
+        title="提示：表格支持直接编辑、TSV 粘贴；框选区域后使用“填充”进行同值或序列递增。"
+        style="--delay: 60ms"
+      />
+
+      <section class="comm-panel comm-panel--run comm-animate" style="--delay: 120ms">
+        <div class="comm-run-grid">
+          <div class="comm-profile-block">
+            <div class="comm-label">连接配置</div>
+            <el-select
+              v-model="activeChannelName"
+              placeholder="选择连接"
+              :disabled="isRunning || isStarting || isStopping"
+            >
+              <el-option v-for="p in profiles.profiles" :key="p.channelName" :label="profileLabel(p)" :value="p.channelName" />
+            </el-select>
+            <div v-if="activeProfile" class="comm-profile-meta">
+              <span class="comm-chip">{{ activeProfile.protocolType }}</span>
+              <span class="comm-chip">{{ activeProfile.channelName }}</span>
+              <span class="comm-chip">Area {{ activeProfile.readArea }}</span>
+              <span class="comm-chip">Start {{ formatHumanAddressFrom0Based(activeProfile.readArea, activeProfile.startAddress) }}</span>
+              <span class="comm-chip">Len {{ activeProfile.length }}</span>
+            </div>
+          </div>
+
+          <div class="comm-run-actions">
+            <el-button type="primary" :loading="isStarting" :disabled="isRunning || isStopping" @click="startRun">开始运行</el-button>
+            <el-button type="danger" :loading="isStopping" :disabled="!isRunning" @click="stopRun('manual')">停止</el-button>
+            <el-select v-model="pollMs" style="width: 160px">
+              <el-option :value="500" label="轮询 500ms" />
+              <el-option :value="1000" label="轮询 1s" />
+              <el-option :value="2000" label="轮询 2s" />
+            </el-select>
+          </div>
+        </div>
+
+        <div class="comm-run-meta">
+          <div class="comm-run-tags">
+            <el-tag v-if="isRunning && configChangedDuringRun" type="warning" effect="light">
+              {{ autoRestartPending ? "配置已变更：即将自动重启" : "配置已变更：重启中" }}
+            </el-tag>
+            <el-tag v-if="runUiState === 'running'" type="success">running</el-tag>
+            <el-tag v-else-if="runUiState === 'starting'" type="warning">starting</el-tag>
+            <el-tag v-else-if="runUiState === 'stopping'" type="warning">stopping</el-tag>
+            <el-tag v-else-if="runUiState === 'error'" type="danger">error</el-tag>
+            <el-tag v-else type="info">idle</el-tag>
+          </div>
+          <div class="comm-run-tags">
+            <el-tag v-if="runId" type="info">runId={{ runId }}</el-tag>
+            <el-tag v-if="resumeAfterFix && !isRunning" type="warning">配置无效：修复后自动恢复</el-tag>
+            <el-tag v-if="latest" type="info">updatedAt={{ latest.updatedAtUtc }}</el-tag>
+          </div>
+        </div>
+      </section>
+
+      <section class="comm-panel comm-panel--stats comm-animate" style="--delay: 180ms">
+        <div class="comm-stat-grid">
+          <div class="comm-stat"><el-statistic title="Total" :value="latest?.stats.total ?? 0" /></div>
+          <div class="comm-stat"><el-statistic title="OK" :value="latest?.stats.ok ?? 0" /></div>
+          <div class="comm-stat"><el-statistic title="Timeout" :value="latest?.stats.timeout ?? 0" /></div>
+          <div class="comm-stat"><el-statistic title="CommErr" :value="latest?.stats.commError ?? 0" /></div>
+          <div class="comm-stat"><el-statistic title="DecodeErr" :value="latest?.stats.decodeError ?? 0" /></div>
+          <div class="comm-stat"><el-statistic title="CfgErr" :value="latest?.stats.configError ?? 0" /></div>
+        </div>
+      </section>
+
+      <el-alert
+        v-if="runError"
+        class="comm-run-error comm-animate"
+        style="--delay: 200ms"
+        type="error"
+        show-icon
+        :closable="false"
+        :title="`${runError.kind}: ${runError.message}`"
+      />
+
+      <div class="comm-status-bar comm-animate" style="--delay: 220ms" :class="{ 'is-error': hasValidationIssues || hasBackendFieldIssues }">
+        <div class="comm-status-left">
+          <div class="comm-status-title">配置校验</div>
+          <div class="comm-status-desc">{{ validationSummary }}</div>
+        </div>
+        <div class="comm-status-actions">
+          <el-button size="small" :disabled="!hasValidationIssues && !hasBackendFieldIssues" @click="validationPanelOpen = true">
+            查看详情
+          </el-button>
+        </div>
       </div>
-    </template>
 
-    <el-alert
-      class="comm-hint-bar"
-      type="info"
-      show-icon
-      :closable="false"
-      title="提示：表格支持直接编辑、TSV 粘贴；框选区域后使用“填充”进行同值或序列递增。"
-      style="margin-bottom: 12px"
-    />
+      <section class="comm-panel comm-panel--table comm-animate" style="--delay: 260ms">
+        <div class="comm-toolbar">
+          <div class="comm-toolbar-left">
+            <el-button type="primary" @click="addSingleRow">新增单行</el-button>
+            <el-button @click="openBatchAddDialog">批量新增 (Ctrl+B)</el-button>
+            <el-button :disabled="gridRows.length === 0" @click="openBatchEditDialog">批量编辑 (Ctrl+E)</el-button>
+            <el-dropdown
+              split-button
+              type="default"
+              :disabled="gridRows.length === 0"
+              @click="applyFill"
+              @command="handleFillCommand"
+            >
+              {{ fillModeLabel }}
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="copy">同值填充</el-dropdown-item>
+                  <el-dropdown-item command="series">序列递增</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+          <div class="comm-toolbar-right">
+            <el-button type="danger" :disabled="gridRows.length === 0" @click="removeSelectedRows">删除选中行（{{ selectedCount }}）(Del)</el-button>
+            <el-button :disabled="!undoManager.canUndo()" @click="handleUndo">撤销 (Ctrl+Z)</el-button>
+            <el-button :disabled="!undoManager.canRedo()" @click="handleRedo">重做 (Ctrl+Y)</el-button>
+          </div>
+        </div>
+        <div class="comm-toolbar-tip">
+          <span>选中 {{ selectedCount }} 行</span>
+          <span>快捷键：Ctrl+B / Ctrl+E / Del / Ctrl+Z / Ctrl+Y</span>
+        </div>
 
-    <div class="comm-toolbar-layer">
-    <el-space wrap style="margin-bottom: 12px">
-      <el-select
-        v-model="activeChannelName"
-        placeholder="选择连接"
-        style="width: 520px"
-        :disabled="isRunning || isStarting || isStopping"
-      >
-        <el-option v-for="p in profiles.profiles" :key="p.channelName" :label="profileLabel(p)" :value="p.channelName" />
-      </el-select>
-      <el-button type="primary" :loading="isStarting" :disabled="isRunning || isStopping" @click="startRun">开始运行</el-button>
-      <el-button type="danger" :loading="isStopping" :disabled="!isRunning" @click="stopRun('manual')">停止</el-button>
-      <el-tag v-if="isRunning && configChangedDuringRun" type="warning">
-        {{ autoRestartPending ? "配置已变更：即将自动重启" : "配置已变更：重启中" }}
-      </el-tag>
-      <el-select v-model="pollMs" style="width: 160px">
-        <el-option :value="500" label="轮询 500ms" />
-        <el-option :value="1000" label="轮询 1s" />
-        <el-option :value="2000" label="轮询 2s" />
-      </el-select>
-      <el-tag v-if="runId" type="info">runId={{ runId }}</el-tag>
-      <el-tag v-if="runUiState === 'running'" type="success">running</el-tag>
-      <el-tag v-else-if="runUiState === 'starting'" type="warning">starting</el-tag>
-      <el-tag v-else-if="runUiState === 'stopping'" type="warning">stopping</el-tag>
-      <el-tag v-else-if="runUiState === 'error'" type="danger">error</el-tag>
-      <el-tag v-else type="info">idle</el-tag>
-      <el-tag v-if="resumeAfterFix && !isRunning" type="warning">配置无效：修复后自动恢复</el-tag>
-      <el-tag v-if="latest" type="info">updatedAt={{ latest.updatedAtUtc }}</el-tag>
-    </el-space>
-
-    <el-space wrap style="margin-bottom: 12px">
-      <el-button type="primary" @click="addSingleRow">新增单行</el-button>
-      <el-button @click="openBatchAddDialog">批量新增 (Ctrl+B)</el-button>
-      <el-button :disabled="gridRows.length === 0" @click="openBatchEditDialog">批量编辑 (Ctrl+E)</el-button>
-      <el-dropdown
-        split-button
-        type="default"
-        :disabled="gridRows.length === 0"
-        @click="applyFill"
-        @command="handleFillCommand"
-      >
-        {{ fillModeLabel }}
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="copy">同值填充</el-dropdown-item>
-            <el-dropdown-item command="series">序列递增</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-      <el-button type="danger" :disabled="gridRows.length === 0" @click="removeSelectedRows">删除选中行（{{ selectedCount }}）(Del)</el-button>
-      <el-button :disabled="!undoManager.canUndo()" @click="handleUndo">撤销 (Ctrl+Z)</el-button>
-      <el-button :disabled="!undoManager.canRedo()" @click="handleRedo">重做 (Ctrl+Y)</el-button>
-    </el-space>
-
-    <el-divider />
-
-    <el-row :gutter="12" style="margin-bottom: 12px">
-      <el-col :span="4"><el-statistic title="Total" :value="latest?.stats.total ?? 0" /></el-col>
-      <el-col :span="4"><el-statistic title="OK" :value="latest?.stats.ok ?? 0" /></el-col>
-      <el-col :span="4"><el-statistic title="Timeout" :value="latest?.stats.timeout ?? 0" /></el-col>
-      <el-col :span="4"><el-statistic title="CommErr" :value="latest?.stats.commError ?? 0" /></el-col>
-      <el-col :span="4"><el-statistic title="DecodeErr" :value="latest?.stats.decodeError ?? 0" /></el-col>
-      <el-col :span="4"><el-statistic title="CfgErr" :value="latest?.stats.configError ?? 0" /></el-col>
-    </el-row>
-
-    <el-alert
-      v-if="runError"
-      style="margin-bottom: 12px"
-      type="error"
-      show-icon
-      :closable="false"
-      :title="`${runError.kind}: ${runError.message}`"
-    />
-
-    <div class="comm-status-bar" :class="{ 'is-error': hasValidationIssues || hasBackendFieldIssues }">
-      <div class="comm-status-left">
-        <div class="comm-status-title">配置校验</div>
-        <div class="comm-status-desc">{{ validationSummary }}</div>
-      </div>
-      <div class="comm-status-actions">
-        <el-button size="small" :disabled="!hasValidationIssues && !hasBackendFieldIssues" @click="validationPanelOpen = true">
-          查看详情
-        </el-button>
-      </div>
-    </div>
-    </div>
-
-    <div class="comm-grid-layer">
-    <Grid
-      ref="gridRef"
-      :source="gridRows"
-      :columns="columns"
-      :editors="gridEditors"
-      :range="true"
-      :useClipboard="true"
-      :canFocus="true"
-      :autoSizeColumn="{ mode: 'autoSizeOnTextOverlap' }"
-      :stretch="true"
-      :resize="true"
-      :rowHeaders="true"
-      :rowClass="getRowClass"
-      class="comm-grid"
-      style="height: clamp(420px, 60vh, 720px); width: 100%"
-      @beforeautofill="onBeforeAutofill"
-      @afteredit="onAfterEdit"
-      @beforekeydown="onBeforeGridKeyDown"
-      @setrange="onGridSetRange"
-      @selectionchangeinit="onGridSelectionChange"
-      @clearregion="onGridClearRegion"
-    />
-    </div>
+        <div class="comm-grid-layer">
+          <Grid
+            ref="gridRef"
+            :source="gridRows"
+            :columns="columns"
+            :editors="gridEditors"
+            :range="true"
+            :useClipboard="true"
+            :canFocus="true"
+            :autoSizeColumn="gridAutoSizeColumn"
+            :stretch="true"
+            :resize="true"
+            :rowHeaders="true"
+            :rowClass="getRowClass"
+            class="comm-grid"
+            style="height: clamp(420px, 62vh, 740px); width: 100%"
+            @beforeautofill="onBeforeAutofill"
+            @afteredit="onAfterEdit"
+            @beforekeydown="onBeforeGridKeyDown"
+            @setrange="onGridSetRange"
+            @selectionchangeinit="onGridSelectionChange"
+            @clearregion="onGridClearRegion"
+          />
+        </div>
+      </section>
 
     <el-drawer v-model="validationPanelOpen" title="配置校验" size="520px">
       <div class="comm-validation-drawer">
@@ -2049,12 +2110,12 @@ onBeforeUnmount(() => {
             <el-form-item label="行数（N）">
               <el-input-number v-model="batchAddTemplate.count" :min="1" :max="500" />
             </el-form-item>
-            <el-form-item label="起始 Modbus 地址">
-              <el-input v-model="batchAddTemplate.startAddressHuman" placeholder="例如 40001" />
+            <el-form-item label="起始地址（1-based）">
+              <el-input v-model="batchAddTemplate.startAddressHuman" placeholder="例如 1" />
             </el-form-item>
             <el-form-item label="数据类型（步长）">
               <el-select v-model="batchAddTemplate.dataType" style="width: 220px">
-                <el-option v-for="opt in DATA_TYPES" :key="opt" :label="opt" :value="opt" />
+                <el-option v-for="opt in dataTypeOptions" :key="opt" :label="opt" :value="opt" />
               </el-select>
               <el-tag v-if="activeProfile" type="info" style="margin-left: 10px"
                 >step={{ spanForArea(activeProfile.readArea, batchAddTemplate.dataType) ?? "?" }}</el-tag
@@ -2068,7 +2129,7 @@ onBeforeUnmount(() => {
             <el-form-item label="变量名称（HMI）模板">
               <el-input v-model="batchAddTemplate.hmiNameTemplate" placeholder="例如 AI_{{i}} 或 AI_{{addr}}" />
               <div style="margin-top: 6px; color: var(--el-text-color-secondary); font-size: 12px">
-                支持占位符：<code v-pre>{{i}}</code>（从 1 开始） / <code v-pre>{{addr}}</code>（如 40001）
+                支持占位符：<code v-pre>{{i}}</code>（从 1 开始） / <code v-pre>{{addr}}</code>（如 1）
               </div>
             </el-form-item>
             <el-form-item label="scale 模板">
@@ -2110,90 +2171,51 @@ onBeforeUnmount(() => {
       </template>
     </el-dialog>
 
-    <!-- 批量编辑对话框 -->
     <BatchEditDialog
       v-model="batchEditDialogVisible"
       :selected-count="selectedCount"
       :selected-rows="effectiveSelectedRows"
+      :data-type-options="dataTypeOptions"
       @confirm="handleBatchEditConfirm"
     />
-  </el-card>
+  </div>
 </template>
 
 <style scoped>
-.comm-toolbar-layer {
-  position: relative;
-  z-index: 2;
-}
-
-.comm-hint-bar {
-  border-radius: 8px;
-}
-
-.comm-status-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 8px;
-  background: #f8fafc;
-  margin-bottom: 12px;
-}
-
-.comm-status-bar.is-error {
-  border-color: rgba(245, 108, 108, 0.45);
-  background: rgba(245, 108, 108, 0.08);
-}
-
-.comm-status-left {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.comm-status-actions {
-  flex-shrink: 0;
-}
-
-.comm-status-title {
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.comm-status-desc {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
 .comm-validation-drawer {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.comm-grid-layer {
-  position: relative;
-  z-index: 1;
-  overflow: hidden;
-  border: 1px solid var(--el-border-color);
-  border-radius: 8px;
-  background: #fff;
-}
-
 :deep(.comm-grid) {
   width: 100%;
 }
 
-:deep(.rgHeaderCell) {
-  background: #f8fafc;
-  color: #1e293b;
+:deep(.comm-grid .rgHeaderCell) {
+  background: #f1f5f9;
+  color: var(--comm-text);
   font-weight: 600;
+  border-bottom: 1px solid var(--comm-border);
+}
+
+:deep(.comm-grid .rgCell) {
+  font-size: 12px;
+  padding: 0 8px;
+  border-color: rgba(15, 23, 42, 0.06);
+  font-variant-numeric: tabular-nums;
+}
+
+:deep(.comm-grid .rgRow:nth-child(even) .rgCell) {
+  background: rgba(15, 23, 42, 0.02);
+}
+
+:deep(.comm-grid .rgRow:hover .rgCell) {
+  background: rgba(37, 99, 235, 0.06);
 }
 
 :deep(.comm-cell-error) {
-  background: rgba(245, 108, 108, 0.12);
+  background: rgba(245, 108, 108, 0.14);
   box-shadow: inset 0 0 0 1px rgba(245, 108, 108, 0.85);
   animation: comm-blink 1.2s ease-in-out infinite;
 }
@@ -2210,7 +2232,7 @@ onBeforeUnmount(() => {
     background-color: rgba(245, 108, 108, 0.12);
   }
   50% {
-    background-color: rgba(245, 108, 108, 0.35);
+    background-color: rgba(245, 108, 108, 0.32);
   }
 }
 
@@ -2220,26 +2242,34 @@ onBeforeUnmount(() => {
     box-shadow: inset 0 0 0 2px rgba(245, 108, 108, 0.95);
   }
   50% {
-    box-shadow: inset 0 0 0 3px rgba(245, 108, 108, 0.85);
+    box-shadow: inset 0 0 0 3px rgba(245, 108, 108, 0.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :deep(.comm-cell-error),
+  :deep(.comm-cell-focus) {
+    animation: none;
   }
 }
 
 :deep(.comm-rg-editor) {
   width: 100%;
   box-sizing: border-box;
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 2px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 8px;
   font-size: 12px;
   outline: none;
+  background: #ffffff;
 }
 
 :deep(.comm-rg-editor:focus) {
-  border-color: var(--el-color-primary);
+  border-color: var(--comm-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
-/* 行头样式 - 可点击 */
 :deep(.rgHeaderCell[data-type="rowHeaders"]) {
   cursor: pointer;
   user-select: none;
@@ -2247,10 +2277,9 @@ onBeforeUnmount(() => {
 }
 
 :deep(.rgHeaderCell[data-type="rowHeaders"]:hover) {
-  background-color: rgba(64, 158, 255, 0.15);
+  background-color: rgba(37, 99, 235, 0.12);
 }
 
-/* 行号单元格可点选 */
 :deep(.rowHeaders .rgCell) {
   cursor: pointer;
   user-select: none;
@@ -2258,21 +2287,20 @@ onBeforeUnmount(() => {
 }
 
 :deep(.rowHeaders .rgCell:hover) {
-  background-color: rgba(64, 158, 255, 0.12);
+  background-color: rgba(37, 99, 235, 0.1);
 }
 
-/* 选中行的样式 */
 :deep(.row-selected) {
-  background-color: rgba(64, 158, 255, 0.08) !important;
+  background-color: rgba(37, 99, 235, 0.08) !important;
 }
 
 :deep(.row-selected .rgHeaderCell[data-type="rowHeaders"]) {
-  background-color: rgba(64, 158, 255, 0.25) !important;
+  background-color: rgba(37, 99, 235, 0.22) !important;
   font-weight: 600;
-  color: var(--el-color-primary);
+  color: var(--comm-primary-ink);
 }
 
 :deep(.row-selected .rgCell) {
-  background-color: rgba(64, 158, 255, 0.08) !important;
+  background-color: rgba(37, 99, 235, 0.06) !important;
 }
 </style>

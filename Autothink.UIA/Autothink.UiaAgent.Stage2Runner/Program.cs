@@ -1109,6 +1109,7 @@ internal static class Program
             ImportVariablesConfig importVariables = config.ImportVariables ?? new ImportVariablesConfig();
             ImportProgramConfig importProgram = config.ImportProgram ?? new ImportProgramConfig();
             BuildConfig build = config.Build ?? new BuildConfig();
+            bool useDefaults = config.UseDefaultFlowConfig;
             bool runImportVariables = !config.SkipImportVariables;
             bool runImportProgram = !config.SkipImportProgram;
             bool runBuild = !config.SkipBuild;
@@ -1160,12 +1161,49 @@ internal static class Program
                 {
                     string filePath = ResolvePath(importVariables.FilePath ?? inputs.VariablesFilePath, configDir, required: true, "variablesFilePath");
 
-                    ElementSelector filePathEditorSelector = ResolveSelector(importVariables.FilePathEditorSelector, importVariables.FilePathEditorSelectorKey, importVariablesProfile.Profile, "filePathEditorSelector");
-                    ElementSelector confirmButtonSelector = ResolveSelector(importVariables.ConfirmButtonSelector, importVariables.ConfirmButtonSelectorKey, importVariablesProfile.Profile, "confirmButtonSelector");
-                    ElementSelector? dialogSelector = ResolveSelectorOptional(importVariables.DialogSelector, importVariables.DialogSelectorKey, importVariablesProfile.Profile);
+                    IReadOnlyList<ImportDialogStepConfig>? openImportStepsConfig = importVariables.OpenImportDialogSteps;
+                    if (useDefaults && openImportStepsConfig is null)
+                    {
+                        openImportStepsConfig = new List<ImportDialogStepConfig>
+                        {
+                            new()
+                            {
+                                Action = "Click",
+                                SelectorKey = DefaultSelectorKeys.ImportVariablesMenuOrButton,
+                            },
+                        };
+                    }
 
-                    var openDialogSteps = BuildDialogSteps(importVariables.OpenImportDialogSteps, importVariablesProfile.Profile);
-                    WaitCondition? successCondition = ResolveWaitCondition(importVariables.SuccessCondition, importVariablesProfile.Profile);
+                    string? dialogSelectorKey = importVariables.DialogSelectorKey;
+                    if (useDefaults && string.IsNullOrWhiteSpace(dialogSelectorKey))
+                    {
+                        dialogSelectorKey = DefaultSelectorKeys.ImportVariablesDialogRoot;
+                    }
+
+                    string? filePathEditorKey = importVariables.FilePathEditorSelectorKey;
+                    if (useDefaults && string.IsNullOrWhiteSpace(filePathEditorKey))
+                    {
+                        filePathEditorKey = DefaultSelectorKeys.ImportVariablesFilePathEdit;
+                    }
+
+                    string? confirmButtonKey = importVariables.ConfirmButtonSelectorKey;
+                    if (useDefaults && string.IsNullOrWhiteSpace(confirmButtonKey))
+                    {
+                        confirmButtonKey = DefaultSelectorKeys.ImportVariablesOkButton;
+                    }
+
+                    WaitConditionConfig? successConditionConfig = importVariables.SuccessCondition;
+                    if (useDefaults && successConditionConfig is null)
+                    {
+                        successConditionConfig = BuildDefaultImportVariablesSuccessCondition(importVariablesProfile.Profile);
+                    }
+
+                    ElementSelector filePathEditorSelector = ResolveSelector(importVariables.FilePathEditorSelector, filePathEditorKey, importVariablesProfile.Profile, "filePathEditorSelector");
+                    ElementSelector confirmButtonSelector = ResolveSelector(importVariables.ConfirmButtonSelector, confirmButtonKey, importVariablesProfile.Profile, "confirmButtonSelector");
+                    ElementSelector? dialogSelector = ResolveSelectorOptional(importVariables.DialogSelector, dialogSelectorKey, importVariablesProfile.Profile);
+
+                    var openDialogSteps = BuildDialogSteps(openImportStepsConfig, importVariablesProfile.Profile);
+                    WaitCondition? successCondition = ResolveWaitCondition(successConditionConfig, importVariablesProfile.Profile);
 
                     PopupArgs importVariablesPopup = BuildPopupArgs(
                         importVariables.EnablePopupHandling,
@@ -1272,10 +1310,46 @@ internal static class Program
                     string programTextPath = ResolvePath(inputs.ProgramTextPath, configDir, required: true, "programTextPath");
                     string programText = File.ReadAllText(programTextPath);
 
-                    var openProgramSteps = BuildDialogSteps(importProgram.OpenProgramSteps, importProgramProfile.Profile);
-                    ElementSelector? editorRootSelector = ResolveSelectorOptional(importProgram.EditorRootSelector, importProgram.EditorRootSelectorKey, importProgramProfile.Profile);
-                    ElementSelector editorSelector = ResolveSelector(importProgram.EditorSelector, importProgram.EditorSelectorKey, importProgramProfile.Profile, "editorSelector");
-                    ElementSelector? verifySelector = ResolveSelectorOptional(importProgram.VerifySelector, importProgram.VerifySelectorKey, importProgramProfile.Profile);
+                    IReadOnlyList<ImportDialogStepConfig>? openProgramStepsConfig = importProgram.OpenProgramSteps;
+                    if (useDefaults && openProgramStepsConfig is null)
+                    {
+                        openProgramStepsConfig = new List<ImportDialogStepConfig>
+                        {
+                            new()
+                            {
+                                Action = "Click",
+                                SelectorKey = DefaultSelectorKeys.ImportProgramMenuOrButton,
+                            },
+                        };
+                    }
+
+                    string? editorRootKey = importProgram.EditorRootSelectorKey;
+                    if (useDefaults && string.IsNullOrWhiteSpace(editorRootKey))
+                    {
+                        editorRootKey = DefaultSelectorKeys.ProgramEditorRoot;
+                    }
+
+                    string? editorKey = importProgram.EditorSelectorKey;
+                    if (useDefaults && string.IsNullOrWhiteSpace(editorKey))
+                    {
+                        editorKey = DefaultSelectorKeys.ProgramEditorTextArea;
+                    }
+
+                    string? verifyKey = importProgram.VerifySelectorKey;
+                    if (useDefaults &&
+                        string.IsNullOrWhiteSpace(importProgram.VerifyMode) &&
+                        importProgram.VerifySelector is null &&
+                        string.IsNullOrWhiteSpace(verifyKey) &&
+                        HasSelector(importProgramProfile.Profile, DefaultSelectorKeys.ProgramPastedIndicator))
+                    {
+                        importProgram.VerifyMode = "elementExists";
+                        verifyKey = DefaultSelectorKeys.ProgramPastedIndicator;
+                    }
+
+                    var openProgramSteps = BuildDialogSteps(openProgramStepsConfig, importProgramProfile.Profile);
+                    ElementSelector? editorRootSelector = ResolveSelectorOptional(importProgram.EditorRootSelector, editorRootKey, importProgramProfile.Profile);
+                    ElementSelector editorSelector = ResolveSelector(importProgram.EditorSelector, editorKey, importProgramProfile.Profile, "editorSelector");
+                    ElementSelector? verifySelector = ResolveSelectorOptional(importProgram.VerifySelector, verifyKey, importProgramProfile.Profile);
 
                     PopupArgs importProgramPopup = BuildPopupArgs(
                         importProgram.EnablePopupHandling,
@@ -1386,8 +1460,24 @@ internal static class Program
             {
                 try
                 {
-                    ElementSelector buildButtonSelector = ResolveSelector(build.BuildButtonSelector, build.BuildButtonSelectorKey, buildProfile.Profile, "buildButtonSelector");
-                    WaitCondition? waitCondition = ResolveWaitCondition(build.WaitCondition, buildProfile.Profile);
+                    string? buildButtonKey = build.BuildButtonSelectorKey;
+                    if (useDefaults && string.IsNullOrWhiteSpace(buildButtonKey))
+                    {
+                        buildButtonKey = DefaultSelectorKeys.BuildButton;
+                    }
+
+                    WaitConditionConfig? waitConditionConfig = build.WaitCondition;
+                    if (useDefaults && waitConditionConfig is null && !string.IsNullOrWhiteSpace(buildButtonKey))
+                    {
+                        waitConditionConfig = new WaitConditionConfig
+                        {
+                            Kind = WaitConditionKinds.ElementEnabled,
+                            SelectorKey = buildButtonKey,
+                        };
+                    }
+
+                    ElementSelector buildButtonSelector = ResolveSelector(build.BuildButtonSelector, buildButtonKey, buildProfile.Profile, "buildButtonSelector");
+                    WaitCondition? waitCondition = ResolveWaitCondition(waitConditionConfig, buildProfile.Profile);
 
                     if (waitCondition is null)
                     {
@@ -1426,6 +1516,15 @@ internal static class Program
                         "build");
 
                     BuildOutcomeConfig? buildOutcomeConfig = build.BuildOutcome;
+                    if (useDefaults && buildOutcomeConfig is null && HasSelector(buildProfile.Profile, DefaultSelectorKeys.BuildSucceededIndicator))
+                    {
+                        buildOutcomeConfig = new BuildOutcomeConfig
+                        {
+                            Mode = "waitSelector",
+                            SuccessSelectorKey = DefaultSelectorKeys.BuildSucceededIndicator,
+                            TimeoutMs = build.TimeoutMs,
+                        };
+                    }
                     ElementSelector? buildOutcomeSuccess = ResolveSelectorOptional(buildOutcomeConfig?.SuccessSelector, buildOutcomeConfig?.SuccessSelectorKey, buildProfile.Profile);
                     ElementSelector? buildOutcomeFailure = ResolveSelectorOptional(buildOutcomeConfig?.FailureSelector, buildOutcomeConfig?.FailureSelectorKey, buildProfile.Profile);
                     ElementSelector? buildOutcomeTextProbe = ResolveSelectorOptional(buildOutcomeConfig?.TextProbeSelector, buildOutcomeConfig?.TextProbeSelectorKey, buildProfile.Profile);
@@ -3012,6 +3111,34 @@ internal static class Program
         };
     }
 
+    private static bool HasSelector(SelectorProfileFile profile, string key)
+    {
+        return profile.Selectors.ContainsKey(key);
+    }
+
+    private static WaitConditionConfig? BuildDefaultImportVariablesSuccessCondition(SelectorProfileFile profile)
+    {
+        if (HasSelector(profile, DefaultSelectorKeys.ImportVariablesDoneIndicator))
+        {
+            return new WaitConditionConfig
+            {
+                Kind = WaitConditionKinds.ElementExists,
+                SelectorKey = DefaultSelectorKeys.ImportVariablesDoneIndicator,
+            };
+        }
+
+        if (HasSelector(profile, DefaultSelectorKeys.ImportVariablesDialogRoot))
+        {
+            return new WaitConditionConfig
+            {
+                Kind = WaitConditionKinds.ElementNotExists,
+                SelectorKey = DefaultSelectorKeys.ImportVariablesDialogRoot,
+            };
+        }
+
+        return null;
+    }
+
     private static string ResolvePath(string? path, string baseDir, bool required, string label)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -4056,6 +4183,21 @@ internal static class Program
                     new[] { "buildSucceededIndicator", "buildFinishedIndicator" },
                 }),
         };
+    }
+
+    private static class DefaultSelectorKeys
+    {
+        public const string ImportVariablesMenuOrButton = "importVariablesMenuOrButton";
+        public const string ImportVariablesDialogRoot = "importVariablesDialogRoot";
+        public const string ImportVariablesFilePathEdit = "importVariablesFilePathEdit";
+        public const string ImportVariablesOkButton = "importVariablesOkButton";
+        public const string ImportVariablesDoneIndicator = "importVariablesDoneIndicator";
+        public const string ImportProgramMenuOrButton = "importProgramMenuOrButton";
+        public const string ProgramEditorRoot = "programEditorRoot";
+        public const string ProgramEditorTextArea = "programEditorTextArea";
+        public const string ProgramPastedIndicator = "programPastedIndicator";
+        public const string BuildButton = "buildButton";
+        public const string BuildSucceededIndicator = "buildSucceededIndicator";
     }
 
     private static string BuildMissingKeysMessage(IReadOnlyList<string> missingKeys)
@@ -5778,6 +5920,8 @@ internal static class Program
         public bool SkipBuild { get; set; }
 
         public bool AllowPartial { get; set; }
+
+        public bool UseDefaultFlowConfig { get; set; } = true;
 
         public string? SelectorsRoot { get; set; }
 

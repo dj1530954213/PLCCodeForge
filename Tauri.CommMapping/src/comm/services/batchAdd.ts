@@ -25,7 +25,7 @@ export function buildBatchPoints(
   const startRaw = params.startAddressHuman.trim();
   if (!startRaw) return { ok: false, message: "起始地址不能为空" };
 
-  const parsed = parseHumanAddress(startRaw);
+  const parsed = parseHumanAddress(startRaw, params.profileReadArea);
   if (!parsed.ok) return parsed;
   if (parsed.area !== params.profileReadArea) {
     return {

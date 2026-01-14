@@ -4,11 +4,11 @@ import { buildBatchPoints } from "../../src/comm/services/batchAdd";
 import { formatHumanAddressFrom0Based } from "../../src/comm/services/address";
 
 describe("comm batchAdd", () => {
-  it("Holding + UInt16: 40001 start, 3 rows => 40001/40002/40003", () => {
+  it("Holding + UInt16: 1 start, 3 rows => 1/2/3", () => {
     const built = buildBatchPoints({
       channelName: "tcp-1",
       count: 3,
-      startAddressHuman: "40001",
+      startAddressHuman: "1",
       dataType: "UInt16",
       byteOrder: "ABCD",
       scale: 1.0,
@@ -25,14 +25,14 @@ describe("comm batchAdd", () => {
     if (!built.ok) return;
 
     const addrs = built.points.map((p) => formatHumanAddressFrom0Based("Holding", 0 + (p.addressOffset ?? 0)));
-    expect(addrs).toEqual(["40001", "40002", "40003"]);
+    expect(addrs).toEqual(["1", "2", "3"]);
   });
 
-  it("Holding + Float32: 40001 start, 3 rows => 40001/40003/40005; byteOrder applies to all", () => {
+  it("Holding + Float32: 1 start, 3 rows => 1/3/5; byteOrder applies to all", () => {
     const built = buildBatchPoints({
       channelName: "tcp-1",
       count: 3,
-      startAddressHuman: "40001",
+      startAddressHuman: "1",
       dataType: "Float32",
       byteOrder: "DCBA",
       scale: 1.0,
@@ -49,8 +49,7 @@ describe("comm batchAdd", () => {
     if (!built.ok) return;
 
     const addrs = built.points.map((p) => formatHumanAddressFrom0Based("Holding", 0 + (p.addressOffset ?? 0)));
-    expect(addrs).toEqual(["40001", "40003", "40005"]);
+    expect(addrs).toEqual(["1", "3", "5"]);
     expect(built.points.map((p) => p.byteOrder)).toEqual(["DCBA", "DCBA", "DCBA"]);
   });
 });
-

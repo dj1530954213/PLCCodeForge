@@ -58,35 +58,11 @@ const DATA_TYPE_INFO_MAP: Record<DataType, DataTypeInfo> = {
     category: 'integer',
     signed: false,
   },
-  Int64: {
-    name: "Int64",
-    displayName: "64位有符号整数",
-    registerSpan: 4,
-    byteSize: 8,
-    category: 'integer',
-    signed: true,
-  },
-  UInt64: {
-    name: "UInt64",
-    displayName: "64位无符号整数",
-    registerSpan: 4,
-    byteSize: 8,
-    category: 'integer',
-    signed: false,
-  },
   Float32: {
     name: "Float32",
     displayName: "32位浮点数",
     registerSpan: 2,
     byteSize: 4,
-    category: 'float',
-    signed: true,
-  },
-  Float64: {
-    name: "Float64",
-    displayName: "64位浮点数",
-    registerSpan: 4,
-    byteSize: 8,
     category: 'float',
     signed: true,
   },
@@ -112,7 +88,7 @@ export function getDataTypeInfo(dataType: DataType): DataTypeInfo {
 /**
  * 获取数据类型占用的寄存器数量
  * @param dataType 数据类型
- * @returns 寄存器数量（Bool/Int16/UInt16=1, Int32/UInt32/Float32=2, Int64/UInt64/Float64=4）
+ * @returns 寄存器数量（Bool/Int16/UInt16=1, Int32/UInt32/Float32=2）
  */
 export function getRegisterSpan(dataType: DataType): number {
   return DATA_TYPE_INFO_MAP[dataType].registerSpan;
@@ -125,9 +101,15 @@ export function getRegisterSpan(dataType: DataType): number {
  * @returns 是否兼容
  */
 export function isValidForArea(dataType: DataType, area: RegisterArea): boolean {
-  // Holding 和 Input 区域支持所有非布尔类型
+  // Holding 和 Input 区域仅支持冻结 v1 数据类型
   if (area === "Holding" || area === "Input") {
-    return dataType !== "Bool" && dataType !== "Unknown";
+    return (
+      dataType === "Int16" ||
+      dataType === "UInt16" ||
+      dataType === "Int32" ||
+      dataType === "UInt32" ||
+      dataType === "Float32"
+    );
   }
   
   // Coil 和 Discrete 区域只支持布尔类型
@@ -145,7 +127,7 @@ export function isValidForArea(dataType: DataType, area: RegisterArea): boolean 
  */
 export function getSupportedDataTypes(area: RegisterArea): DataType[] {
   if (area === "Holding" || area === "Input") {
-    return ["Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Float32", "Float64"];
+    return ["Int16", "UInt16", "Int32", "UInt32", "Float32"];
   }
   
   if (area === "Coil" || area === "Discrete") {

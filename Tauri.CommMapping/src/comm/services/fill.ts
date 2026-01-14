@@ -1,4 +1,4 @@
-import type { DataType } from "../api";
+import type { DataType, RegisterArea } from "../api";
 import { formatHumanAddressFrom0Based, parseHumanAddress, spanForArea } from "./address";
 
 export type SelectionRange = {
@@ -43,6 +43,7 @@ export function computeFillDownEdits<T extends Record<string, unknown>>(params: 
 export function computeFillAddressEdits(params: {
   rows: ReadonlyArray<{ modbusAddress: string; dataType: DataType }>;
   range: Pick<SelectionRange, "rowStart" | "rowEnd">;
+  readArea: RegisterArea;
   addressProp?: string;
 }):
   | { ok: true; edits: Array<{ rowIndex: number; value: string }>; changed: number }
@@ -52,9 +53,9 @@ export function computeFillAddressEdits(params: {
   if (!row0) return { ok: false, message: "选区为空" };
 
   const startRaw = String(row0.modbusAddress ?? "").trim();
-  if (!startRaw) return { ok: false, message: "Fill Address 需要选区第一行先填写 Modbus 地址" };
+  if (!startRaw) return { ok: false, message: "填充地址需要选区第一行先填写起始地址" };
 
-  const parsed = parseHumanAddress(startRaw);
+  const parsed = parseHumanAddress(startRaw, params.readArea);
   if (!parsed.ok) return parsed;
   const area = parsed.area;
 
@@ -77,4 +78,3 @@ export function computeFillAddressEdits(params: {
 
   return { ok: true, edits, changed: edits.length };
 }
-

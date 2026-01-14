@@ -6,10 +6,7 @@ export type DataType =
   | "UInt16"
   | "Int32"
   | "UInt32"
-  | "Int64"
-  | "UInt64"
   | "Float32"
-  | "Float64"
   | "Unknown";
 
 export type ByteOrder32 = "ABCD" | "BADC" | "CDAB" | "DCBA" | "Unknown";
