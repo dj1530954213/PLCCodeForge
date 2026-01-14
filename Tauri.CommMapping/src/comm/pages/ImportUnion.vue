@@ -206,7 +206,7 @@ async function importAndGenerate() {
 
         <el-form-item label="地址基准">
           <el-select v-model="addressBase" style="width: 220px">
-            <el-option label="one（UI 1-based）" value="one" />
+            <el-option label="从 1 开始（UI）" value="one" />
             <el-option label="zero（0-based）" value="zero" />
           </el-select>
         </el-form-item>

@@ -32,7 +32,7 @@ export function parseHumanAddress(input: string, area: RegisterArea): ParseHuman
   if (!/^[0-9]+$/.test(raw)) return { ok: false, message: "地址必须为纯数字（例如 1）" };
 
   const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return { ok: false, message: "地址必须为正整数（1-based）" };
+  if (!Number.isFinite(n) || n <= 0) return { ok: false, message: "地址必须为正整数（从 1 开始）" };
 
   const start1Based = Math.floor(n);
   const start0Based = start1Based - 1;
@@ -57,7 +57,7 @@ export function nextAddress(
   if (!parsed.ok) return parsed;
   const span = spanForArea(parsed.area, dataType);
   if (span === null) {
-    return { ok: false, message: `dataType=${dataType} 与 readArea=${parsed.area} 不匹配` };
+    return { ok: false, message: `数据类型 ${dataType} 与读取区域 ${parsed.area} 不匹配` };
   }
   return { ok: true, nextHumanAddr: formatHumanAddressFrom0Based(parsed.area, parsed.start0Based + span) };
 }

@@ -66,10 +66,17 @@ interface ValidationIssue {
   field?: keyof PointRow;
 }
 
+interface BackendFieldIssue {
+  pointKey?: string;
+  hmiName?: string;
+  field: string;
+  reason?: string;
+}
+
 type PointRow = CommPoint & {
   __selected: boolean;
   modbusAddress: string;
-  quality: Quality | "";
+  quality: string;
   valueDisplay: string;
   errorMessage: string;
   timestamp: string;
@@ -228,7 +235,7 @@ const hmiDuplicateByPointKey = computed<Record<string, string>>(() => {
   for (const list of byName.values()) {
     if (list.length < 2) continue;
     const deviceLabel = Array.from(new Set(list.map((v) => v.deviceName))).join(" / ");
-    const message = `HMI 重名：${deviceLabel}`;
+    const message = `HMI 重名（跨设备）：${deviceLabel}`;
     for (const item of list) {
       if (item.deviceId === activeDeviceId.value) {
         out[item.pointKey] = message;
@@ -297,7 +304,105 @@ const validationIssueByPointKey = computed<Record<string, string>>(() => {
   return out;
 });
 
-const backendFieldIssues = computed(() => runError.value?.details?.missingFields ?? []);
+const FIELD_LABEL_MAP: Record<string, string> = {
+  hmiName: "变量名称（HMI）",
+  modbusAddress: "起始地址",
+  dataType: "数据类型",
+  byteOrder: "字节序",
+  scale: "缩放倍数",
+  channelName: "通道名称",
+  pointKey: "pointKey（稳定键）",
+  "profiles.channelName": "连接通道名称",
+};
+
+function formatFieldLabel(field?: string): string {
+  if (!field) return "未知字段";
+  return FIELD_LABEL_MAP[field] ?? field;
+}
+
+function formatBackendReason(reason?: string): string {
+  if (!reason) return "未知原因";
+  const trimmed = reason.trim();
+  if (!trimmed) return "未知原因";
+  if (/[\u4e00-\u9fa5]/.test(trimmed)) return trimmed;
+  if (trimmed === "duplicate") return "重复";
+  if (trimmed === "empty") return "不能为空";
+  if (trimmed === "Unknown") return "未知";
+  if (trimmed === "not finite") return "不是有效数字";
+  if (trimmed === "dataType/readArea mismatch") return "数据类型与读取区域不匹配";
+  if (trimmed === "address conflict") return "地址冲突";
+  if (trimmed === "out of range") return "地址超出连接范围";
+
+  const duplicateChannel = trimmed.match(/^duplicate channelName:\s*(.+)$/i);
+  if (duplicateChannel) return `通道名称重复：${duplicateChannel[1]}`;
+
+  const unknownChannel = trimmed.match(/^unknown channelName:\s*(.+)$/i);
+  if (unknownChannel) return `未知通道名称：${unknownChannel[1]}`;
+
+  const duplicateWith = trimmed.match(/^duplicate with\s*(.+)$/i);
+  if (duplicateWith) return `与${duplicateWith[1]}重复`;
+
+  return trimmed;
+}
+
+function formatRunErrorKind(kind: CommRunError["kind"]): string {
+  switch (kind) {
+    case "ConfigError":
+      return "配置错误";
+    case "RunNotFound":
+      return "运行不存在";
+    case "InternalError":
+      return "内部错误";
+    default:
+      return "未知错误";
+  }
+}
+
+function formatRunErrorMessage(message?: string): string {
+  const raw = String(message ?? "").trim();
+  if (!raw) return "未知错误";
+  if (/[\u4e00-\u9fa5]/.test(raw)) return raw;
+  if (raw === "profiles is empty") return "连接配置为空";
+  if (raw === "points is empty") return "点位列表为空";
+  if (raw === "invalid points/profiles configuration") return "点位或连接配置无效";
+  return raw;
+}
+
+function formatRunErrorTitle(err: CommRunError): string {
+  return `${formatRunErrorKind(err.kind)}：${formatRunErrorMessage(err.message)}`;
+}
+
+function formatQualityLabel(quality?: Quality | string | null): string {
+  switch (quality) {
+    case "Ok":
+      return "正常";
+    case "Timeout":
+      return "超时";
+    case "CommError":
+      return "通讯错误";
+    case "DecodeError":
+      return "解析错误";
+    case "ConfigError":
+      return "配置错误";
+    case "":
+    case null:
+    case undefined:
+      return "";
+    default:
+      return String(quality);
+  }
+}
+
+const runErrorTitle = computed(() => (runError.value ? formatRunErrorTitle(runError.value) : ""));
+
+const backendFieldIssues = computed<BackendFieldIssue[]>(() => runError.value?.details?.missingFields ?? []);
+const backendFieldIssuesView = computed(() =>
+  backendFieldIssues.value.map((issue) => ({
+    ...issue,
+    fieldLabel: formatFieldLabel(issue.field),
+    reasonLabel: formatBackendReason(issue.reason),
+  }))
+);
 const hasBackendFieldIssues = computed(() => backendFieldIssues.value.length > 0);
 
 const hasValidationIssues = computed(() => validationIssues.value.length > 0);
@@ -349,7 +454,7 @@ function scheduleAutoRestart(reason: string, mode: AutoRestartMode) {
   autoRestartTimer = window.setTimeout(() => {
     autoRestartTimer = null;
     autoRestartPending.value = false;
-    pushLog("run_restart", "info", `auto restart: ${reason}`);
+    pushLog("run_restart", "info", `自动重启：${reason}`);
     if (mode === "restart") {
       if (!isRunning.value) return;
       void restartRun();
@@ -376,11 +481,11 @@ function markPointsChanged() {
   if (resumeAfterFix.value && !isRunning.value) {
     resumeAfterFix.value = false;
     runError.value = null;
-    scheduleAutoRestart("config fixed", "start");
+    scheduleAutoRestart("配置已修复", "start");
     return;
   }
 
-  scheduleAutoRestart("config changed", "restart");
+  scheduleAutoRestart("配置变更", "restart");
 }
 
 function makeUiConfigError(message: string): CommRunError {
@@ -535,9 +640,9 @@ function attachGridSelectionListeners() {
 
 function profileLabel(p: ConnectionProfile): string {
   if (p.protocolType === "TCP") {
-    return `${p.channelName} / TCP / ${p.ip}:${p.port} / area=${p.readArea} / start=${formatHumanAddressFrom0Based(p.readArea, p.startAddress)} len=${p.length}`;
+    return `${p.channelName} / TCP / ${p.ip}:${p.port} / 区域=${p.readArea} / 起始=${formatHumanAddressFrom0Based(p.readArea, p.startAddress)} / 长度=${p.length}`;
   }
-  return `${p.channelName} / 485 / ${p.serialPort} / area=${p.readArea} / start=${formatHumanAddressFrom0Based(p.readArea, p.startAddress)} len=${p.length}`;
+  return `${p.channelName} / 485 / ${p.serialPort} / 区域=${p.readArea} / 起始=${formatHumanAddressFrom0Based(p.readArea, p.startAddress)} / 长度=${p.length}`;
 }
 
 function validateHmiName(row: PointRow): string | null {
@@ -555,7 +660,7 @@ function validateModbusAddress(row: PointRow): string | null {
   if (!profile) return "请先选择连接";
 
   const len = spanForArea(profile.readArea, row.dataType);
-  if (len === null) return `dataType=${row.dataType} 与 readArea=${profile.readArea} 不匹配`;
+  if (len === null) return `数据类型 ${row.dataType} 与读取区域 ${profile.readArea} 不匹配`;
 
   const addrRaw = row.modbusAddress.trim();
   if (!addrRaw) return null; // 兼容旧行为：空地址 => addressOffset=None，plan 会按顺排自动映射
@@ -648,7 +753,7 @@ const columns = computed<ColumnRegular[]>(() => [
   },
   {
     prop: "modbusAddress",
-    name: "起始地址(1-based)",
+    name: "起始地址（从 1 开始）",
     size: 120,
     minSize: 110,
     editor: EDITOR_TEXT,
@@ -671,11 +776,11 @@ const columns = computed<ColumnRegular[]>(() => [
     editorOptions: BYTE_ORDERS.map((v) => ({ label: v, value: v })),
   },
   { prop: "scale", name: "缩放倍数", size: 90, minSize: 90, editor: EDITOR_NUMBER, cellProperties: rowCellProps("scale") },
-  { prop: "quality", name: "quality", size: 90, minSize: 90, readonly: true },
+  { prop: "quality", name: "质量", size: 90, minSize: 90, readonly: true },
   { prop: "valueDisplay", name: "实时值", size: 160, minSize: 140, autoSize: true, readonly: true },
-  { prop: "timestamp", name: "timestamp", size: 180, minSize: 160, readonly: true },
-  { prop: "durationMs", name: "ms", size: 70, minSize: 70, readonly: true },
-  { prop: "errorMessage", name: "error", size: 220, minSize: 180, readonly: true },
+  { prop: "timestamp", name: "时间戳", size: 180, minSize: 160, readonly: true },
+  { prop: "durationMs", name: "耗时(ms)", size: 90, minSize: 90, readonly: true },
+  { prop: "errorMessage", name: "错误信息", size: 220, minSize: 180, readonly: true },
 ]);
 
 const colIndexByProp = computed<Record<string, number>>(() => {
@@ -706,7 +811,7 @@ function makeRowFromPoint(p: CommPoint): PointRow {
     ...p,
     __selected: isSelected,
     modbusAddress: addr,
-    quality: runtime?.quality ?? "",
+    quality: formatQualityLabel(runtime?.quality),
     valueDisplay: runtime?.valueDisplay ?? "",
     errorMessage: runtime?.errorMessage ?? "",
     timestamp: runtime?.timestamp ?? "",
@@ -800,9 +905,9 @@ async function loadAll() {
 
     suppressChannelWatch = false;
     await rebuildPlan();
-    ElMessage.success("已加载 points/profiles");
+    ElMessage.success("已加载点位与连接配置");
   } catch (e: unknown) {
-    ElMessage.error(String((e as any)?.message ?? e ?? "load failed"));
+    ElMessage.error(String((e as any)?.message ?? e ?? "加载失败"));
   }
 }
 
@@ -831,7 +936,7 @@ async function savePoints() {
       project.value = { ...project.value, devices: nextDevices };
     }
   }
-  ElMessage.success("已保存 points");
+  ElMessage.success("已保存点位");
   showAllValidation.value = false;
   touchedRowKeys.value = {};
 }
@@ -1158,7 +1263,7 @@ async function confirmBatchAdd() {
     }
   });
 
-  ElMessage.success(`已新增 ${built.points.length} 行（step=${built.span}）`);
+  ElMessage.success(`已新增 ${built.points.length} 行（步长=${built.span}）`);
 
   const pid = projectId.value.trim();
   if (pid) {
@@ -1360,7 +1465,7 @@ async function applyFillSeries(range: SelectionRange) {
       const row = gridRows.value[e.rowIndex];
       const len = row ? spanForArea(active.readArea, row.dataType) : null;
       if (len === null) {
-        ElMessage.error(`dataType=${row?.dataType ?? "?"} 与 readArea=${active.readArea} 不匹配（row=${e.rowIndex + 1}）`);
+        ElMessage.error(`数据类型 ${row?.dataType ?? "?"} 与读取区域 ${active.readArea} 不匹配（行 ${e.rowIndex + 1}）`);
         return;
       }
       if (parsed.start0Based < active.startAddress) {
@@ -1458,22 +1563,22 @@ async function handleBatchEditConfirm(request: BatchEditRequest) {
 
 function handleUndo() {
   if (!undoManager.canUndo()) {
-    ElMessage.warning('没有可撤销的操作');
+  ElMessage.warning("没有可撤销的操作");
     return;
   }
   undoManager.undo();
   void rebuildPlan();
-  ElMessage.success('已撤销');
+  ElMessage.success("已撤销");
 }
 
 function handleRedo() {
   if (!undoManager.canRedo()) {
-    ElMessage.warning('没有可重做的操作');
+  ElMessage.warning("没有可重做的操作");
     return;
   }
   undoManager.redo();
   void rebuildPlan();
-  ElMessage.success('已重做');
+  ElMessage.success("已重做");
 }
 
 async function syncFromGridAndMapAddresses(touchedKeys?: string[]) {
@@ -1519,7 +1624,7 @@ async function startPolling() {
   clearTimer();
   timer = window.setInterval(pollLatest, pollMs.value);
   await pollLatest();
-  pushLog("poll", "info", `polling every ${pollMs.value}ms`);
+  pushLog("poll", "info", `轮询间隔 ${pollMs.value}ms`);
 }
 
 function applyLatestToGridRows(results: SampleResult[]) {
@@ -1536,7 +1641,7 @@ function applyLatestToGridRows(results: SampleResult[]) {
     const res = byKey[row.pointKey];
     if (!res) continue;
 
-    const nextQuality = res.quality;
+    const nextQuality = formatQualityLabel(res.quality);
     const nextValue = res.valueDisplay;
     const nextErr = res.errorMessage ?? "";
     const nextTs = res.timestamp;
@@ -1571,14 +1676,14 @@ async function startRun() {
   runError.value = null;
   latest.value = null;
   runPointsRevision.value = null;
-  pushLog("run_start", "info", "start clicked");
+  pushLog("run_start", "info", "点击启动");
 
   showAllValidation.value = true;
   await syncFromGridAndMapAddresses();
   const invalid = gridRows.value.map(validateRowForRun).find((v) => Boolean(v));
   if (invalid) {
     runError.value = makeUiConfigError(invalid);
-    pushLog("run_start", "error", `${runError.value.kind}: ${runError.value.message}`);
+    pushLog("run_start", "error", formatRunErrorTitle(runError.value));
     ElMessage.error(invalid);
     runUiState.value = "error";
     return;
@@ -1589,18 +1694,18 @@ async function startRun() {
     if (!profile) {
       const err = makeUiConfigError("未选择连接");
       runError.value = err;
-      pushLog("run_start", "error", `${err.kind}: ${err.message}`);
-      ElMessage.error(err.message);
+      pushLog("run_start", "error", formatRunErrorTitle(err));
+      ElMessage.error(formatRunErrorMessage(err.message));
       runUiState.value = "error";
       return;
     }
 
     const channelPoints = points.value.points.filter((p) => p.channelName === profile.channelName);
     if (channelPoints.length === 0) {
-      const err = makeUiConfigError("points 为空：请先新增点位并保存");
+      const err = makeUiConfigError("点位为空：请先新增点位并保存");
       runError.value = err;
-      pushLog("run_start", "error", `${err.kind}: ${err.message}`);
-      ElMessage.error(err.message);
+      pushLog("run_start", "error", formatRunErrorTitle(err));
+      ElMessage.error(formatRunErrorMessage(err.message));
       runUiState.value = "error";
       return;
     }
@@ -1610,7 +1715,7 @@ async function startRun() {
       projectId.value,
       activeDeviceId.value
     );
-    pushLog("run_start", "info", `plan ok: jobs=${planToUse.jobs.length}`);
+    pushLog("run_start", "info", `读取计划生成完成：${planToUse.jobs.length} 个任务`);
 
     pushLog("run_start", "info", "调用 comm_run_start_obs（后端 spawn，不阻塞 UI）");
     const resp = await commRunStartObs(
@@ -1628,11 +1733,11 @@ async function startRun() {
         resp.error ??
         ({
           kind: "InternalError",
-          message: "comm_run_start_obs failed (ok=false) but error is missing",
+          message: "comm_run_start_obs 失败（ok=false 且 error 为空）",
         } as CommRunError);
       runError.value = err;
-      pushLog("run_start", "error", `${err.kind}: ${err.message}`);
-      ElMessage.error(`${err.kind}: ${err.message}`);
+      pushLog("run_start", "error", formatRunErrorTitle(err));
+      ElMessage.error(formatRunErrorTitle(err));
       runUiState.value = "error";
       return;
     }
@@ -1640,15 +1745,15 @@ async function startRun() {
     runId.value = resp.runId;
     runUiState.value = "running";
     runPointsRevision.value = pointsRevision.value;
-    pushLog("run_start", "success", `run started: runId=${resp.runId}`);
-    ElMessage.success(`采集已启动：runId=${resp.runId}`);
+    pushLog("run_start", "success", `采集已启动：运行ID=${resp.runId}`);
+    ElMessage.success(`采集已启动：运行ID=${resp.runId}`);
 
     await startPolling();
   } catch (e: unknown) {
-    const err = makeUiConfigError(String((e as any)?.message ?? e ?? "unknown error"));
+    const err = makeUiConfigError(String((e as any)?.message ?? e ?? "未知错误"));
     runError.value = err;
-    pushLog("run_start", "error", `${err.kind}: ${err.message}`);
-    ElMessage.error(`${err.kind}: ${err.message}`);
+    pushLog("run_start", "error", formatRunErrorTitle(err));
+    ElMessage.error(formatRunErrorTitle(err));
     runUiState.value = "error";
   }
 }
@@ -1662,10 +1767,10 @@ async function pollLatest() {
       resp.error ??
       ({
         kind: "InternalError",
-        message: "comm_run_latest_obs failed (ok=false) but error is missing",
+        message: "comm_run_latest_obs 失败（ok=false 且 error 为空）",
       } as CommRunError);
     runError.value = err;
-    pushLog("run_latest", "error", `${err.kind}: ${err.message}`);
+    pushLog("run_latest", "error", formatRunErrorTitle(err));
     runUiState.value = "error";
     clearTimer();
     if (runId.value) {
@@ -1678,7 +1783,7 @@ async function pollLatest() {
 
   latest.value = resp.value;
   applyLatestToGridRows(resp.value.results);
-  pushLog("run_latest", "success", `ok: total=${resp.value.stats.total} ok=${resp.value.stats.ok}`);
+  pushLog("run_latest", "success", `采集成功：总数 ${resp.value.stats.total} / 正常 ${resp.value.stats.ok}`);
 }
 
 async function stopRun(reason: "manual" | "restart" | "validation" = "manual") {
@@ -1690,7 +1795,7 @@ async function stopRun(reason: "manual" | "restart" | "validation" = "manual") {
   runUiState.value = "stopping";
   const id = runId.value;
   const reasonLabel =
-    reason === "validation" ? "auto stop: invalid config" : reason === "restart" ? "stop for restart" : "stop clicked";
+    reason === "validation" ? "配置无效自动停止" : reason === "restart" ? "重启前停止" : "点击停止";
   pushLog("run_stop", "info", reasonLabel);
 
   try {
@@ -1700,23 +1805,23 @@ async function stopRun(reason: "manual" | "restart" | "validation" = "manual") {
         resp.error ??
         ({
           kind: "InternalError",
-          message: "comm_run_stop_obs failed (ok=false) but error is missing",
+          message: "comm_run_stop_obs 失败（ok=false 且 error 为空）",
         } as CommRunError);
       runError.value = err;
-      pushLog("run_stop", "error", `${err.kind}: ${err.message}`);
-      ElMessage.error(`${err.kind}: ${err.message}`);
+      pushLog("run_stop", "error", formatRunErrorTitle(err));
+      ElMessage.error(formatRunErrorTitle(err));
       runUiState.value = "error";
       return;
     }
-    pushLog("run_stop", "success", "stopped");
+    pushLog("run_stop", "success", "已停止");
     ElMessage.success("采集已停止");
     runUiState.value = "idle";
     clearTimer();
   } catch (e: unknown) {
-    const err = makeUiConfigError(String((e as any)?.message ?? e ?? "unknown error"));
+    const err = makeUiConfigError(String((e as any)?.message ?? e ?? "未知错误"));
     runError.value = err;
-    pushLog("run_stop", "error", `${err.kind}: ${err.message}`);
-    ElMessage.error(`${err.kind}: ${err.message}`);
+    pushLog("run_stop", "error", formatRunErrorTitle(err));
+    ElMessage.error(formatRunErrorTitle(err));
     runUiState.value = "error";
   }
 }
@@ -1724,7 +1829,7 @@ async function stopRun(reason: "manual" | "restart" | "validation" = "manual") {
 async function restartRun() {
   if (!isRunning.value || !runId.value) return;
   clearAutoRestartTimer();
-  pushLog("run_restart", "info", "restart clicked");
+  pushLog("run_restart", "info", "点击重启");
   await stopRun("restart");
   await startRun();
 }
@@ -1861,7 +1966,7 @@ watch(activeChannelName, async (v) => {
   const pid = projectId.value.trim();
   if (pid) {
     commProjectUiStatePatchV1(pid, { activeChannelName: v }).catch((e: unknown) => {
-      pushLog("ui_state", "warning", `activeChannelName 保存失败：${String((e as any)?.message ?? e ?? "")}`);
+      pushLog("ui_state", "warning", `当前通道保存失败：${String((e as any)?.message ?? e ?? "")}`);
     });
   }
   await rebuildPlan();
@@ -1871,7 +1976,7 @@ watch(pollMs, (v) => {
   if (!isRunning.value) return;
   clearTimer();
   timer = window.setInterval(pollLatest, v);
-  pushLog("poll", "info", `polling interval changed: ${v}ms`);
+  pushLog("poll", "info", `轮询间隔变更：${v}ms`);
 });
 
 watch([projectId, activeDeviceId], loadAll, { immediate: true });
@@ -1917,88 +2022,98 @@ onBeforeUnmount(() => {
         style="--delay: 60ms"
       />
 
-      <section class="comm-panel comm-panel--run comm-animate" style="--delay: 120ms">
-        <div class="comm-run-grid">
-          <div class="comm-profile-block">
-            <div class="comm-label">连接配置</div>
-            <el-select
-              v-model="activeChannelName"
-              placeholder="选择连接"
-              :disabled="isRunning || isStarting || isStopping"
-            >
-              <el-option v-for="p in profiles.profiles" :key="p.channelName" :label="profileLabel(p)" :value="p.channelName" />
-            </el-select>
-            <div v-if="activeProfile" class="comm-profile-meta">
-              <span class="comm-chip">{{ activeProfile.protocolType }}</span>
-              <span class="comm-chip">{{ activeProfile.channelName }}</span>
-              <span class="comm-chip">Area {{ activeProfile.readArea }}</span>
-              <span class="comm-chip">Start {{ formatHumanAddressFrom0Based(activeProfile.readArea, activeProfile.startAddress) }}</span>
-              <span class="comm-chip">Len {{ activeProfile.length }}</span>
+      <section class="comm-top-grid">
+        <div class="comm-top-left">
+          <section class="comm-panel comm-panel--run comm-animate" style="--delay: 120ms">
+            <div class="comm-run-grid">
+              <div class="comm-profile-block">
+                <div class="comm-label">连接配置</div>
+                <el-select
+                  v-model="activeChannelName"
+                  placeholder="选择连接"
+                  :disabled="isRunning || isStarting || isStopping"
+                >
+                  <el-option v-for="p in profiles.profiles" :key="p.channelName" :label="profileLabel(p)" :value="p.channelName" />
+                </el-select>
+                <div v-if="activeProfile" class="comm-profile-meta">
+                  <span class="comm-chip">{{ activeProfile.protocolType }}</span>
+                  <span class="comm-chip">{{ activeProfile.channelName }}</span>
+                  <span class="comm-chip">区域 {{ activeProfile.readArea }}</span>
+                  <span class="comm-chip">起始 {{ formatHumanAddressFrom0Based(activeProfile.readArea, activeProfile.startAddress) }}</span>
+                  <span class="comm-chip">长度 {{ activeProfile.length }}</span>
+                </div>
+              </div>
+
+              <div class="comm-run-actions">
+                <el-button type="primary" :loading="isStarting" :disabled="isRunning || isStopping" @click="startRun">开始运行</el-button>
+                <el-button type="danger" :loading="isStopping" :disabled="!isRunning" @click="stopRun('manual')">停止</el-button>
+                <el-select v-model="pollMs" style="width: 160px">
+                  <el-option :value="500" label="轮询 500ms" />
+                  <el-option :value="1000" label="轮询 1s" />
+                  <el-option :value="2000" label="轮询 2s" />
+                </el-select>
+              </div>
+            </div>
+
+            <div class="comm-run-meta">
+              <div class="comm-run-tags">
+                <el-tag v-if="isRunning && configChangedDuringRun" type="warning" effect="light">
+                  {{ autoRestartPending ? "配置已变更：即将自动重启" : "配置已变更：重启中" }}
+                </el-tag>
+                <el-tag v-if="runUiState === 'running'" type="success">运行中</el-tag>
+                <el-tag v-else-if="runUiState === 'starting'" type="warning">启动中</el-tag>
+                <el-tag v-else-if="runUiState === 'stopping'" type="warning">停止中</el-tag>
+                <el-tag v-else-if="runUiState === 'error'" type="danger">错误</el-tag>
+                <el-tag v-else type="info">空闲</el-tag>
+              </div>
+              <div class="comm-run-tags">
+                <el-tag v-if="runId" type="info">运行ID={{ runId }}</el-tag>
+                <el-tag v-if="resumeAfterFix && !isRunning" type="warning">配置无效：修复后自动恢复</el-tag>
+                <el-tag v-if="latest" type="info">更新时间={{ latest.updatedAtUtc }}</el-tag>
+              </div>
+            </div>
+          </section>
+
+          <el-alert
+            v-if="runError"
+            class="comm-run-error comm-animate"
+            style="--delay: 160ms"
+            type="error"
+            show-icon
+            :closable="false"
+            :title="runErrorTitle"
+          />
+        </div>
+
+        <div class="comm-top-right">
+          <section class="comm-panel comm-panel--stats comm-animate" style="--delay: 180ms">
+            <div class="comm-stat-grid">
+              <div class="comm-stat"><el-statistic title="总数" :value="latest?.stats.total ?? 0" /></div>
+              <div class="comm-stat"><el-statistic title="正常" :value="latest?.stats.ok ?? 0" /></div>
+              <div class="comm-stat"><el-statistic title="超时" :value="latest?.stats.timeout ?? 0" /></div>
+              <div class="comm-stat"><el-statistic title="通讯错误" :value="latest?.stats.commError ?? 0" /></div>
+              <div class="comm-stat"><el-statistic title="解析错误" :value="latest?.stats.decodeError ?? 0" /></div>
+              <div class="comm-stat"><el-statistic title="配置错误" :value="latest?.stats.configError ?? 0" /></div>
+            </div>
+          </section>
+
+          <div
+            class="comm-status-bar comm-animate"
+            style="--delay: 200ms"
+            :class="{ 'is-error': hasValidationIssues || hasBackendFieldIssues }"
+          >
+            <div class="comm-status-left">
+              <div class="comm-status-title">配置校验</div>
+              <div class="comm-status-desc">{{ validationSummary }}</div>
+            </div>
+            <div class="comm-status-actions">
+              <el-button size="small" :disabled="!hasValidationIssues && !hasBackendFieldIssues" @click="validationPanelOpen = true">
+                查看详情
+              </el-button>
             </div>
           </div>
-
-          <div class="comm-run-actions">
-            <el-button type="primary" :loading="isStarting" :disabled="isRunning || isStopping" @click="startRun">开始运行</el-button>
-            <el-button type="danger" :loading="isStopping" :disabled="!isRunning" @click="stopRun('manual')">停止</el-button>
-            <el-select v-model="pollMs" style="width: 160px">
-              <el-option :value="500" label="轮询 500ms" />
-              <el-option :value="1000" label="轮询 1s" />
-              <el-option :value="2000" label="轮询 2s" />
-            </el-select>
-          </div>
-        </div>
-
-        <div class="comm-run-meta">
-          <div class="comm-run-tags">
-            <el-tag v-if="isRunning && configChangedDuringRun" type="warning" effect="light">
-              {{ autoRestartPending ? "配置已变更：即将自动重启" : "配置已变更：重启中" }}
-            </el-tag>
-            <el-tag v-if="runUiState === 'running'" type="success">running</el-tag>
-            <el-tag v-else-if="runUiState === 'starting'" type="warning">starting</el-tag>
-            <el-tag v-else-if="runUiState === 'stopping'" type="warning">stopping</el-tag>
-            <el-tag v-else-if="runUiState === 'error'" type="danger">error</el-tag>
-            <el-tag v-else type="info">idle</el-tag>
-          </div>
-          <div class="comm-run-tags">
-            <el-tag v-if="runId" type="info">runId={{ runId }}</el-tag>
-            <el-tag v-if="resumeAfterFix && !isRunning" type="warning">配置无效：修复后自动恢复</el-tag>
-            <el-tag v-if="latest" type="info">updatedAt={{ latest.updatedAtUtc }}</el-tag>
-          </div>
         </div>
       </section>
-
-      <section class="comm-panel comm-panel--stats comm-animate" style="--delay: 180ms">
-        <div class="comm-stat-grid">
-          <div class="comm-stat"><el-statistic title="Total" :value="latest?.stats.total ?? 0" /></div>
-          <div class="comm-stat"><el-statistic title="OK" :value="latest?.stats.ok ?? 0" /></div>
-          <div class="comm-stat"><el-statistic title="Timeout" :value="latest?.stats.timeout ?? 0" /></div>
-          <div class="comm-stat"><el-statistic title="CommErr" :value="latest?.stats.commError ?? 0" /></div>
-          <div class="comm-stat"><el-statistic title="DecodeErr" :value="latest?.stats.decodeError ?? 0" /></div>
-          <div class="comm-stat"><el-statistic title="CfgErr" :value="latest?.stats.configError ?? 0" /></div>
-        </div>
-      </section>
-
-      <el-alert
-        v-if="runError"
-        class="comm-run-error comm-animate"
-        style="--delay: 200ms"
-        type="error"
-        show-icon
-        :closable="false"
-        :title="`${runError.kind}: ${runError.message}`"
-      />
-
-      <div class="comm-status-bar comm-animate" style="--delay: 220ms" :class="{ 'is-error': hasValidationIssues || hasBackendFieldIssues }">
-        <div class="comm-status-left">
-          <div class="comm-status-title">配置校验</div>
-          <div class="comm-status-desc">{{ validationSummary }}</div>
-        </div>
-        <div class="comm-status-actions">
-          <el-button size="small" :disabled="!hasValidationIssues && !hasBackendFieldIssues" @click="validationPanelOpen = true">
-            查看详情
-          </el-button>
-        </div>
-      </div>
 
       <section class="comm-panel comm-panel--table comm-animate" style="--delay: 260ms">
         <div class="comm-toolbar">
@@ -2059,7 +2174,13 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-    <el-drawer v-model="validationPanelOpen" title="配置校验" size="520px">
+    <el-drawer
+      v-model="validationPanelOpen"
+      title="配置校验"
+      size="min(92vw, 960px)"
+      :append-to-body="true"
+      class="comm-validation-panel"
+    >
       <div class="comm-validation-drawer">
         <el-empty v-if="!hasValidationIssues && !hasBackendFieldIssues" description="暂无校验错误" />
 
@@ -2072,16 +2193,21 @@ onBeforeUnmount(() => {
             :title="`前端校验阻断错误 ${validationIssues.length} 条`"
             style="margin-bottom: 12px"
           />
-          <el-table v-if="hasValidationIssues" :data="validationIssues" size="small" height="240">
-            <el-table-column prop="hmiName" label="HMI" min-width="140" />
-            <el-table-column prop="modbusAddress" label="Addr" width="110" />
-            <el-table-column prop="message" label="问题" min-width="200" />
-            <el-table-column label="定位" width="96" align="center" fixed="right">
-              <template #default="{ row }">
-                <el-button type="primary" link size="small" @click="handleJumpToIssue(row)">定位</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+          <div v-if="hasValidationIssues" class="comm-validation-table">
+            <el-table :data="validationIssues" size="small" style="width: 100%">
+              <el-table-column prop="hmiName" label="变量名称（HMI）" min-width="160" />
+              <el-table-column prop="modbusAddress" label="起始地址" width="120" />
+              <el-table-column label="字段" min-width="140">
+                <template #default="{ row }">{{ formatFieldLabel(row.field) }}</template>
+              </el-table-column>
+              <el-table-column prop="message" label="原因" min-width="240" class-name="comm-validation-reason" />
+              <el-table-column label="定位" width="96" align="center" fixed="right">
+                <template #default="{ row }">
+                  <el-button type="primary" link size="small" @click="handleJumpToIssue(row)">定位</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
 
           <el-divider v-if="hasBackendFieldIssues" style="margin: 16px 0" />
 
@@ -2093,12 +2219,14 @@ onBeforeUnmount(() => {
             :title="`后端校验字段问题 ${backendFieldIssues.length} 条`"
             style="margin-bottom: 12px"
           />
-          <el-table v-if="hasBackendFieldIssues" :data="backendFieldIssues" size="small" height="220">
-            <el-table-column prop="hmiName" label="HMI" min-width="120" />
-            <el-table-column prop="pointKey" label="pointKey" min-width="160" />
-            <el-table-column prop="field" label="field" min-width="120" />
-            <el-table-column prop="reason" label="reason" min-width="160" />
-          </el-table>
+          <div v-if="hasBackendFieldIssues" class="comm-validation-table">
+            <el-table :data="backendFieldIssuesView" size="small" style="width: 100%">
+              <el-table-column prop="hmiName" label="变量名称（HMI）" min-width="160" />
+              <el-table-column prop="pointKey" label="pointKey（稳定键）" min-width="200" show-overflow-tooltip />
+              <el-table-column prop="fieldLabel" label="字段" min-width="140" />
+              <el-table-column prop="reasonLabel" label="原因" min-width="240" class-name="comm-validation-reason" />
+            </el-table>
+          </div>
         </template>
       </div>
     </el-drawer>
@@ -2110,7 +2238,7 @@ onBeforeUnmount(() => {
             <el-form-item label="行数（N）">
               <el-input-number v-model="batchAddTemplate.count" :min="1" :max="500" />
             </el-form-item>
-            <el-form-item label="起始地址（1-based）">
+            <el-form-item label="起始地址（从 1 开始）">
               <el-input v-model="batchAddTemplate.startAddressHuman" placeholder="例如 1" />
             </el-form-item>
             <el-form-item label="数据类型（步长）">
@@ -2118,7 +2246,7 @@ onBeforeUnmount(() => {
                 <el-option v-for="opt in dataTypeOptions" :key="opt" :label="opt" :value="opt" />
               </el-select>
               <el-tag v-if="activeProfile" type="info" style="margin-left: 10px"
-                >step={{ spanForArea(activeProfile.readArea, batchAddTemplate.dataType) ?? "?" }}</el-tag
+                >步长={{ spanForArea(activeProfile.readArea, batchAddTemplate.dataType) ?? "?" }}</el-tag
               >
             </el-form-item>
             <el-form-item label="字节序">
@@ -2132,10 +2260,10 @@ onBeforeUnmount(() => {
                 支持占位符：<code v-pre>{{i}}</code>（从 1 开始） / <code v-pre>{{addr}}</code>（如 1）
               </div>
             </el-form-item>
-            <el-form-item label="scale 模板">
+            <el-form-item label="缩放倍数模板">
               <el-input v-model="batchAddTemplate.scaleTemplate" placeholder="例如 1 或 {{i}}" />
               <div style="margin-top: 6px; color: var(--el-text-color-secondary); font-size: 12px">
-                MVP：仅支持数字或 <code v-pre>{{i}}</code>
+                当前仅支持数字或 <code v-pre>{{i}}</code>
               </div>
             </el-form-item>
             <el-form-item label="插入位置">
@@ -2155,11 +2283,11 @@ onBeforeUnmount(() => {
 
             <el-table v-else :data="batchAddPreview.preview" size="small" height="360" style="width: 100%">
               <el-table-column prop="i" label="#" width="60" />
-              <el-table-column prop="hmiName" label="HMI" min-width="160" />
-              <el-table-column prop="modbusAddress" label="Addr" width="110" />
-              <el-table-column prop="dataType" label="dtype" width="100" />
-              <el-table-column prop="byteOrder" label="endian" width="100" />
-              <el-table-column prop="scale" label="scale" width="100" />
+              <el-table-column prop="hmiName" label="变量名称（HMI）" min-width="160" />
+              <el-table-column prop="modbusAddress" label="起始地址" width="110" />
+              <el-table-column prop="dataType" label="数据类型" width="100" />
+              <el-table-column prop="byteOrder" label="字节序" width="100" />
+              <el-table-column prop="scale" label="缩放倍数" width="100" />
             </el-table>
           </el-card>
         </el-col>
@@ -2186,6 +2314,38 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
+}
+
+.comm-top-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.comm-top-left,
+.comm-top-right {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+:deep(.comm-validation-panel .el-drawer__body) {
+  padding: 16px 18px 20px;
+  overflow: auto;
+}
+
+.comm-validation-table {
+  border: 1px solid var(--comm-border);
+  border-radius: 12px;
+  overflow: auto;
+  max-height: min(46vh, 420px);
+}
+
+:deep(.comm-validation-reason .cell) {
+  white-space: normal;
+  line-height: 1.4;
 }
 
 :deep(.comm-grid) {
@@ -2193,7 +2353,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.comm-grid .rgHeaderCell) {
-  background: #f1f5f9;
+  background: #fff4e6;
   color: var(--comm-text);
   font-weight: 600;
   border-bottom: 1px solid var(--comm-border);
@@ -2202,16 +2362,18 @@ onBeforeUnmount(() => {
 :deep(.comm-grid .rgCell) {
   font-size: 12px;
   padding: 0 8px;
-  border-color: rgba(15, 23, 42, 0.06);
+  border-color: rgba(234, 223, 212, 0.8);
+  background: #ffffff;
+  color: var(--comm-text);
   font-variant-numeric: tabular-nums;
 }
 
 :deep(.comm-grid .rgRow:nth-child(even) .rgCell) {
-  background: rgba(15, 23, 42, 0.02);
+  background: #fffaf5;
 }
 
 :deep(.comm-grid .rgRow:hover .rgCell) {
-  background: rgba(37, 99, 235, 0.06);
+  background: rgba(249, 115, 22, 0.1);
 }
 
 :deep(.comm-cell-error) {
@@ -2258,16 +2420,17 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   height: 30px;
   padding: 0 8px;
-  border: 1px solid rgba(148, 163, 184, 0.5);
+  border: 1px solid rgba(234, 223, 212, 0.9);
   border-radius: 8px;
   font-size: 12px;
   outline: none;
   background: #ffffff;
+  color: var(--comm-text);
 }
 
 :deep(.comm-rg-editor:focus) {
   border-color: var(--comm-primary);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
 }
 
 :deep(.rgHeaderCell[data-type="rowHeaders"]) {
@@ -2277,7 +2440,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.rgHeaderCell[data-type="rowHeaders"]:hover) {
-  background-color: rgba(37, 99, 235, 0.12);
+  background-color: rgba(249, 115, 22, 0.14);
 }
 
 :deep(.rowHeaders .rgCell) {
@@ -2287,20 +2450,26 @@ onBeforeUnmount(() => {
 }
 
 :deep(.rowHeaders .rgCell:hover) {
-  background-color: rgba(37, 99, 235, 0.1);
+  background-color: rgba(249, 115, 22, 0.12);
 }
 
 :deep(.row-selected) {
-  background-color: rgba(37, 99, 235, 0.08) !important;
+  background-color: rgba(249, 115, 22, 0.14) !important;
 }
 
 :deep(.row-selected .rgHeaderCell[data-type="rowHeaders"]) {
-  background-color: rgba(37, 99, 235, 0.22) !important;
+  background-color: rgba(249, 115, 22, 0.22) !important;
   font-weight: 600;
   color: var(--comm-primary-ink);
 }
 
 :deep(.row-selected .rgCell) {
-  background-color: rgba(37, 99, 235, 0.06) !important;
+  background-color: rgba(249, 115, 22, 0.1) !important;
+}
+
+@media (max-width: 1100px) {
+  .comm-top-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

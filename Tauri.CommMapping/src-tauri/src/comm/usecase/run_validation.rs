@@ -113,7 +113,7 @@ fn validate_channel_addresses(
                 &mut out,
                 point,
                 "dataType",
-                "dataType/readArea mismatch",
+                "数据类型与读取区域不匹配",
             );
             continue;
         };
@@ -122,7 +122,7 @@ fn validate_channel_addresses(
         let end = start.saturating_add(unit_len as u32);
 
         if start < channel_start || end > channel_end {
-            push_point_error(&mut out, point, "modbusAddress", "out of range");
+            push_point_error(&mut out, point, "modbusAddress", "地址超出连接范围");
             continue;
         }
 
@@ -147,7 +147,7 @@ fn validate_channel_addresses(
 
     for key in conflict_keys {
         if let Some(point) = explicit_points.get(&key) {
-            push_point_error(&mut out, point, "modbusAddress", "address conflict");
+            push_point_error(&mut out, point, "modbusAddress", "地址冲突");
         }
     }
 
@@ -164,7 +164,7 @@ fn validate_channel_addresses(
                 &mut out,
                 point,
                 "dataType",
-                "dataType/readArea mismatch",
+                "数据类型与读取区域不匹配",
             );
             continue;
         };
@@ -179,7 +179,7 @@ fn validate_channel_addresses(
             };
 
             if seg.end > channel_end {
-                push_point_error(&mut out, point, "modbusAddress", "out of range");
+                push_point_error(&mut out, point, "modbusAddress", "地址超出连接范围");
                 break;
             }
 
@@ -209,14 +209,14 @@ pub fn validate_hmi_uniqueness_points(points: &[CommPoint]) -> Vec<CommMissingFi
         }
         if let Some(prev_key) = seen.get(name).copied() {
             if flagged.insert(point.point_key) {
-                push_point_error(&mut out, point, "hmiName", "duplicate");
+                push_point_error(&mut out, point, "hmiName", "重名");
             }
             if flagged.insert(prev_key) {
                 out.push(CommMissingField {
                     point_key: Some(prev_key.to_string()),
                     hmi_name: Some(name.to_string()),
                     field: "hmiName".to_string(),
-                    reason: Some("duplicate".to_string()),
+                    reason: Some("重名".to_string()),
                 });
             }
         } else {
@@ -234,7 +234,7 @@ pub fn validate_global_hmi_uniqueness(devices: &[CommDeviceV1]) -> Vec<CommMissi
 
     for device in devices {
         let device_label = format!(
-            "deviceId={} deviceName={}",
+            "设备Id={} 设备名={}",
             device.device_id, device.device_name
         );
         for point in &device.points.points {
@@ -248,7 +248,7 @@ pub fn validate_global_hmi_uniqueness(devices: &[CommDeviceV1]) -> Vec<CommMissi
                         &mut out,
                         point,
                         "hmiName",
-                        &format!("duplicate with {prev_device}"),
+                        &format!("与其他设备（{prev_device}）重名"),
                     );
                 }
                 if flagged.insert(prev_key) {
@@ -256,7 +256,7 @@ pub fn validate_global_hmi_uniqueness(devices: &[CommDeviceV1]) -> Vec<CommMissi
                         point_key: Some(prev_key.to_string()),
                         hmi_name: Some(name.to_string()),
                         field: "hmiName".to_string(),
-                        reason: Some(format!("duplicate with {device_label}")),
+                        reason: Some(format!("与其他设备（{device_label}）重名")),
                     });
                 }
             } else {
@@ -282,7 +282,7 @@ pub fn validate_run_inputs(
                 point_key: None,
                 hmi_name: None,
                 field: "profiles.channelName".to_string(),
-                reason: Some("empty".to_string()),
+                reason: Some("不能为空".to_string()),
             });
             continue;
         }
@@ -291,7 +291,7 @@ pub fn validate_run_inputs(
                 point_key: None,
                 hmi_name: None,
                 field: "profiles.channelName".to_string(),
-                reason: Some(format!("duplicate channelName: {channel_name}")),
+                reason: Some(format!("通道名称重复: {channel_name}")),
             });
             continue;
         }
@@ -305,7 +305,7 @@ pub fn validate_run_inputs(
                 point_key: Some(point.point_key.to_string()),
                 hmi_name: Some(point.hmi_name.clone()),
                 field: "pointKey".to_string(),
-                reason: Some("duplicate".to_string()),
+                reason: Some("重复".to_string()),
             });
         }
 
@@ -314,7 +314,7 @@ pub fn validate_run_inputs(
                 point_key: Some(point.point_key.to_string()),
                 hmi_name: None,
                 field: "hmiName".to_string(),
-                reason: Some("empty".to_string()),
+                reason: Some("不能为空".to_string()),
             });
         }
 
@@ -324,14 +324,14 @@ pub fn validate_run_inputs(
                 point_key: Some(point.point_key.to_string()),
                 hmi_name: Some(point.hmi_name.clone()),
                 field: "channelName".to_string(),
-                reason: Some("empty".to_string()),
+                reason: Some("不能为空".to_string()),
             });
         } else if !profiles_by_channel.contains_key(channel_name) {
             out.push(CommMissingField {
                 point_key: Some(point.point_key.to_string()),
                 hmi_name: Some(point.hmi_name.clone()),
                 field: "channelName".to_string(),
-                reason: Some(format!("unknown channelName: {channel_name}")),
+                reason: Some(format!("未知通道名称: {channel_name}")),
             });
         }
 
@@ -340,7 +340,7 @@ pub fn validate_run_inputs(
                 point_key: Some(point.point_key.to_string()),
                 hmi_name: Some(point.hmi_name.clone()),
                 field: "dataType".to_string(),
-                reason: Some("Unknown".to_string()),
+                reason: Some("未知".to_string()),
             });
         }
 
@@ -349,7 +349,7 @@ pub fn validate_run_inputs(
                 point_key: Some(point.point_key.to_string()),
                 hmi_name: Some(point.hmi_name.clone()),
                 field: "byteOrder".to_string(),
-                reason: Some("Unknown".to_string()),
+                reason: Some("未知".to_string()),
             });
         }
 
@@ -358,7 +358,7 @@ pub fn validate_run_inputs(
                 point_key: Some(point.point_key.to_string()),
                 hmi_name: Some(point.hmi_name.clone()),
                 field: "scale".to_string(),
-                reason: Some("not finite".to_string()),
+                reason: Some("不是有效数字".to_string()),
             });
         }
     }

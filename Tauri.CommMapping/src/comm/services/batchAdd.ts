@@ -44,7 +44,7 @@ export function buildBatchPoints(
 
   const span = spanForArea(params.profileReadArea, params.dataType);
   if (span === null) {
-    return { ok: false, message: `dataType=${params.dataType} 与 readArea=${params.profileReadArea} 不匹配` };
+    return { ok: false, message: `数据类型 ${params.dataType} 与读取区域 ${params.profileReadArea} 不匹配` };
   }
 
   const start0 = parsed.start0Based;
@@ -161,7 +161,7 @@ export function validateTemplate(template: string): { ok: true } | { ok: false; 
  */
 function renderScale(raw: string, vars: { i: number }): { ok: true; value: number } | { ok: false; message: string } {
   const trimmed = raw.trim();
-  if (!trimmed) return { ok: false, message: "scale 模板不能为空" };
+  if (!trimmed) return { ok: false, message: "缩放倍数模板不能为空" };
   
   // 替换所有支持的占位符
   const replaced = trimmed
@@ -170,12 +170,12 @@ function renderScale(raw: string, vars: { i: number }): { ok: true; value: numbe
   
   // 检查是否还有未替换的占位符
   if (replaced.includes("{{")) {
-    return { ok: false, message: "scale 模板仅支持 {{number}} 或 {{i}} 占位符" };
+    return { ok: false, message: "缩放倍数模板仅支持 {{number}} 或 {{i}} 占位符" };
   }
   
   const n = Number(replaced);
   if (!Number.isFinite(n)) {
-    return { ok: false, message: `scale 模板不是有效数字: ${trimmed}` };
+    return { ok: false, message: `缩放倍数模板不是有效数字：${trimmed}` };
   }
   
   return { ok: true, value: n };

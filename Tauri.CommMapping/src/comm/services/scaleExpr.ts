@@ -191,7 +191,7 @@ function evalRpn(rpn: Token[], x: number): number {
         out = a / b;
         break;
       default:
-        throw new Error(`unknown op: ${t.op}`);
+        throw new Error(`未知操作符：${t.op}`);
     }
     stack.push(out);
   }

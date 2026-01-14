@@ -668,9 +668,9 @@ pub fn comm_profiles_save(
     if let Some(project_id) = project_id.as_deref() {
         let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
         let mut project = projects::load_project_data(&app_data_dir, project_id)?;
-        if let Some(device_id) = device_id.as_deref() {
+            if let Some(device_id) = device_id.as_deref() {
             let Some(first_profile) = payload.profiles.first().cloned() else {
-                return Err("profiles is empty".to_string());
+                return Err("连接配置为空".to_string());
             };
             let device = find_device_mut(&mut project, device_id)?;
             device.profile = first_profile;
@@ -948,7 +948,7 @@ async fn comm_run_start_inner(
     if profiles.profiles.is_empty() {
         return Err(CommRunError {
             kind: CommRunErrorKind::ConfigError,
-            message: "profiles is empty".to_string(),
+            message: "连接配置为空".to_string(),
             details: Some(CommRunErrorDetails {
                 project_id,
                 device_id: device_id.clone(),
@@ -960,7 +960,7 @@ async fn comm_run_start_inner(
     if points.points.is_empty() {
         return Err(CommRunError {
             kind: CommRunErrorKind::ConfigError,
-            message: "points is empty".to_string(),
+            message: "点位列表为空".to_string(),
             details: Some(CommRunErrorDetails {
                 project_id,
                 device_id: device_id.clone(),
@@ -982,7 +982,7 @@ async fn comm_run_start_inner(
     if !missing_fields.is_empty() {
         return Err(CommRunError {
             kind: CommRunErrorKind::ConfigError,
-            message: "invalid points/profiles configuration".to_string(),
+            message: "点位或连接配置无效".to_string(),
             details: Some(CommRunErrorDetails {
                 project_id,
                 device_id: device_id.clone(),
@@ -2397,10 +2397,9 @@ fn infer_driver_kind_from_profiles(
     match (has_tcp, has_rtu) {
         (true, false) => Ok(CommDriverKind::Tcp),
         (false, true) => Ok(CommDriverKind::Rtu485),
-        (false, false) => Err("profiles is empty".to_string()),
+        (false, false) => Err("连接配置为空".to_string()),
         (true, true) => Err(
-            "mixed TCP and 485 profiles are not supported in a single run; please run separately"
-                .to_string(),
+            "TCP 与 485 混用不支持同一次运行，请拆分为两次运行".to_string(),
         ),
     }
 }

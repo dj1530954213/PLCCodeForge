@@ -205,7 +205,7 @@ watch([projectId, activeDeviceId], () => void load(true), { immediate: true });
         </el-table-column>
         <el-table-column prop="channelName" label="通道名称" min-width="160" />
         <el-table-column prop="readArea" label="读取区域" width="100" />
-        <el-table-column label="起始地址(1-based)" width="140">
+        <el-table-column label="起始地址（从 1 开始）" width="160">
           <template #default="{ row }">{{ row.startAddress + 1 }}</template>
         </el-table-column>
         <el-table-column prop="length" label="长度" width="80" />
@@ -243,7 +243,7 @@ watch([projectId, activeDeviceId], () => void load(true), { immediate: true });
         </el-select>
       </el-form-item>
 
-      <el-form-item label="起始地址（UI 1-based）">
+      <el-form-item label="起始地址（从 1 开始）">
         <el-input-number v-model="editingUiStartAddress" :min="1" />
       </el-form-item>
 

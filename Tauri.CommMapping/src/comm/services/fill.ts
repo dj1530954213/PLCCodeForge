@@ -68,7 +68,7 @@ export function computeFillAddressEdits(params: {
       if (!prev) break;
       const prevSpan = spanForArea(area, prev.dataType);
       if (prevSpan === null) {
-        return { ok: false, message: `dataType=${prev.dataType} 与 readArea=${area} 不匹配（row=${r}）` };
+        return { ok: false, message: `数据类型 ${prev.dataType} 与读取区域 ${area} 不匹配（行 ${r}）` };
       }
       curStart0 += prevSpan;
     }
