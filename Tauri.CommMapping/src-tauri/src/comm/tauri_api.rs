@@ -2211,7 +2211,10 @@ fn resolve_project_device<'a>(
         return Ok(None);
     };
     if devices.is_empty() {
-        return Err("project.devices is empty".to_string());
+        if device_id.is_some() {
+            return Err("project.devices is empty".to_string());
+        }
+        return Ok(None);
     }
 
     if let Some(device_id) = device_id {

@@ -20,7 +20,6 @@ fn profile_channel_name(profile: &ConnectionProfile) -> &str {
 struct ProfileInfo {
     read_area: RegisterArea,
     start_address: u16,
-    length: u16,
 }
 
 fn profile_info(profile: &ConnectionProfile) -> ProfileInfo {
@@ -28,22 +27,18 @@ fn profile_info(profile: &ConnectionProfile) -> ProfileInfo {
         ConnectionProfile::Tcp {
             read_area,
             start_address,
-            length,
             ..
         } => ProfileInfo {
             read_area: read_area.clone(),
             start_address: *start_address,
-            length: *length,
         },
         ConnectionProfile::Rtu485 {
             read_area,
             start_address,
-            length,
             ..
         } => ProfileInfo {
             read_area: read_area.clone(),
             start_address: *start_address,
-            length: *length,
         },
     }
 }
@@ -98,7 +93,6 @@ fn validate_channel_addresses(
     let mut out: Vec<CommMissingField> = Vec::new();
 
     let channel_start = profile.start_address as u32;
-    let channel_end = channel_start + profile.length as u32;
 
     let mut explicit_segments: Vec<AddressSegment> = Vec::new();
     let mut explicit_points: HashMap<Uuid, &CommPoint> = HashMap::new();
@@ -120,11 +114,6 @@ fn validate_channel_addresses(
 
         let start = channel_start + u32::from(offset);
         let end = start.saturating_add(unit_len as u32);
-
-        if start < channel_start || end > channel_end {
-            push_point_error(&mut out, point, "modbusAddress", "地址超出连接范围");
-            continue;
-        }
 
         explicit_segments.push(AddressSegment {
             point_key: point.point_key,
@@ -177,11 +166,6 @@ fn validate_channel_addresses(
                 start: candidate,
                 end: candidate.saturating_add(unit_len as u32),
             };
-
-            if seg.end > channel_end {
-                push_point_error(&mut out, point, "modbusAddress", "地址超出连接范围");
-                break;
-            }
 
             if let Some(overlap) = occupied.iter().find(|other| overlaps(other, &seg)) {
                 candidate = overlap.end;

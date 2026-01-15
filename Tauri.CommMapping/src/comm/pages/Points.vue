@@ -263,8 +263,6 @@ const addressConflictByPointKey = computed<Record<string, string>>(() => {
     if (span === null) continue;
     const start = parsed.start0Based;
     const end = start + span;
-    if (start < profile.startAddress) continue;
-    if (end > profile.startAddress + profile.length) continue;
     segments.push({ pointKey: row.pointKey, start, end });
   }
 
@@ -306,7 +304,7 @@ const validationIssueByPointKey = computed<Record<string, string>>(() => {
 
 const FIELD_LABEL_MAP: Record<string, string> = {
   hmiName: "变量名称（HMI）",
-  modbusAddress: "起始地址",
+  modbusAddress: "点位地址",
   dataType: "数据类型",
   byteOrder: "字节序",
   scale: "缩放倍数",
@@ -640,9 +638,9 @@ function attachGridSelectionListeners() {
 
 function profileLabel(p: ConnectionProfile): string {
   if (p.protocolType === "TCP") {
-    return `${p.channelName} / TCP / ${p.ip}:${p.port} / 区域=${p.readArea} / 起始=${formatHumanAddressFrom0Based(p.readArea, p.startAddress)} / 长度=${p.length}`;
+    return `${p.channelName} / TCP / ${p.ip}:${p.port} / 区域=${p.readArea} / 地址=点位配置`;
   }
-  return `${p.channelName} / 485 / ${p.serialPort} / 区域=${p.readArea} / 起始=${formatHumanAddressFrom0Based(p.readArea, p.startAddress)} / 长度=${p.length}`;
+  return `${p.channelName} / 485 / ${p.serialPort} / 区域=${p.readArea} / 地址=点位配置`;
 }
 
 function validateHmiName(row: PointRow): string | null {
@@ -667,19 +665,6 @@ function validateModbusAddress(row: PointRow): string | null {
 
   const parsed = parseHumanAddress(addrRaw, profile.readArea);
   if (!parsed.ok) return parsed.message;
-
-  const start0 = parsed.start0Based;
-  if (start0 < profile.startAddress) {
-    return `地址小于连接起始地址 ${formatHumanAddressFrom0Based(profile.readArea, profile.startAddress)}`;
-  }
-
-  const end0 = start0 + len;
-  const channelEnd0 = profile.startAddress + profile.length;
-  if (end0 > channelEnd0) {
-    const endHuman = formatHumanAddressFrom0Based(profile.readArea, end0 - 1);
-    const limitHuman = formatHumanAddressFrom0Based(profile.readArea, channelEnd0 - 1);
-    return `地址越界：结束地址 ${endHuman} 超出连接范围 ${limitHuman}`;
-  }
   return null;
 }
 
@@ -753,7 +738,7 @@ const columns = computed<ColumnRegular[]>(() => [
   },
   {
     prop: "modbusAddress",
-    name: "起始地址（从 1 开始）",
+    name: "点位地址（从 1 开始）",
     size: 120,
     minSize: 110,
     editor: EDITOR_TEXT,
@@ -975,7 +960,6 @@ const batchAddPreview = computed(() => {
       scaleTemplate: batchAddTemplate.value.scaleTemplate,
       profileReadArea: profile.readArea,
       profileStartAddress: profile.startAddress,
-      profileLength: profile.length,
     },
     10
   );
@@ -1274,7 +1258,6 @@ async function confirmBatchAdd() {
     scaleTemplate: batchAddTemplate.value.scaleTemplate,
     profileReadArea: profile.readArea,
     profileStartAddress: profile.startAddress,
-    profileLength: profile.length,
   });
   if (!built.ok) {
     ElMessage.error(built.message);
@@ -1518,7 +1501,6 @@ async function applyFillSeries(range: SelectionRange) {
       return;
     }
 
-    const channelEnd0 = active.startAddress + active.length;
     for (const e of computed.edits) {
       const parsed = parseHumanAddress(e.value, active.readArea);
       if (!parsed.ok) {
@@ -1529,16 +1511,6 @@ async function applyFillSeries(range: SelectionRange) {
       const len = row ? spanForArea(active.readArea, row.dataType) : null;
       if (len === null) {
         ElMessage.error(`数据类型 ${row?.dataType ?? "?"} 与读取区域 ${active.readArea} 不匹配（行 ${e.rowIndex + 1}）`);
-        return;
-      }
-      if (parsed.start0Based < active.startAddress) {
-        ElMessage.error(`地址小于连接起始地址 ${formatHumanAddressFrom0Based(active.readArea, active.startAddress)}`);
-        return;
-      }
-      if (parsed.start0Based + len > channelEnd0) {
-        const endHuman = formatHumanAddressFrom0Based(active.readArea, parsed.start0Based + len - 1);
-        const limitHuman = formatHumanAddressFrom0Based(active.readArea, channelEnd0 - 1);
-        ElMessage.error(`地址越界：结束地址 ${endHuman} 超出连接范围 ${limitHuman}`);
         return;
       }
     }
@@ -2230,8 +2202,7 @@ onBeforeUnmount(() => {
                   <span class="comm-chip">{{ activeProfile.protocolType }}</span>
                   <span class="comm-chip">{{ activeProfile.channelName }}</span>
                   <span class="comm-chip">区域 {{ activeProfile.readArea }}</span>
-                  <span class="comm-chip">起始 {{ formatHumanAddressFrom0Based(activeProfile.readArea, activeProfile.startAddress) }}</span>
-                  <span class="comm-chip">长度 {{ activeProfile.length }}</span>
+                  <span class="comm-chip">地址按点位配置</span>
                 </div>
               </div>
 
@@ -2326,7 +2297,7 @@ onBeforeUnmount(() => {
           <div v-if="hasValidationIssues" class="comm-validation-table">
             <el-table :data="validationIssues" size="small" style="width: 100%">
               <el-table-column prop="hmiName" label="变量名称（HMI）" min-width="160" />
-              <el-table-column prop="modbusAddress" label="起始地址" width="120" />
+              <el-table-column prop="modbusAddress" label="点位地址" width="120" />
               <el-table-column label="字段" min-width="140">
                 <template #default="{ row }">{{ formatFieldLabel(row.field) }}</template>
               </el-table-column>
@@ -2368,7 +2339,7 @@ onBeforeUnmount(() => {
             <el-form-item label="行数（N）">
               <el-input-number v-model="batchAddTemplate.count" :min="1" :max="500" />
             </el-form-item>
-            <el-form-item label="起始地址（从 1 开始）">
+            <el-form-item label="起始点位地址（从 1 开始）">
               <el-input v-model="batchAddTemplate.startAddressHuman" placeholder="例如 1" />
             </el-form-item>
             <el-form-item label="数据类型（步长）">
@@ -2414,7 +2385,7 @@ onBeforeUnmount(() => {
             <el-table v-else :data="batchAddPreview.preview" size="small" height="360" style="width: 100%">
               <el-table-column prop="i" label="#" width="60" />
               <el-table-column prop="hmiName" label="变量名称（HMI）" min-width="160" />
-              <el-table-column prop="modbusAddress" label="起始地址" width="110" />
+              <el-table-column prop="modbusAddress" label="点位地址" width="110" />
               <el-table-column prop="dataType" label="数据类型" width="100" />
               <el-table-column prop="byteOrder" label="字节序" width="100" />
               <el-table-column prop="scale" label="缩放倍数" width="100" />
@@ -2500,7 +2471,7 @@ onBeforeUnmount(() => {
 
 .comm-points-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
   gap: 16px;
   align-items: start;
 }
@@ -2546,7 +2517,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.comm-grid .rgHeaderCell) {
-  background: #f1e7d8;
+  background: #e6eef2;
   color: var(--comm-text);
   font-weight: 600;
   border-bottom: 1px solid var(--comm-border);
@@ -2555,18 +2526,18 @@ onBeforeUnmount(() => {
 :deep(.comm-grid .rgCell) {
   font-size: 12px;
   padding: 0 8px;
-  border-color: rgba(215, 201, 183, 0.8);
+  border-color: rgba(201, 213, 220, 0.8);
   background: #ffffff;
   color: var(--comm-text);
   font-variant-numeric: tabular-nums;
 }
 
 :deep(.comm-grid .rgRow:nth-child(even) .rgCell) {
-  background: #fbf7f1;
+  background: #f4f8fa;
 }
 
 :deep(.comm-grid .rgRow:hover .rgCell) {
-  background: rgba(84, 119, 146, 0.12);
+  background: rgba(31, 94, 107, 0.1);
 }
 
 :deep(.comm-cell-error) {
@@ -2613,7 +2584,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   height: 30px;
   padding: 0 8px;
-  border: 1px solid rgba(215, 201, 183, 0.9);
+  border: 1px solid rgba(201, 213, 220, 0.9);
   border-radius: 8px;
   font-size: 12px;
   outline: none;
@@ -2623,7 +2594,7 @@ onBeforeUnmount(() => {
 
 :deep(.comm-rg-editor:focus) {
   border-color: var(--comm-primary);
-  box-shadow: 0 0 0 2px rgba(84, 119, 146, 0.2);
+  box-shadow: 0 0 0 2px rgba(31, 94, 107, 0.2);
 }
 
 :deep(.rgHeaderCell[data-type="rowHeaders"]) {
@@ -2633,7 +2604,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.rgHeaderCell[data-type="rowHeaders"]:hover) {
-  background-color: rgba(84, 119, 146, 0.14);
+  background-color: rgba(31, 94, 107, 0.12);
 }
 
 :deep(.rowHeaders .rgCell) {
@@ -2643,24 +2614,24 @@ onBeforeUnmount(() => {
 }
 
 :deep(.rowHeaders .rgCell:hover) {
-  background-color: rgba(84, 119, 146, 0.12);
+  background-color: rgba(31, 94, 107, 0.1);
 }
 
 :deep(.row-selected) {
-  background-color: rgba(84, 119, 146, 0.16) !important;
+  background-color: rgba(111, 183, 177, 0.22) !important;
 }
 
 :deep(.row-selected .rgHeaderCell[data-type="rowHeaders"]) {
-  background-color: rgba(84, 119, 146, 0.22) !important;
+  background-color: rgba(111, 183, 177, 0.3) !important;
   font-weight: 600;
   color: var(--comm-primary-ink);
 }
 
 :deep(.row-selected .rgCell) {
-  background-color: rgba(84, 119, 146, 0.1) !important;
+  background-color: rgba(111, 183, 177, 0.18) !important;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1280px) {
   .comm-points-layout {
     grid-template-columns: 1fr;
   }

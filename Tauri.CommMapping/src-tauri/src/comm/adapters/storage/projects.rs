@@ -146,12 +146,10 @@ pub fn create_project(
         deleted_at_utc: None,
     };
 
-    let default_profile = default_profile();
-
     // Pre-create profiles/points to make "open project" deterministic.
     let default_profiles = ProfilesV1 {
         schema_version: SCHEMA_VERSION_V1,
-        profiles: vec![default_profile.clone()],
+        profiles: vec![],
     };
     storage::save_profiles(&comm_dir, &default_profiles)
         .map_err(|e| format!("save profiles failed: {e}"))?;
@@ -163,20 +161,6 @@ pub fn create_project(
     storage::save_points(&comm_dir, &empty_points)
         .map_err(|e| format!("save points failed: {e}"))?;
 
-    let device_name = project
-        .device
-        .clone()
-        .filter(|v| !v.trim().is_empty())
-        .unwrap_or_else(|| "Device-1".to_string());
-    let device = CommDeviceV1 {
-        device_id: Uuid::new_v4().to_string(),
-        device_name: device_name.clone(),
-        workbook_name: sanitize_workbook_name(&device_name),
-        profile: default_profile.clone(),
-        points: empty_points.clone(),
-        ui_state: None,
-    };
-
     // Single-source-of-truth project file (v1): meta + connections + points (+ optional uiState).
     let project_data = CommProjectDataV1 {
         schema_version: project.schema_version,
@@ -186,7 +170,7 @@ pub fn create_project(
         created_at_utc: project.created_at_utc,
         notes: project.notes.clone(),
         deleted_at_utc: project.deleted_at_utc,
-        devices: Some(vec![device]),
+        devices: Some(vec![]),
         connections: Some(default_profiles),
         points: Some(empty_points),
         ui_state: None,
@@ -289,9 +273,6 @@ pub fn save_project_data(app_data_dir: &Path, payload: &CommProjectDataV1) -> Re
     let mut normalized = payload.clone();
 
     if let Some(devices) = normalized.devices.as_ref() {
-        if devices.is_empty() {
-            return Err("devices is empty".to_string());
-        }
         for device in devices {
             if device.device_id.trim().is_empty() {
                 return Err("deviceId is empty".to_string());
@@ -312,13 +293,16 @@ pub fn save_project_data(app_data_dir: &Path, payload: &CommProjectDataV1) -> Re
     }
 
     if normalized.connections.is_none() || normalized.points.is_none() {
-        if let Some(devices) = normalized.devices.as_ref() {
-            let first = &devices[0];
+        if let Some(device) = normalized
+            .devices
+            .as_ref()
+            .and_then(|list| list.first())
+        {
             normalized.connections = Some(ProfilesV1 {
                 schema_version: SCHEMA_VERSION_V1,
-                profiles: vec![first.profile.clone()],
+                profiles: vec![device.profile.clone()],
             });
-            normalized.points = Some(first.points.clone());
+            normalized.points = Some(device.points.clone());
         }
     }
 

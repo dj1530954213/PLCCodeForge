@@ -22,7 +22,7 @@ const editing = ref<ConnectionProfile>({
   deviceId: 1,
   readArea: "Holding",
   startAddress: 0,
-  length: 10,
+  length: 1,
   ip: "127.0.0.1",
   port: 502,
   timeoutMs: 200,
@@ -38,7 +38,7 @@ function openAddTcp() {
     deviceId: 1,
     readArea: "Holding",
     startAddress: 0,
-    length: 20,
+    length: 1,
     ip: "127.0.0.1",
     port: 502,
     timeoutMs: 500,
@@ -56,7 +56,7 @@ function openAdd485() {
     deviceId: 1,
     readArea: "Coil",
     startAddress: 0,
-    length: 20,
+    length: 1,
     serialPort: "COM1",
     baudRate: 9600,
     parity: "None",
@@ -78,23 +78,6 @@ function openEdit(index: number) {
 function removeAt(index: number) {
   model.value.profiles.splice(index, 1);
 }
-
-function uiStartAddress(profile: ConnectionProfile) {
-  return profile.startAddress + 1;
-}
-
-function setUiStartAddress(profile: ConnectionProfile, uiValue: number) {
-  profile.startAddress = Math.max(0, Math.floor(uiValue) - 1);
-}
-
-const editingUiStartAddress = computed<number>({
-  get() {
-    return uiStartAddress(editing.value);
-  },
-  set(v) {
-    setUiStartAddress(editing.value, v);
-  },
-});
 
 async function load(silent = false) {
   try {
@@ -145,10 +128,6 @@ function saveEditing() {
     ElMessage.error("通道名称不能为空");
     return;
   }
-  if (editing.value.length <= 0) {
-    ElMessage.error("长度必须 > 0");
-    return;
-  }
   if (editing.value.protocolType === "TCP") {
     if (!editing.value.ip.trim()) {
       ElMessage.error("IP 不能为空");
@@ -187,7 +166,7 @@ watch([projectId, activeDeviceId], () => void load(true), { immediate: true });
     <section class="comm-panel comm-animate" style="--delay: 80ms">
       <div class="comm-panel-header">
         <div class="comm-section-title">通道列表</div>
-        <div class="comm-inline-meta">MVP：单设备单通道</div>
+        <div class="comm-inline-meta">单设备单通道 · 地址按点位配置</div>
       </div>
 
       <el-alert
@@ -205,10 +184,6 @@ watch([projectId, activeDeviceId], () => void load(true), { immediate: true });
         </el-table-column>
         <el-table-column prop="channelName" label="通道名称" min-width="160" />
         <el-table-column prop="readArea" label="读取区域" width="100" />
-        <el-table-column label="起始地址（从 1 开始）" width="160">
-          <template #default="{ row }">{{ row.startAddress + 1 }}</template>
-        </el-table-column>
-        <el-table-column prop="length" label="长度" width="80" />
         <el-table-column label="操作" width="160">
           <template #default="{ $index }">
             <el-button size="small" @click="openEdit($index)">编辑</el-button>
@@ -241,14 +216,6 @@ watch([projectId, activeDeviceId], () => void load(true), { immediate: true });
         <el-select v-model="editing.readArea" style="width: 220px">
           <el-option v-for="opt in AREA_OPTIONS" :key="opt" :label="opt" :value="opt" />
         </el-select>
-      </el-form-item>
-
-      <el-form-item label="起始地址（从 1 开始）">
-        <el-input-number v-model="editingUiStartAddress" :min="1" />
-      </el-form-item>
-
-      <el-form-item label="长度">
-        <el-input-number v-model="editing.length" :min="1" />
       </el-form-item>
 
       <template v-if="editing.protocolType === 'TCP'">

@@ -10,6 +10,8 @@ export type ParseHumanAddressResult =
   | { ok: true; area: RegisterArea; start1Based: number; start0Based: number }
   | { ok: false; message: string };
 
+const MAX_ADDRESS_1_BASED = 65536;
+
 export function modbusHumanBase(_area: RegisterArea): number {
   return 1;
 }
@@ -33,6 +35,7 @@ export function parseHumanAddress(input: string, area: RegisterArea): ParseHuman
 
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return { ok: false, message: "地址必须为正整数（从 1 开始）" };
+  if (n > MAX_ADDRESS_1_BASED) return { ok: false, message: `地址不能超过 ${MAX_ADDRESS_1_BASED}` };
 
   const start1Based = Math.floor(n);
   const start0Based = start1Based - 1;
@@ -61,7 +64,6 @@ export function nextAddress(
   }
   return { ok: true, nextHumanAddr: formatHumanAddressFrom0Based(parsed.area, parsed.start0Based + span) };
 }
-
 
 /**
  * 智能推断下一个地址
@@ -93,57 +95,4 @@ export function inferNextAddress(
 
   // 如果计算失败，返回连接配置的起始地址
   return formatHumanAddressFrom0Based(profileArea, profileStartAddress);
-}
-
-/**
- * 验证地址范围是否有效
- * 检查批量生成的地址是否都在连接配置的范围内
- * 遵循SRP：只负责地址范围验证
- * 
- * @param startAddress 起始地址（0-based）
- * @param count 生成数量
- * @param dataType 数据类型
- * @param profileArea 连接配置的寄存器区域
- * @param profileStartAddress 连接配置的起始地址（0-based）
- * @param profileLength 连接配置的长度
- * @returns 验证结果
- */
-export function validateAddressRange(
-  startAddress: number,
-  count: number,
-  dataType: DataType,
-  profileArea: RegisterArea,
-  profileStartAddress: number,
-  profileLength: number
-): { ok: true } | { ok: false; message: string } {
-  // 验证数据类型与区域的兼容性
-  const span = spanForArea(profileArea, dataType);
-  if (span === null) {
-    return {
-      ok: false,
-      message: `数据类型 ${dataType} 不适用于 ${profileArea} 区域`,
-    };
-  }
-
-  // 验证起始地址是否在范围内
-  if (startAddress < profileStartAddress) {
-    return {
-      ok: false,
-      message: `起始地址 ${formatHumanAddressFrom0Based(profileArea, startAddress)} 小于连接起始地址 ${formatHumanAddressFrom0Based(profileArea, profileStartAddress)}`,
-    };
-  }
-
-  // 计算结束地址
-  const endAddress = startAddress + span * count;
-  const profileEndAddress = profileStartAddress + profileLength;
-
-  // 验证结束地址是否在范围内
-  if (endAddress > profileEndAddress) {
-    return {
-      ok: false,
-      message: `地址范围越界：结束地址 ${formatHumanAddressFrom0Based(profileArea, endAddress - 1)} 超出连接范围 ${formatHumanAddressFrom0Based(profileArea, profileEndAddress - 1)}`,
-    };
-  }
-
-  return { ok: true };
 }

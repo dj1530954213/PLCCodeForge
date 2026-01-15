@@ -1,5 +1,5 @@
 import type { ByteOrder32, CommPoint, DataType, RegisterArea } from "../api";
-import { formatHumanAddressFrom0Based, parseHumanAddress, spanForArea, validateAddressRange } from "./address";
+import { formatHumanAddressFrom0Based, parseHumanAddress, spanForArea } from "./address";
 import { isValidForArea } from "./dataTypes";
 
 export type BatchAddMode = "increment" | "fixed";
@@ -14,7 +14,6 @@ export type BuildBatchPointsParams = {
   mode: BatchAddMode;
   profileReadArea: RegisterArea;
   profileStartAddress: number;
-  profileLength: number;
   pointKeyFactory?: () => string;
 };
 
@@ -48,20 +47,6 @@ export function buildBatchPoints(
   }
 
   const start0 = parsed.start0Based;
-  
-  // 使用新的地址范围验证函数
-  const rangeValidation = validateAddressRange(
-    start0,
-    count,
-    params.dataType,
-    params.profileReadArea,
-    params.profileStartAddress,
-    params.profileLength
-  );
-  
-  if (!rangeValidation.ok) {
-    return rangeValidation;
-  }
 
   const pointKeyFactory = params.pointKeyFactory ?? (() => crypto.randomUUID());
   const points: CommPoint[] = [];
@@ -92,7 +77,6 @@ export type BatchAddTemplateParams = {
   scaleTemplate: string; // number or {{i}}
   profileReadArea: RegisterArea;
   profileStartAddress: number;
-  profileLength: number;
   pointKeyFactory?: () => string;
 };
 
@@ -204,7 +188,6 @@ export function buildBatchPointsTemplate(
     mode: params.mode,
     profileReadArea: params.profileReadArea,
     profileStartAddress: params.profileStartAddress,
-    profileLength: params.profileLength,
     pointKeyFactory: params.pointKeyFactory,
   });
   if (!built.ok) return built;

@@ -74,12 +74,8 @@ pub enum PlanError {
         data_type: DataType,
     },
 
-    #[error("channelName={channel_name} exceeds configured address range (startAddress={start_address}, length={length})")]
-    ExceedsChannelRange {
-        channel_name: String,
-        start_address: u16,
-        length: u16,
-    },
+    #[error("channelName={channel_name} has conflicting addresses")]
+    AddressConflict { channel_name: String },
 
     #[error("point requires {point_length} units but max per job is {max_per_job}")]
     PointTooLargeForJob { point_length: u16, max_per_job: u16 },
@@ -185,7 +181,6 @@ struct ProfileInfo {
     channel_name: String,
     read_area: RegisterArea,
     start_address: u16,
-    total_length: u16,
 }
 
 impl ConnectionProfile {
@@ -207,13 +202,6 @@ impl ConnectionProfile {
         match self {
             ConnectionProfile::Tcp { start_address, .. } => *start_address,
             ConnectionProfile::Rtu485 { start_address, .. } => *start_address,
-        }
-    }
-
-    fn total_length(&self) -> u16 {
-        match self {
-            ConnectionProfile::Tcp { length, .. } => *length,
-            ConnectionProfile::Rtu485 { length, .. } => *length,
         }
     }
 }
@@ -238,7 +226,6 @@ fn build_profile_index<'a>(
                 channel_name: name.to_string(),
                 read_area: profile.read_area(),
                 start_address: profile.start_address(),
-                total_length: profile.total_length(),
             },
         );
     }
@@ -288,7 +275,7 @@ fn build_jobs_for_channel(
     options: &PlanOptions,
 ) -> Result<Vec<ReadJob>, PlanError> {
     // 地址语义（冻结约束）：
-    // - profile：描述 area/start/len（内部 0-based baseStart）
+    // - profile：描述 area/start（内部 0-based baseStart）
     // - point：可选提供 addressOffset（相对 profile.baseStart 的偏移），用于精确对齐真实地址
     // - 若 point.addressOffset 缺省，则保持兼容旧行为：按 points 顺序从 profile.baseStart 自动顺排
     // - plan：将上述信息汇总为 ReadJob.startAddress/length（内部 0-based）
@@ -305,7 +292,6 @@ fn build_jobs_for_channel(
     }
 
     let channel_start: u32 = profile.start_address as u32;
-    let channel_end: u32 = profile.start_address as u32 + profile.total_length as u32;
 
     // 先收集显式 offset 的占用段，保证 auto 顺排不会与其冲突。
     let mut occupied: Vec<Segment> = Vec::with_capacity(points.len());
@@ -328,19 +314,9 @@ fn build_jobs_for_channel(
             end: start.saturating_add(len),
         };
 
-        if seg.end > channel_end {
-            return Err(PlanError::ExceedsChannelRange {
-                channel_name: channel_name.to_string(),
-                start_address: profile.start_address,
-                length: profile.total_length,
-            });
-        }
-
         if occupied.iter().copied().any(|other| overlaps(seg, other)) {
-            return Err(PlanError::ExceedsChannelRange {
+            return Err(PlanError::AddressConflict {
                 channel_name: channel_name.to_string(),
-                start_address: profile.start_address,
-                length: profile.total_length,
             });
         }
 
@@ -362,14 +338,6 @@ fn build_jobs_for_channel(
                         start: candidate,
                         end: candidate.saturating_add(len),
                     };
-
-                    if seg.end > channel_end {
-                        return Err(PlanError::ExceedsChannelRange {
-                            channel_name: channel_name.to_string(),
-                            start_address: profile.start_address,
-                            length: profile.total_length,
-                        });
-                    }
 
                     if let Some(overlap) =
                         occupied.iter().copied().find(|other| overlaps(seg, *other))

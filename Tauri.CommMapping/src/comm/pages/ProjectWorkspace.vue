@@ -24,6 +24,10 @@ const {
   saveProject,
 } = provideCommDeviceContext(projectId);
 
+const totalPoints = computed(() => (project.value?.devices ?? []).reduce((sum, d) => sum + d.points.points.length, 0));
+const activeProfile = computed(() => activeDevice.value?.profile ?? null);
+const activeChannelName = computed(() => project.value?.uiState?.activeChannelName ?? activeProfile.value?.channelName ?? "");
+
 const tabs = computed(() => {
   const pid = projectId.value;
   return [
@@ -407,6 +411,87 @@ watch(project, (next) => {
 
           <router-view />
         </main>
+
+        <aside class="comm-workspace-context">
+          <section class="comm-panel comm-panel--flat comm-animate" style="--delay: 120ms">
+            <div class="comm-panel-header">
+              <div class="comm-section-title">项目概览</div>
+            </div>
+            <div class="comm-kpi-grid">
+              <div class="comm-kpi-card">
+                <div class="comm-kpi-label">项目</div>
+                <div class="comm-kpi-value">{{ project?.name ?? "未找到" }}</div>
+                <div class="comm-kpi-desc">ID {{ projectId }}</div>
+              </div>
+              <div class="comm-kpi-row">
+                <div class="comm-kpi-item">
+                  <div class="comm-kpi-label">设备</div>
+                  <div class="comm-kpi-value">{{ devices.length }}</div>
+                </div>
+                <div class="comm-kpi-item">
+                  <div class="comm-kpi-label">点位</div>
+                  <div class="comm-kpi-value">{{ totalPoints }}</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="comm-panel comm-animate" style="--delay: 140ms">
+            <div class="comm-panel-header">
+              <div class="comm-section-title">设备 / 通道</div>
+            </div>
+            <div class="comm-info-list">
+              <div class="comm-info-row">
+                <span class="comm-info-label">设备</span>
+                <span class="comm-info-value">{{ activeDevice?.deviceName ?? "未选择" }}</span>
+              </div>
+              <div class="comm-info-row">
+                <span class="comm-info-label">设备ID</span>
+                <span class="comm-info-value comm-mono">{{ activeDevice?.deviceId ?? "--" }}</span>
+              </div>
+              <div class="comm-info-row">
+                <span class="comm-info-label">点位数</span>
+                <span class="comm-info-value">{{ activeDevice?.points.points.length ?? 0 }}</span>
+              </div>
+              <div class="comm-info-row">
+                <span class="comm-info-label">通道</span>
+                <span class="comm-info-value">{{ activeChannelName || "--" }}</span>
+              </div>
+              <div class="comm-info-row">
+                <span class="comm-info-label">区域</span>
+                <span class="comm-info-value">{{ activeProfile?.readArea ?? "--" }}</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="comm-panel comm-animate" style="--delay: 160ms">
+            <div class="comm-panel-header">
+              <div class="comm-section-title">工作流</div>
+              <div class="comm-inline-meta">项目 → 设备 → 点位 → 监控</div>
+            </div>
+            <div class="comm-flow">
+              <div class="comm-flow-step">
+                <span class="comm-flow-index">1</span>
+                <span class="comm-flow-text">连接参数</span>
+              </div>
+              <div class="comm-flow-step">
+                <span class="comm-flow-index">2</span>
+                <span class="comm-flow-text">点位配置</span>
+              </div>
+              <div class="comm-flow-step">
+                <span class="comm-flow-index">3</span>
+                <span class="comm-flow-text">运行监控</span>
+              </div>
+              <div class="comm-flow-step">
+                <span class="comm-flow-index">4</span>
+                <span class="comm-flow-text">导出交付</span>
+              </div>
+            </div>
+            <el-button class="comm-flow-action" type="primary" plain @click="router.push(`/projects/${projectId}/comm/run`)">
+              打开运行监控
+            </el-button>
+          </section>
+        </aside>
       </div>
     </div>
 
@@ -492,13 +577,14 @@ watch(project, (next) => {
 <style scoped>
 .comm-workspace-grid {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(240px, 300px);
   gap: 16px;
   align-items: start;
 }
 
 .comm-workspace-side,
-.comm-workspace-main {
+.comm-workspace-main,
+.comm-workspace-context {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -526,12 +612,12 @@ watch(project, (next) => {
 }
 
 :deep(.comm-device-menu .el-menu-item.is-active) {
-  background: rgba(84, 119, 146, 0.18);
+  background: rgba(31, 94, 107, 0.16);
   color: var(--comm-text);
 }
 
 :deep(.comm-device-menu .el-menu-item:hover) {
-  background: rgba(84, 119, 146, 0.12);
+  background: rgba(31, 94, 107, 0.1);
 }
 
 .comm-device-item {
@@ -547,6 +633,123 @@ watch(project, (next) => {
 .comm-device-meta {
   font-size: 12px;
   color: var(--comm-muted);
+}
+
+.comm-kpi-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.comm-kpi-card {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--comm-border);
+  background: #ffffff;
+}
+
+.comm-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.comm-kpi-item {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--comm-border);
+  background: #ffffff;
+}
+
+.comm-kpi-label {
+  font-size: 12px;
+  color: var(--comm-muted);
+  letter-spacing: 0.04em;
+}
+
+.comm-kpi-value {
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.comm-kpi-desc {
+  font-size: 12px;
+  color: var(--comm-muted);
+  margin-top: 4px;
+}
+
+.comm-info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comm-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--comm-border);
+  background: #ffffff;
+}
+
+.comm-info-label {
+  font-size: 12px;
+  color: var(--comm-muted);
+}
+
+.comm-info-value {
+  font-size: 13px;
+  color: var(--comm-text);
+}
+
+.comm-flow {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.comm-flow-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--comm-border);
+  background: #ffffff;
+}
+
+.comm-flow-index {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(31, 94, 107, 0.12);
+  color: var(--comm-primary-ink);
+}
+
+.comm-flow-text {
+  font-size: 13px;
+  color: var(--comm-text);
+}
+
+.comm-flow-action {
+  width: 100%;
+}
+
+@media (max-width: 1400px) {
+  .comm-workspace-grid {
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  }
+
+  .comm-workspace-context {
+    display: none;
+  }
 }
 
 @media (max-width: 1200px) {
