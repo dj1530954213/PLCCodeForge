@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 import type {
   CommDeviceCopyRuleV1,
@@ -135,6 +135,43 @@ function openCopyDialog() {
   copyDeviceName.value = `${active.deviceName}-copy`;
   resetCopyRules();
   copyDialogOpen.value = true;
+}
+
+async function confirmDeleteDevice() {
+  const current = project.value;
+  const active = activeDevice.value;
+  if (!current || !active) {
+    ElMessage.warning("未选择设备");
+    return;
+  }
+
+  await ElMessageBox.confirm(
+    `确认删除设备「${active.deviceName}」？删除后将无法恢复该设备的点位与连接配置。`,
+    "删除设备",
+    {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    }
+  );
+
+  const nextDevices = (current.devices ?? []).filter((d) => d.deviceId !== active.deviceId);
+  const nextActiveId = nextDevices[0]?.deviceId ?? "";
+  const next: CommProjectDataV1 = {
+    ...current,
+    devices: nextDevices,
+    uiState: {
+      ...(current.uiState ?? {}),
+      activeDeviceId: nextActiveId,
+    },
+  };
+
+  try {
+    await saveProject(next);
+    ElMessage.success("设备已删除");
+  } catch (e: unknown) {
+    ElMessage.error(String((e as any)?.message ?? e ?? "删除设备失败"));
+  }
 }
 
 async function confirmAddDevice() {
@@ -333,6 +370,7 @@ watch(project, (next) => {
               <el-space wrap>
                 <el-button type="primary" @click="openAddDialog">新增设备</el-button>
                 <el-button :disabled="!activeDevice" @click="openCopyDialog">复制设备</el-button>
+                <el-button type="danger" :disabled="!activeDevice" @click="confirmDeleteDevice">删除设备</el-button>
               </el-space>
             </div>
 
@@ -470,6 +508,9 @@ watch(project, (next) => {
 .comm-device-menu {
   border-right: none;
   background: transparent;
+  max-height: 60vh;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 :deep(.comm-device-menu) {
