@@ -118,6 +118,10 @@ function resetCopyRules() {
   copyTemplateName.value = "";
 }
 
+function selectDevice(deviceId: string) {
+  activeDeviceId.value = deviceId;
+}
+
 function openAddDialog() {
   addDeviceName.value = "";
   addUseActiveProfile.value = true;
@@ -306,7 +310,7 @@ watch(project, (next) => {
 
 <template>
   <div class="comm-page comm-page--workspace">
-    <div class="comm-shell">
+    <div class="comm-shell comm-shell--wide">
       <header class="comm-hero comm-animate" style="--delay: 0ms">
         <div class="comm-hero-title">
           <div class="comm-title">工程：{{ project?.name ?? "未找到" }}</div>
@@ -321,38 +325,51 @@ watch(project, (next) => {
         </div>
       </header>
 
-      <section class="comm-panel comm-animate" style="--delay: 60ms">
-        <div class="comm-panel-header">
-          <div class="comm-section-title">设备标签</div>
-          <el-space wrap>
-            <el-button type="primary" @click="openAddDialog">新增设备</el-button>
-            <el-button :disabled="!activeDevice" @click="openCopyDialog">复制设备</el-button>
-          </el-space>
-        </div>
-        <el-tabs v-model="activeDeviceId" type="card">
-          <el-tab-pane v-for="d in devices" :key="d.deviceId" :name="d.deviceId" :label="d.deviceName" />
-        </el-tabs>
-        <el-alert
-          v-if="devices.length === 0"
-          type="warning"
-          show-icon
-          :closable="false"
-          title="当前工程没有设备，请先新增设备"
-          style="margin-top: 12px"
-        />
-      </section>
+      <div class="comm-workspace-grid">
+        <aside class="comm-workspace-side">
+          <section class="comm-panel comm-animate" style="--delay: 60ms">
+            <div class="comm-panel-header">
+              <div class="comm-section-title">设备列表</div>
+              <el-space wrap>
+                <el-button type="primary" @click="openAddDialog">新增设备</el-button>
+                <el-button :disabled="!activeDevice" @click="openCopyDialog">复制设备</el-button>
+              </el-space>
+            </div>
 
-      <section class="comm-panel comm-panel--flat comm-animate" style="--delay: 100ms">
-        <div class="comm-panel-header">
-          <div class="comm-section-title">功能导航</div>
-          <div class="comm-inline-meta">连接 → 点位 → 运行 → 导出</div>
-        </div>
-        <el-tabs v-model="activeTab" type="card">
-          <el-tab-pane v-for="t in tabs" :key="t.name" :name="t.name" :label="t.label" />
-        </el-tabs>
-      </section>
+            <el-menu class="comm-device-menu" :default-active="activeDeviceId" @select="selectDevice">
+              <el-menu-item v-for="d in devices" :key="d.deviceId" :index="d.deviceId">
+                <div class="comm-device-item">
+                  <span class="comm-device-name">{{ d.deviceName }}</span>
+                  <span class="comm-device-meta">{{ d.points.points.length }} 点位</span>
+                </div>
+              </el-menu-item>
+            </el-menu>
 
-      <router-view />
+            <el-alert
+              v-if="devices.length === 0"
+              type="warning"
+              show-icon
+              :closable="false"
+              title="当前工程没有设备，请先新增设备"
+              style="margin-top: 12px"
+            />
+          </section>
+        </aside>
+
+        <main class="comm-workspace-main">
+          <section class="comm-panel comm-panel--flat comm-animate" style="--delay: 100ms">
+            <div class="comm-panel-header">
+              <div class="comm-section-title">功能导航</div>
+              <div class="comm-inline-meta">连接 → 点位 → 运行 → 导出</div>
+            </div>
+            <el-tabs v-model="activeTab" type="card" class="comm-workspace-tabs">
+              <el-tab-pane v-for="t in tabs" :key="t.name" :name="t.name" :label="t.label" />
+            </el-tabs>
+          </section>
+
+          <router-view />
+        </main>
+      </div>
     </div>
 
     <el-dialog v-model="addDialogOpen" width="520px">
@@ -433,3 +450,67 @@ watch(project, (next) => {
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.comm-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.comm-workspace-side,
+.comm-workspace-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.comm-device-menu {
+  border-right: none;
+  background: transparent;
+}
+
+:deep(.comm-device-menu) {
+  background-color: transparent;
+}
+
+:deep(.comm-device-menu .el-menu-item) {
+  height: auto;
+  line-height: 1.2;
+  padding: 10px 12px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+}
+
+:deep(.comm-device-menu .el-menu-item.is-active) {
+  background: rgba(84, 119, 146, 0.18);
+  color: var(--comm-text);
+}
+
+:deep(.comm-device-menu .el-menu-item:hover) {
+  background: rgba(84, 119, 146, 0.12);
+}
+
+.comm-device-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.comm-device-name {
+  font-weight: 600;
+}
+
+.comm-device-meta {
+  font-size: 12px;
+  color: var(--comm-muted);
+}
+
+@media (max-width: 1200px) {
+  .comm-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

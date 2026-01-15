@@ -981,6 +981,69 @@ const batchAddPreview = computed(() => {
   );
 });
 
+type ReplaceScope = "selected" | "all";
+
+const replaceDialogOpen = ref(false);
+const replaceForm = ref<{ find: string; replace: string; scope: ReplaceScope }>({
+  find: "",
+  replace: "",
+  scope: "all",
+});
+
+const replacePreviewLimit = 8;
+
+function replaceAllLiteral(input: string, find: string, replace: string): { value: string; count: number } {
+  if (!find) return { value: input, count: 0 };
+  const parts = String(input).split(find);
+  return { value: parts.join(replace), count: Math.max(0, parts.length - 1) };
+}
+
+const replacePreview = computed(() => {
+  const find = replaceForm.value.find;
+  const replaceValue = replaceForm.value.replace;
+  const scope = replaceForm.value.scope;
+  const targetSet = scope === "selected" ? effectiveSelectedKeySet.value : null;
+  const preview: Array<{ rowIndex: number; before: string; after: string; count: number; pointKey: string }> = [];
+  let matchedRows = 0;
+  let replaceCount = 0;
+
+  if (!find) {
+    return { matchedRows, replaceCount, preview };
+  }
+
+  for (let i = 0; i < gridRows.value.length; i++) {
+    const row = gridRows.value[i];
+    if (targetSet && !targetSet.has(row.pointKey)) continue;
+    const before = String(row.hmiName ?? "");
+    if (!before) continue;
+    const result = replaceAllLiteral(before, find, replaceValue);
+    if (result.count <= 0 || result.value === before) continue;
+    matchedRows += 1;
+    replaceCount += result.count;
+    if (preview.length < replacePreviewLimit) {
+      preview.push({
+        rowIndex: i + 1,
+        before,
+        after: result.value,
+        count: result.count,
+        pointKey: row.pointKey,
+      });
+    }
+  }
+
+  return { matchedRows, replaceCount, preview };
+});
+
+async function openReplaceDialog() {
+  const sel = await getSelectedRange();
+  if (sel) {
+    selectedRangeRows.value = { rowStart: sel.rowStart, rowEnd: sel.rowEnd };
+  }
+
+  replaceForm.value.scope = selectedCount.value > 0 ? "selected" : "all";
+  replaceDialogOpen.value = true;
+}
+
 function newPointKey(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -1561,6 +1624,74 @@ async function handleBatchEditConfirm(request: BatchEditRequest) {
   ElMessage.success(`已批量编辑 ${result.affectedPoints} 行 / ${result.totalChanges} 个字段`);
 }
 
+async function confirmReplaceHmiNames() {
+  const find = replaceForm.value.find;
+  if (!find) {
+    ElMessage.error("查找内容不能为空");
+    return;
+  }
+
+  if (replaceForm.value.scope === "selected" && selectedCount.value === 0) {
+    ElMessage.warning("请先选中要替换的行");
+    return;
+  }
+
+  const replaceValue = replaceForm.value.replace;
+  const targetSet = replaceForm.value.scope === "selected" ? effectiveSelectedKeySet.value : null;
+  const changes: Array<{ pointKey: string; before: string; after: string; count: number }> = [];
+  let totalCount = 0;
+
+  for (const row of gridRows.value) {
+    if (targetSet && !targetSet.has(row.pointKey)) continue;
+    const before = String(row.hmiName ?? "");
+    if (!before) continue;
+    const result = replaceAllLiteral(before, find, replaceValue);
+    if (result.count <= 0 || result.value === before) continue;
+    totalCount += result.count;
+    changes.push({ pointKey: row.pointKey, before, after: result.value, count: result.count });
+  }
+
+  if (changes.length === 0) {
+    ElMessage.info("未找到需要替换的变量名称");
+    return;
+  }
+
+  const undoAction = createBatchEditUndoAction(
+    () => points.value.points,
+    (newPoints: CommPoint[]) => {
+      points.value.points = newPoints;
+    },
+    `变量名称替换：${changes.length} 行 / ${totalCount} 处`
+  );
+
+  const changeMap = new Map(changes.map((c) => [c.pointKey, c.after]));
+  for (const point of points.value.points) {
+    const next = changeMap.get(point.pointKey);
+    if (next !== undefined) point.hmiName = next;
+  }
+
+  for (const row of gridRows.value) {
+    const next = changeMap.get(row.pointKey);
+    if (next !== undefined) row.hmiName = next;
+  }
+  gridRows.value = [...gridRows.value];
+
+  undoManager.push(undoAction);
+
+  const touched = changes.map((c) => c.pointKey);
+  if (touched.length > 0) {
+    const nextTouched = { ...touchedRowKeys.value };
+    for (const key of touched) nextTouched[String(key)] = true;
+    touchedRowKeys.value = nextTouched;
+  }
+
+  replaceDialogOpen.value = false;
+  markPointsChanged();
+  await rebuildPlan();
+
+  ElMessage.success(`已替换 ${changes.length} 行 / ${totalCount} 处`);
+}
+
 function handleUndo() {
   if (!undoManager.canUndo()) {
   ElMessage.warning("没有可撤销的操作");
@@ -2022,9 +2153,69 @@ onBeforeUnmount(() => {
         style="--delay: 60ms"
       />
 
-      <section class="comm-top-grid">
-        <div class="comm-top-left">
-          <section class="comm-panel comm-panel--run comm-animate" style="--delay: 120ms">
+      <div class="comm-points-layout">
+        <section class="comm-panel comm-panel--table comm-animate comm-points-main" style="--delay: 120ms">
+          <div class="comm-toolbar">
+            <div class="comm-toolbar-left">
+            <el-button type="primary" @click="addSingleRow">新增单行</el-button>
+            <el-button @click="openBatchAddDialog">批量新增 (Ctrl+B)</el-button>
+            <el-button :disabled="gridRows.length === 0" @click="openBatchEditDialog">批量编辑 (Ctrl+E)</el-button>
+            <el-button :disabled="gridRows.length === 0" @click="openReplaceDialog">变量名替换</el-button>
+            <el-dropdown
+              split-button
+              type="default"
+              :disabled="gridRows.length === 0"
+                @click="applyFill"
+                @command="handleFillCommand"
+              >
+                {{ fillModeLabel }}
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="copy">同值填充</el-dropdown-item>
+                    <el-dropdown-item command="series">序列递增</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            <div class="comm-toolbar-right">
+              <el-button type="danger" :disabled="gridRows.length === 0" @click="removeSelectedRows">删除选中行（{{ selectedCount }}）(Del)</el-button>
+              <el-button :disabled="!undoManager.canUndo()" @click="handleUndo">撤销 (Ctrl+Z)</el-button>
+              <el-button :disabled="!undoManager.canRedo()" @click="handleRedo">重做 (Ctrl+Y)</el-button>
+            </div>
+          </div>
+          <div class="comm-toolbar-tip">
+            <span>选中 {{ selectedCount }} 行</span>
+            <span>快捷键：Ctrl+B / Ctrl+E / Del / Ctrl+Z / Ctrl+Y</span>
+          </div>
+
+          <div class="comm-grid-layer">
+            <Grid
+              ref="gridRef"
+              :source="gridRows"
+              :columns="columns"
+              :editors="gridEditors"
+              :range="true"
+              :useClipboard="true"
+              :canFocus="true"
+              :autoSizeColumn="gridAutoSizeColumn"
+              :stretch="true"
+              :resize="true"
+              :rowHeaders="true"
+              :rowClass="getRowClass"
+              class="comm-grid"
+              style="height: clamp(460px, 68vh, 820px); width: 100%"
+              @beforeautofill="onBeforeAutofill"
+              @afteredit="onAfterEdit"
+              @beforekeydown="onBeforeGridKeyDown"
+              @setrange="onGridSetRange"
+              @selectionchangeinit="onGridSelectionChange"
+              @clearregion="onGridClearRegion"
+            />
+          </div>
+        </section>
+
+        <aside class="comm-points-aside">
+          <section class="comm-panel comm-panel--run comm-animate" style="--delay: 140ms">
             <div class="comm-run-grid">
               <div class="comm-profile-block">
                 <div class="comm-label">连接配置</div>
@@ -2083,23 +2274,10 @@ onBeforeUnmount(() => {
             :closable="false"
             :title="runErrorTitle"
           />
-        </div>
-
-        <div class="comm-top-right">
-          <section class="comm-panel comm-panel--stats comm-animate" style="--delay: 180ms">
-            <div class="comm-stat-grid">
-              <div class="comm-stat"><el-statistic title="总数" :value="latest?.stats.total ?? 0" /></div>
-              <div class="comm-stat"><el-statistic title="正常" :value="latest?.stats.ok ?? 0" /></div>
-              <div class="comm-stat"><el-statistic title="超时" :value="latest?.stats.timeout ?? 0" /></div>
-              <div class="comm-stat"><el-statistic title="通讯错误" :value="latest?.stats.commError ?? 0" /></div>
-              <div class="comm-stat"><el-statistic title="解析错误" :value="latest?.stats.decodeError ?? 0" /></div>
-              <div class="comm-stat"><el-statistic title="配置错误" :value="latest?.stats.configError ?? 0" /></div>
-            </div>
-          </section>
 
           <div
             class="comm-status-bar comm-animate"
-            style="--delay: 200ms"
+            style="--delay: 180ms"
             :class="{ 'is-error': hasValidationIssues || hasBackendFieldIssues }"
           >
             <div class="comm-status-left">
@@ -2112,67 +2290,19 @@ onBeforeUnmount(() => {
               </el-button>
             </div>
           </div>
-        </div>
-      </section>
 
-      <section class="comm-panel comm-panel--table comm-animate" style="--delay: 260ms">
-        <div class="comm-toolbar">
-          <div class="comm-toolbar-left">
-            <el-button type="primary" @click="addSingleRow">新增单行</el-button>
-            <el-button @click="openBatchAddDialog">批量新增 (Ctrl+B)</el-button>
-            <el-button :disabled="gridRows.length === 0" @click="openBatchEditDialog">批量编辑 (Ctrl+E)</el-button>
-            <el-dropdown
-              split-button
-              type="default"
-              :disabled="gridRows.length === 0"
-              @click="applyFill"
-              @command="handleFillCommand"
-            >
-              {{ fillModeLabel }}
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="copy">同值填充</el-dropdown-item>
-                  <el-dropdown-item command="series">序列递增</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-          <div class="comm-toolbar-right">
-            <el-button type="danger" :disabled="gridRows.length === 0" @click="removeSelectedRows">删除选中行（{{ selectedCount }}）(Del)</el-button>
-            <el-button :disabled="!undoManager.canUndo()" @click="handleUndo">撤销 (Ctrl+Z)</el-button>
-            <el-button :disabled="!undoManager.canRedo()" @click="handleRedo">重做 (Ctrl+Y)</el-button>
-          </div>
-        </div>
-        <div class="comm-toolbar-tip">
-          <span>选中 {{ selectedCount }} 行</span>
-          <span>快捷键：Ctrl+B / Ctrl+E / Del / Ctrl+Z / Ctrl+Y</span>
-        </div>
-
-        <div class="comm-grid-layer">
-          <Grid
-            ref="gridRef"
-            :source="gridRows"
-            :columns="columns"
-            :editors="gridEditors"
-            :range="true"
-            :useClipboard="true"
-            :canFocus="true"
-            :autoSizeColumn="gridAutoSizeColumn"
-            :stretch="true"
-            :resize="true"
-            :rowHeaders="true"
-            :rowClass="getRowClass"
-            class="comm-grid"
-            style="height: clamp(420px, 62vh, 740px); width: 100%"
-            @beforeautofill="onBeforeAutofill"
-            @afteredit="onAfterEdit"
-            @beforekeydown="onBeforeGridKeyDown"
-            @setrange="onGridSetRange"
-            @selectionchangeinit="onGridSelectionChange"
-            @clearregion="onGridClearRegion"
-          />
-        </div>
-      </section>
+          <section class="comm-panel comm-panel--stats comm-animate" style="--delay: 200ms">
+            <div class="comm-stat-grid">
+              <div class="comm-stat"><el-statistic title="总数" :value="latest?.stats.total ?? 0" /></div>
+              <div class="comm-stat"><el-statistic title="正常" :value="latest?.stats.ok ?? 0" /></div>
+              <div class="comm-stat"><el-statistic title="超时" :value="latest?.stats.timeout ?? 0" /></div>
+              <div class="comm-stat"><el-statistic title="通讯错误" :value="latest?.stats.commError ?? 0" /></div>
+              <div class="comm-stat"><el-statistic title="解析错误" :value="latest?.stats.decodeError ?? 0" /></div>
+              <div class="comm-stat"><el-statistic title="配置错误" :value="latest?.stats.configError ?? 0" /></div>
+            </div>
+          </section>
+        </aside>
+      </div>
 
     <el-drawer
       v-model="validationPanelOpen"
@@ -2299,6 +2429,45 @@ onBeforeUnmount(() => {
       </template>
     </el-dialog>
 
+    <el-dialog v-model="replaceDialogOpen" title="变量名称批量替换" width="720px">
+      <el-form label-width="120px">
+        <el-form-item label="查找内容">
+          <el-input v-model="replaceForm.find" placeholder="例如 AI_" />
+        </el-form-item>
+        <el-form-item label="替换为">
+          <el-input v-model="replaceForm.replace" placeholder="例如 DI_" />
+        </el-form-item>
+        <el-form-item label="替换范围">
+          <el-radio-group v-model="replaceForm.scope">
+            <el-radio-button label="selected" :disabled="selectedCount === 0">仅选中行</el-radio-button>
+            <el-radio-button label="all">当前通道全部</el-radio-button>
+          </el-radio-group>
+          <div class="comm-replace-hint">
+            {{ replaceForm.scope === "selected" ? `已选中 ${selectedCount} 行` : `当前通道 ${gridRows.length} 行` }}
+          </div>
+        </el-form-item>
+      </el-form>
+
+      <el-card shadow="never">
+        <template #header>预览</template>
+        <div class="comm-replace-summary">
+          匹配 {{ replacePreview.matchedRows }} 行 / 替换 {{ replacePreview.replaceCount }} 处（仅展示前 {{ replacePreviewLimit }} 行）
+        </div>
+        <el-table v-if="replacePreview.preview.length > 0" :data="replacePreview.preview" size="small" style="width: 100%" height="260">
+          <el-table-column prop="rowIndex" label="#" width="60" />
+          <el-table-column prop="before" label="原变量名" min-width="180" />
+          <el-table-column prop="after" label="替换后" min-width="180" />
+          <el-table-column prop="count" label="替换次数" width="100" />
+        </el-table>
+        <el-empty v-else description="暂无匹配预览" />
+      </el-card>
+
+      <template #footer>
+        <el-button @click="replaceDialogOpen = false">取消</el-button>
+        <el-button type="primary" @click="confirmReplaceHmiNames">应用替换</el-button>
+      </template>
+    </el-dialog>
+
     <BatchEditDialog
       v-model="batchEditDialogVisible"
       :selected-count="selectedCount"
@@ -2317,18 +2486,42 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
-.comm-top-grid {
+.comm-replace-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--comm-muted);
+}
+
+.comm-replace-summary {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--comm-muted);
+}
+
+.comm-points-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   gap: 16px;
   align-items: start;
 }
 
-.comm-top-left,
-.comm-top-right {
+.comm-points-main,
+.comm-points-aside {
+  min-width: 0;
+}
+
+.comm-points-aside {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.comm-points-aside :deep(.comm-run-grid) {
+  grid-template-columns: 1fr;
+}
+
+.comm-points-aside :deep(.comm-run-actions) {
+  justify-content: flex-start;
 }
 
 :deep(.comm-validation-panel .el-drawer__body) {
@@ -2353,7 +2546,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.comm-grid .rgHeaderCell) {
-  background: #fff4e6;
+  background: #f1e7d8;
   color: var(--comm-text);
   font-weight: 600;
   border-bottom: 1px solid var(--comm-border);
@@ -2362,18 +2555,18 @@ onBeforeUnmount(() => {
 :deep(.comm-grid .rgCell) {
   font-size: 12px;
   padding: 0 8px;
-  border-color: rgba(234, 223, 212, 0.8);
+  border-color: rgba(215, 201, 183, 0.8);
   background: #ffffff;
   color: var(--comm-text);
   font-variant-numeric: tabular-nums;
 }
 
 :deep(.comm-grid .rgRow:nth-child(even) .rgCell) {
-  background: #fffaf5;
+  background: #fbf7f1;
 }
 
 :deep(.comm-grid .rgRow:hover .rgCell) {
-  background: rgba(249, 115, 22, 0.1);
+  background: rgba(84, 119, 146, 0.12);
 }
 
 :deep(.comm-cell-error) {
@@ -2420,7 +2613,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   height: 30px;
   padding: 0 8px;
-  border: 1px solid rgba(234, 223, 212, 0.9);
+  border: 1px solid rgba(215, 201, 183, 0.9);
   border-radius: 8px;
   font-size: 12px;
   outline: none;
@@ -2430,7 +2623,7 @@ onBeforeUnmount(() => {
 
 :deep(.comm-rg-editor:focus) {
   border-color: var(--comm-primary);
-  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+  box-shadow: 0 0 0 2px rgba(84, 119, 146, 0.2);
 }
 
 :deep(.rgHeaderCell[data-type="rowHeaders"]) {
@@ -2440,7 +2633,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.rgHeaderCell[data-type="rowHeaders"]:hover) {
-  background-color: rgba(249, 115, 22, 0.14);
+  background-color: rgba(84, 119, 146, 0.14);
 }
 
 :deep(.rowHeaders .rgCell) {
@@ -2450,25 +2643,25 @@ onBeforeUnmount(() => {
 }
 
 :deep(.rowHeaders .rgCell:hover) {
-  background-color: rgba(249, 115, 22, 0.12);
+  background-color: rgba(84, 119, 146, 0.12);
 }
 
 :deep(.row-selected) {
-  background-color: rgba(249, 115, 22, 0.14) !important;
+  background-color: rgba(84, 119, 146, 0.16) !important;
 }
 
 :deep(.row-selected .rgHeaderCell[data-type="rowHeaders"]) {
-  background-color: rgba(249, 115, 22, 0.22) !important;
+  background-color: rgba(84, 119, 146, 0.22) !important;
   font-weight: 600;
   color: var(--comm-primary-ink);
 }
 
 :deep(.row-selected .rgCell) {
-  background-color: rgba(249, 115, 22, 0.1) !important;
+  background-color: rgba(84, 119, 146, 0.1) !important;
 }
 
-@media (max-width: 1100px) {
-  .comm-top-grid {
+@media (max-width: 1200px) {
+  .comm-points-layout {
     grid-template-columns: 1fr;
   }
 }
