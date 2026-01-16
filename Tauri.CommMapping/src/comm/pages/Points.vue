@@ -2520,11 +2520,12 @@ onBeforeUnmount(() => {
   background: #e6eef2;
   color: var(--comm-text);
   font-weight: 600;
+  font-size: 13px;
   border-bottom: 1px solid var(--comm-border);
 }
 
 :deep(.comm-grid .rgCell) {
-  font-size: 12px;
+  font-size: 13px;
   padding: 0 8px;
   border-color: rgba(201, 213, 220, 0.8);
   background: #ffffff;
@@ -2586,7 +2587,7 @@ onBeforeUnmount(() => {
   padding: 0 8px;
   border: 1px solid rgba(201, 213, 220, 0.9);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
   background: #ffffff;
   color: var(--comm-text);

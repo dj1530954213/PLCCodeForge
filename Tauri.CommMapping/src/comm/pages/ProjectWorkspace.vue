@@ -25,6 +25,7 @@ const {
 } = provideCommDeviceContext(projectId);
 
 const totalPoints = computed(() => (project.value?.devices ?? []).reduce((sum, d) => sum + d.points.points.length, 0));
+const activePointCount = computed(() => activeDevice.value?.points.points.length ?? 0);
 const activeProfile = computed(() => activeDevice.value?.profile ?? null);
 const activeChannelName = computed(() => project.value?.uiState?.activeChannelName ?? activeProfile.value?.channelName ?? "");
 
@@ -52,6 +53,77 @@ const activeTab = computed<string>({
     const tab = tabs.value.find((t) => t.name === name);
     if (tab) router.push(tab.path);
   },
+});
+
+const activeTabLabel = computed(() => {
+  const tab = tabs.value.find((t) => t.name === activeTab.value);
+  return tab?.label ?? "连接参数";
+});
+
+const connectionSummary = computed(() => {
+  const profile = activeProfile.value;
+  if (!profile) return [];
+  const base = [
+    { label: "协议", value: profile.protocolType },
+    { label: "通道", value: activeChannelName.value || "--" },
+    { label: "区域", value: profile.readArea },
+  ];
+  if (profile.protocolType === "TCP") {
+    return [
+      ...base,
+      { label: "IP", value: profile.ip },
+      { label: "端口", value: String(profile.port) },
+      { label: "超时", value: `${profile.timeoutMs} ms` },
+      { label: "重试", value: String(profile.retryCount) },
+      { label: "采样间隔", value: `${profile.pollIntervalMs} ms` },
+    ];
+  }
+  return [
+    ...base,
+    { label: "串口", value: profile.serialPort },
+    { label: "波特率", value: String(profile.baudRate) },
+    { label: "校验", value: profile.parity },
+    { label: "数据位", value: String(profile.dataBits) },
+    { label: "停止位", value: String(profile.stopBits) },
+    { label: "超时", value: `${profile.timeoutMs} ms` },
+    { label: "重试", value: String(profile.retryCount) },
+    { label: "采样间隔", value: `${profile.pollIntervalMs} ms` },
+  ];
+});
+
+const workspaceTips = computed(() => {
+  switch (activeTab.value) {
+    case "connection":
+      return [
+        "先确认协议与寄存器区域，再录入点位地址",
+        "地址不连续时可逐点配置，避免使用连续区间假设",
+        "通道名称建议与现场设备一致，便于导出对齐",
+      ];
+    case "points":
+      return [
+        "建议按设备功能分组命名变量，减少后续查找成本",
+        "批量新增前先确认数据类型步长，避免地址跳跃错误",
+        "可用“批量替换”快速迁移变量前缀",
+      ];
+    case "run":
+      return [
+        "运行前先做配置校验，确保无阻断错误",
+        "通讯异常时优先检查端口/串口与超时设置",
+        "重点关注解析错误与配置错误的占比",
+      ];
+    case "export":
+      return [
+        "导出前确认变量名称与设备名称一致",
+        "导出结果以冻结表头为准，请勿手动修改表头",
+      ];
+    case "advanced":
+      return [
+        "高级配置主要用于联调与集成场景",
+        "修改后建议先在测试通道验证",
+      ];
+    default:
+      return [];
+  }
 });
 
 const addDialogOpen = ref(false);
@@ -368,6 +440,26 @@ watch(project, (next) => {
 
       <div class="comm-workspace-grid">
         <aside class="comm-workspace-side">
+          <section class="comm-panel comm-animate" style="--delay: 40ms">
+            <div class="comm-panel-header">
+              <div class="comm-section-title">项目</div>
+            </div>
+            <div class="comm-info-list">
+              <div class="comm-info-row">
+                <span class="comm-info-label">名称</span>
+                <span class="comm-info-value">{{ project?.name ?? "未找到" }}</span>
+              </div>
+              <div class="comm-info-row">
+                <span class="comm-info-label">项目ID</span>
+                <span class="comm-info-value comm-mono">{{ projectId }}</span>
+              </div>
+              <div class="comm-info-row">
+                <span class="comm-info-label">设备数</span>
+                <span class="comm-info-value">{{ devices.length }}</span>
+              </div>
+            </div>
+          </section>
+
           <section class="comm-panel comm-animate" style="--delay: 60ms">
             <div class="comm-panel-header">
               <div class="comm-section-title">设备列表</div>
@@ -396,6 +488,35 @@ watch(project, (next) => {
               style="margin-top: 12px"
             />
           </section>
+
+          <section class="comm-panel comm-animate" style="--delay: 80ms">
+            <div class="comm-panel-header">
+              <div class="comm-section-title">连接配置</div>
+            </div>
+            <div v-if="connectionSummary.length > 0" class="comm-info-list">
+              <div v-for="item in connectionSummary" :key="item.label" class="comm-info-row">
+                <span class="comm-info-label">{{ item.label }}</span>
+                <span class="comm-info-value">{{ item.value }}</span>
+              </div>
+            </div>
+            <el-empty v-else description="未选择设备或无连接配置" />
+          </section>
+
+          <section class="comm-panel comm-animate" style="--delay: 100ms">
+            <div class="comm-panel-header">
+              <div class="comm-section-title">点位统计</div>
+            </div>
+            <div class="comm-kpi-grid">
+              <div class="comm-kpi-item">
+                <div class="comm-kpi-label">当前设备点位</div>
+                <div class="comm-kpi-value">{{ activePointCount }}</div>
+              </div>
+              <div class="comm-kpi-item">
+                <div class="comm-kpi-label">项目点位总数</div>
+                <div class="comm-kpi-value">{{ totalPoints }}</div>
+              </div>
+            </div>
+          </section>
         </aside>
 
         <main class="comm-workspace-main">
@@ -415,30 +536,21 @@ watch(project, (next) => {
         <aside class="comm-workspace-context">
           <section class="comm-panel comm-panel--flat comm-animate" style="--delay: 120ms">
             <div class="comm-panel-header">
-              <div class="comm-section-title">项目概览</div>
+              <div class="comm-section-title">工作区提示</div>
+              <div class="comm-inline-meta">当前：{{ activeTabLabel }}</div>
             </div>
-            <div class="comm-kpi-grid">
-              <div class="comm-kpi-card">
-                <div class="comm-kpi-label">项目</div>
-                <div class="comm-kpi-value">{{ project?.name ?? "未找到" }}</div>
-                <div class="comm-kpi-desc">ID {{ projectId }}</div>
-              </div>
-              <div class="comm-kpi-row">
-                <div class="comm-kpi-item">
-                  <div class="comm-kpi-label">设备</div>
-                  <div class="comm-kpi-value">{{ devices.length }}</div>
-                </div>
-                <div class="comm-kpi-item">
-                  <div class="comm-kpi-label">点位</div>
-                  <div class="comm-kpi-value">{{ totalPoints }}</div>
-                </div>
+            <div v-if="workspaceTips.length > 0" class="comm-tip-list">
+              <div v-for="(tip, idx) in workspaceTips" :key="idx" class="comm-tip-item">
+                <span class="comm-tip-index">{{ idx + 1 }}</span>
+                <span class="comm-tip-text">{{ tip }}</span>
               </div>
             </div>
+            <el-empty v-else description="暂无提示" />
           </section>
 
           <section class="comm-panel comm-animate" style="--delay: 140ms">
             <div class="comm-panel-header">
-              <div class="comm-section-title">设备 / 通道</div>
+              <div class="comm-section-title">详细信息</div>
             </div>
             <div class="comm-info-list">
               <div class="comm-info-row">
@@ -448,10 +560,6 @@ watch(project, (next) => {
               <div class="comm-info-row">
                 <span class="comm-info-label">设备ID</span>
                 <span class="comm-info-value comm-mono">{{ activeDevice?.deviceId ?? "--" }}</span>
-              </div>
-              <div class="comm-info-row">
-                <span class="comm-info-label">点位数</span>
-                <span class="comm-info-value">{{ activeDevice?.points.points.length ?? 0 }}</span>
               </div>
               <div class="comm-info-row">
                 <span class="comm-info-label">通道</span>
@@ -466,30 +574,12 @@ watch(project, (next) => {
 
           <section class="comm-panel comm-animate" style="--delay: 160ms">
             <div class="comm-panel-header">
-              <div class="comm-section-title">工作流</div>
-              <div class="comm-inline-meta">项目 → 设备 → 点位 → 监控</div>
+              <div class="comm-section-title">报文与诊断</div>
             </div>
-            <div class="comm-flow">
-              <div class="comm-flow-step">
-                <span class="comm-flow-index">1</span>
-                <span class="comm-flow-text">连接参数</span>
-              </div>
-              <div class="comm-flow-step">
-                <span class="comm-flow-index">2</span>
-                <span class="comm-flow-text">点位配置</span>
-              </div>
-              <div class="comm-flow-step">
-                <span class="comm-flow-index">3</span>
-                <span class="comm-flow-text">运行监控</span>
-              </div>
-              <div class="comm-flow-step">
-                <span class="comm-flow-index">4</span>
-                <span class="comm-flow-text">导出交付</span>
-              </div>
+            <el-empty description="报文查看功能规划中" />
+            <div class="comm-inline-meta" style="margin-top: 8px">
+              预留用于展示最近一次请求/响应与通讯诊断信息
             </div>
-            <el-button class="comm-flow-action" type="primary" plain @click="router.push(`/projects/${projectId}/comm/run`)">
-              打开运行监控
-            </el-button>
           </section>
         </aside>
       </div>
@@ -577,7 +667,7 @@ watch(project, (next) => {
 <style scoped>
 .comm-workspace-grid {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr) minmax(260px, 340px);
   gap: 16px;
   align-items: start;
 }
@@ -594,7 +684,7 @@ watch(project, (next) => {
 .comm-device-menu {
   border-right: none;
   background: transparent;
-  max-height: 60vh;
+  max-height: 36vh;
   overflow: auto;
   padding-right: 4px;
 }
@@ -637,19 +727,6 @@ watch(project, (next) => {
 
 .comm-kpi-grid {
   display: grid;
-  gap: 12px;
-}
-
-.comm-kpi-card {
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--comm-border);
-  background: #ffffff;
-}
-
-.comm-kpi-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -704,15 +781,14 @@ watch(project, (next) => {
   color: var(--comm-text);
 }
 
-.comm-flow {
+.comm-tip-list {
   display: grid;
   gap: 8px;
-  margin-bottom: 12px;
 }
 
-.comm-flow-step {
+.comm-tip-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
   border-radius: 10px;
@@ -720,7 +796,7 @@ watch(project, (next) => {
   background: #ffffff;
 }
 
-.comm-flow-index {
+.comm-tip-index {
   width: 22px;
   height: 22px;
   border-radius: 999px;
@@ -731,20 +807,18 @@ watch(project, (next) => {
   font-weight: 600;
   background: rgba(31, 94, 107, 0.12);
   color: var(--comm-primary-ink);
+  flex-shrink: 0;
 }
 
-.comm-flow-text {
+.comm-tip-text {
   font-size: 13px;
   color: var(--comm-text);
-}
-
-.comm-flow-action {
-  width: 100%;
+  line-height: 1.5;
 }
 
 @media (max-width: 1400px) {
   .comm-workspace-grid {
-    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   }
 
   .comm-workspace-context {
