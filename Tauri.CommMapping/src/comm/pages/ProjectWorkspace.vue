@@ -55,7 +55,6 @@ const runtimeUpdatedAt = computed(() => workspaceRuntime.updatedAtUtc.value || "
 const tabs = computed(() => {
   const pid = projectId.value;
   return [
-    { name: "connection", label: "连接参数", path: `/projects/${pid}/comm/connection` },
     { name: "points", label: "点位配置", path: `/projects/${pid}/comm/points` },
     { name: "run", label: "运行监控", path: `/projects/${pid}/comm/run` },
     { name: "export", label: "导出与证据包", path: `/projects/${pid}/comm/export` },
@@ -66,7 +65,6 @@ const tabs = computed(() => {
 const activeTab = computed<string>({
   get() {
     const p = route.path;
-    if (p.includes("/comm/connection")) return "connection";
     if (p.includes("/comm/points")) return "points";
     if (p.includes("/comm/run")) return "run";
     if (p.includes("/comm/export")) return "export";
@@ -666,20 +664,6 @@ watch(project, (next) => {
 <template>
   <div class="comm-page comm-page--workspace">
     <div class="comm-shell comm-shell--wide">
-      <header class="comm-hero comm-animate" style="--delay: 0ms">
-        <div class="comm-hero-title">
-          <div class="comm-title">工程：{{ project?.name ?? "未找到" }}</div>
-          <div class="comm-subtitle">设备：{{ activeDevice?.deviceName ?? "未选择" }}</div>
-          <div class="comm-inline-meta">
-            <span>projectId: {{ projectId }}</span>
-            <span>设备数: {{ devices.length }}</span>
-          </div>
-        </div>
-        <div class="comm-hero-actions">
-          <el-button :loading="projectListLoading" @click="reloadProject">刷新工程</el-button>
-        </div>
-      </header>
-
       <div class="comm-workspace-grid">
         <aside class="comm-workspace-side">
           <section class="comm-panel comm-animate" style="--delay: 40ms">
@@ -690,6 +674,17 @@ watch(project, (next) => {
                 <el-button size="small" :disabled="!project" @click="copyProject">复制</el-button>
                 <el-button size="small" type="danger" :disabled="!project" @click="deleteProject">删除</el-button>
               </el-space>
+            </div>
+
+            <div class="comm-project-overview">
+              <div class="comm-project-title">{{ project?.name ?? "未选择工程" }}</div>
+              <div class="comm-project-sub">
+                设备：{{ activeDevice?.deviceName ?? "未选择" }}
+              </div>
+              <div class="comm-inline-meta">
+                <span>projectId: {{ projectId || "--" }}</span>
+                <span>设备数: {{ devices.length }}</span>
+              </div>
             </div>
 
             <el-form label-width="72px" class="comm-form-compact">
@@ -711,6 +706,7 @@ watch(project, (next) => {
 
             <div class="comm-panel-actions">
               <el-button size="small" :loading="projectListLoading" @click="loadProjectList">刷新</el-button>
+              <el-button size="small" @click="reloadProject">同步当前</el-button>
               <el-button size="small" type="primary" :disabled="!projectDirty" @click="saveProjectMeta">保存项目</el-button>
             </div>
           </section>
@@ -851,7 +847,7 @@ watch(project, (next) => {
           <section class="comm-panel comm-panel--flat comm-animate" style="--delay: 100ms">
             <div class="comm-panel-header">
               <div class="comm-section-title">功能导航</div>
-              <div class="comm-inline-meta">连接 → 点位 → 运行 → 导出</div>
+              <div class="comm-inline-meta">点位 → 运行 → 导出</div>
             </div>
             <el-tabs v-model="activeTab" type="card" class="comm-workspace-tabs">
               <el-tab-pane v-for="t in tabs" :key="t.name" :name="t.name" :label="t.label" />
@@ -1046,6 +1042,26 @@ watch(project, (next) => {
 .comm-device-meta {
   font-size: 12px;
   color: var(--comm-muted);
+}
+
+.comm-project-overview {
+  padding: 8px 10px 4px;
+  border-radius: 12px;
+  border: 1px solid var(--comm-border);
+  background: #ffffff;
+  margin-bottom: 12px;
+}
+
+.comm-project-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--comm-text);
+}
+
+.comm-project-sub {
+  font-size: 12px;
+  color: var(--comm-muted);
+  margin-top: 4px;
 }
 
 .comm-kpi-grid {
