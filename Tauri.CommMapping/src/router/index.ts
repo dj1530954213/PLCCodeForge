@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 
 import ProjectsPage from "../comm/pages/Projects.vue";
+import WorkspaceLandingPage from "../comm/pages/WorkspaceLanding.vue";
 import ProjectWorkspacePage from "../comm/pages/ProjectWorkspace.vue";
 import ConnectionPage from "../comm/pages/Connection.vue";
 import PointsPage from "../comm/pages/Points.vue";
@@ -12,17 +13,17 @@ import ImportUnionPage from "../comm/pages/ImportUnion.vue";
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: "/", redirect: "/projects" },
+    { path: "/", component: WorkspaceLandingPage },
     { path: "/projects", component: ProjectsPage },
     {
       path: "/projects/:projectId",
-      redirect: (to) => `/projects/${String(to.params.projectId)}/comm/connection`,
+      redirect: (to) => `/projects/${String(to.params.projectId)}/comm/points`,
     },
     {
       path: "/projects/:projectId/comm",
       component: ProjectWorkspacePage,
       children: [
-        { path: "", redirect: "connection" },
+        { path: "", redirect: "points" },
         { path: "connection", component: ConnectionPage },
         { path: "points", component: PointsPage },
         { path: "run", component: RunPage },

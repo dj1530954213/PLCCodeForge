@@ -32,7 +32,7 @@ async function refresh() {
 }
 
 function openProject(projectId: string) {
-  router.push(`/projects/${projectId}/comm/connection`);
+  router.push(`/projects/${projectId}/comm/points`);
 }
 
 function onRowDblClick(row: CommProjectV1) {

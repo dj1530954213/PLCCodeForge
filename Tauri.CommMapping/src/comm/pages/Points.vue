@@ -37,14 +37,15 @@ import {
   commPointsLoad,
   commPointsSave,
   commProjectUiStatePatchV1,
-  commProfilesLoad,
   commRunLatestObs,
   commRunStartObs,
   commRunStopObs,
 } from "../api";
 import { useCommDeviceContext } from "../composables/useDeviceContext";
+import { useCommWorkspaceRuntime } from "../composables/useWorkspaceRuntime";
 
 const { projectId, project, activeDeviceId, activeDevice } = useCommDeviceContext();
+const workspaceRuntime = useCommWorkspaceRuntime();
 
 const BYTE_ORDERS: ByteOrder32[] = COMM_BYTE_ORDERS_32;
 
@@ -636,13 +637,6 @@ function attachGridSelectionListeners() {
   };
 }
 
-function profileLabel(p: ConnectionProfile): string {
-  if (p.protocolType === "TCP") {
-    return `${p.channelName} / TCP / ${p.ip}:${p.port} / 区域=${p.readArea} / 地址=点位配置`;
-  }
-  return `${p.channelName} / 485 / ${p.serialPort} / 区域=${p.readArea} / 地址=点位配置`;
-}
-
 function validateHmiName(row: PointRow): string | null {
   return normalizeHmiName(row.hmiName) ? null : "变量名称（HMI）不能为空";
 }
@@ -855,7 +849,10 @@ async function loadAll() {
       return;
     }
 
-    profiles.value = await commProfilesLoad(pid, did);
+    const device = activeDevice.value;
+    profiles.value = device
+      ? { schemaVersion: 1, profiles: [JSON.parse(JSON.stringify(device.profile)) as ConnectionProfile] }
+      : { schemaVersion: 1, profiles: [] };
     points.value = await commPointsLoad(pid, did);
     showAllValidation.value = false;
     touchedRowKeys.value = {};
@@ -863,19 +860,16 @@ async function loadAll() {
     markPointsChanged();
 
     suppressChannelWatch = true;
-    const ui = project.value?.uiState;
-    const stored = ui?.activeChannelName ?? "";
-    if (stored && profiles.value.profiles.some((p) => p.channelName === stored)) {
-      activeChannelName.value = stored;
-    } else if (profiles.value.profiles.length > 0) {
-      activeChannelName.value = profiles.value.profiles[0].channelName;
+    const profile = profiles.value.profiles[0];
+    if (profile) {
+      activeChannelName.value = profile.channelName;
     } else if (points.value.points.length > 0) {
       activeChannelName.value = points.value.points[0].channelName;
     } else {
       activeChannelName.value = "";
     }
 
-    const t = ui?.pointsBatchTemplate;
+    const t = project.value?.uiState?.pointsBatchTemplate;
     if (t && t.schemaVersion === 1) {
       batchAddTemplate.value = {
         count: Math.max(1, Math.min(500, Math.floor(t.count || 10))),
@@ -2082,6 +2076,29 @@ watch(pollMs, (v) => {
   pushLog("poll", "info", `轮询间隔变更：${v}ms`);
 });
 
+watch(activeDevice, (device) => {
+  if (!device) {
+    profiles.value = { schemaVersion: 1, profiles: [] };
+    activeChannelName.value = "";
+    return;
+  }
+  profiles.value = { schemaVersion: 1, profiles: [JSON.parse(JSON.stringify(device.profile)) as ConnectionProfile] };
+  if (activeChannelName.value !== device.profile.channelName) {
+    activeChannelName.value = device.profile.channelName;
+  }
+  void rebuildPlan();
+});
+
+watch(latest, (value) => {
+  workspaceRuntime.stats.value = value?.stats ?? null;
+  workspaceRuntime.updatedAtUtc.value = value?.updatedAtUtc ?? "";
+});
+
+watch(activeDeviceId, () => {
+  workspaceRuntime.stats.value = null;
+  workspaceRuntime.updatedAtUtc.value = "";
+});
+
 watch([projectId, activeDeviceId], loadAll, { immediate: true });
 
 // 注册键盘快捷键
@@ -2125,8 +2142,77 @@ onBeforeUnmount(() => {
         style="--delay: 60ms"
       />
 
-      <div class="comm-points-layout">
-        <section class="comm-panel comm-panel--table comm-animate comm-points-main" style="--delay: 120ms">
+      <div class="comm-points-stack">
+        <section class="comm-panel comm-panel--run comm-animate" style="--delay: 120ms">
+          <div class="comm-run-grid">
+            <div class="comm-profile-block">
+              <div class="comm-label">连接配置</div>
+              <div v-if="activeProfile" class="comm-profile-meta">
+                <span class="comm-chip">{{ activeProfile.protocolType }}</span>
+                <span class="comm-chip">{{ activeProfile.channelName }}</span>
+                <span class="comm-chip">区域 {{ activeProfile.readArea }}</span>
+                <span class="comm-chip">地址按点位配置</span>
+              </div>
+              <div v-else class="comm-profile-empty">请先在左侧配置连接</div>
+            </div>
+
+            <div class="comm-run-actions">
+              <el-button type="primary" :loading="isStarting" :disabled="isRunning || isStopping" @click="startRun">开始运行</el-button>
+              <el-button type="danger" :loading="isStopping" :disabled="!isRunning" @click="stopRun('manual')">停止</el-button>
+              <el-select v-model="pollMs" style="width: 160px">
+                <el-option :value="500" label="轮询 500ms" />
+                <el-option :value="1000" label="轮询 1s" />
+                <el-option :value="2000" label="轮询 2s" />
+              </el-select>
+            </div>
+          </div>
+
+          <div class="comm-run-meta">
+            <div class="comm-run-tags">
+              <el-tag v-if="isRunning && configChangedDuringRun" type="warning" effect="light">
+                {{ autoRestartPending ? "配置已变更：即将自动重启" : "配置已变更：重启中" }}
+              </el-tag>
+              <el-tag v-if="runUiState === 'running'" type="success">运行中</el-tag>
+              <el-tag v-else-if="runUiState === 'starting'" type="warning">启动中</el-tag>
+              <el-tag v-else-if="runUiState === 'stopping'" type="warning">停止中</el-tag>
+              <el-tag v-else-if="runUiState === 'error'" type="danger">错误</el-tag>
+              <el-tag v-else type="info">空闲</el-tag>
+            </div>
+            <div class="comm-run-tags">
+              <el-tag v-if="runId" type="info">运行ID={{ runId }}</el-tag>
+              <el-tag v-if="resumeAfterFix && !isRunning" type="warning">配置无效：修复后自动恢复</el-tag>
+              <el-tag v-if="latest" type="info">更新时间={{ latest.updatedAtUtc }}</el-tag>
+            </div>
+          </div>
+        </section>
+
+        <el-alert
+          v-if="runError"
+          class="comm-run-error comm-animate"
+          style="--delay: 140ms"
+          type="error"
+          show-icon
+          :closable="false"
+          :title="runErrorTitle"
+        />
+
+        <div
+          class="comm-status-bar comm-animate"
+          style="--delay: 160ms"
+          :class="{ 'is-error': hasValidationIssues || hasBackendFieldIssues }"
+        >
+          <div class="comm-status-left">
+            <div class="comm-status-title">配置校验</div>
+            <div class="comm-status-desc">{{ validationSummary }}</div>
+          </div>
+          <div class="comm-status-actions">
+            <el-button size="small" :disabled="!hasValidationIssues && !hasBackendFieldIssues" @click="validationPanelOpen = true">
+              查看详情
+            </el-button>
+          </div>
+        </div>
+
+        <section class="comm-panel comm-panel--table comm-animate comm-points-main" style="--delay: 180ms">
           <div class="comm-toolbar">
             <div class="comm-toolbar-left">
             <el-button type="primary" @click="addSingleRow">新增单行</el-button>
@@ -2185,94 +2271,6 @@ onBeforeUnmount(() => {
             />
           </div>
         </section>
-
-        <aside class="comm-points-aside">
-          <section class="comm-panel comm-panel--run comm-animate" style="--delay: 140ms">
-            <div class="comm-run-grid">
-              <div class="comm-profile-block">
-                <div class="comm-label">连接配置</div>
-                <el-select
-                  v-model="activeChannelName"
-                  placeholder="选择连接"
-                  :disabled="isRunning || isStarting || isStopping"
-                >
-                  <el-option v-for="p in profiles.profiles" :key="p.channelName" :label="profileLabel(p)" :value="p.channelName" />
-                </el-select>
-                <div v-if="activeProfile" class="comm-profile-meta">
-                  <span class="comm-chip">{{ activeProfile.protocolType }}</span>
-                  <span class="comm-chip">{{ activeProfile.channelName }}</span>
-                  <span class="comm-chip">区域 {{ activeProfile.readArea }}</span>
-                  <span class="comm-chip">地址按点位配置</span>
-                </div>
-              </div>
-
-              <div class="comm-run-actions">
-                <el-button type="primary" :loading="isStarting" :disabled="isRunning || isStopping" @click="startRun">开始运行</el-button>
-                <el-button type="danger" :loading="isStopping" :disabled="!isRunning" @click="stopRun('manual')">停止</el-button>
-                <el-select v-model="pollMs" style="width: 160px">
-                  <el-option :value="500" label="轮询 500ms" />
-                  <el-option :value="1000" label="轮询 1s" />
-                  <el-option :value="2000" label="轮询 2s" />
-                </el-select>
-              </div>
-            </div>
-
-            <div class="comm-run-meta">
-              <div class="comm-run-tags">
-                <el-tag v-if="isRunning && configChangedDuringRun" type="warning" effect="light">
-                  {{ autoRestartPending ? "配置已变更：即将自动重启" : "配置已变更：重启中" }}
-                </el-tag>
-                <el-tag v-if="runUiState === 'running'" type="success">运行中</el-tag>
-                <el-tag v-else-if="runUiState === 'starting'" type="warning">启动中</el-tag>
-                <el-tag v-else-if="runUiState === 'stopping'" type="warning">停止中</el-tag>
-                <el-tag v-else-if="runUiState === 'error'" type="danger">错误</el-tag>
-                <el-tag v-else type="info">空闲</el-tag>
-              </div>
-              <div class="comm-run-tags">
-                <el-tag v-if="runId" type="info">运行ID={{ runId }}</el-tag>
-                <el-tag v-if="resumeAfterFix && !isRunning" type="warning">配置无效：修复后自动恢复</el-tag>
-                <el-tag v-if="latest" type="info">更新时间={{ latest.updatedAtUtc }}</el-tag>
-              </div>
-            </div>
-          </section>
-
-          <el-alert
-            v-if="runError"
-            class="comm-run-error comm-animate"
-            style="--delay: 160ms"
-            type="error"
-            show-icon
-            :closable="false"
-            :title="runErrorTitle"
-          />
-
-          <div
-            class="comm-status-bar comm-animate"
-            style="--delay: 180ms"
-            :class="{ 'is-error': hasValidationIssues || hasBackendFieldIssues }"
-          >
-            <div class="comm-status-left">
-              <div class="comm-status-title">配置校验</div>
-              <div class="comm-status-desc">{{ validationSummary }}</div>
-            </div>
-            <div class="comm-status-actions">
-              <el-button size="small" :disabled="!hasValidationIssues && !hasBackendFieldIssues" @click="validationPanelOpen = true">
-                查看详情
-              </el-button>
-            </div>
-          </div>
-
-          <section class="comm-panel comm-panel--stats comm-animate" style="--delay: 200ms">
-            <div class="comm-stat-grid">
-              <div class="comm-stat"><el-statistic title="总数" :value="latest?.stats.total ?? 0" /></div>
-              <div class="comm-stat"><el-statistic title="正常" :value="latest?.stats.ok ?? 0" /></div>
-              <div class="comm-stat"><el-statistic title="超时" :value="latest?.stats.timeout ?? 0" /></div>
-              <div class="comm-stat"><el-statistic title="通讯错误" :value="latest?.stats.commError ?? 0" /></div>
-              <div class="comm-stat"><el-statistic title="解析错误" :value="latest?.stats.decodeError ?? 0" /></div>
-              <div class="comm-stat"><el-statistic title="配置错误" :value="latest?.stats.configError ?? 0" /></div>
-            </div>
-          </section>
-        </aside>
       </div>
 
     <el-drawer
@@ -2469,30 +2467,26 @@ onBeforeUnmount(() => {
   color: var(--comm-muted);
 }
 
-.comm-points-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
-  gap: 16px;
-  align-items: start;
-}
-
-.comm-points-main,
-.comm-points-aside {
-  min-width: 0;
-}
-
-.comm-points-aside {
+.comm-points-stack {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.comm-points-aside :deep(.comm-run-grid) {
-  grid-template-columns: 1fr;
+.comm-profile-empty {
+  font-size: 12px;
+  color: var(--comm-muted);
+  padding: 4px 0;
 }
 
-.comm-points-aside :deep(.comm-run-actions) {
-  justify-content: flex-start;
+@media (max-width: 1100px) {
+  :deep(.comm-run-grid) {
+    grid-template-columns: 1fr;
+  }
+
+  :deep(.comm-run-actions) {
+    justify-content: flex-start;
+  }
 }
 
 :deep(.comm-validation-panel .el-drawer__body) {
@@ -2632,9 +2626,4 @@ onBeforeUnmount(() => {
   background-color: rgba(111, 183, 177, 0.18) !important;
 }
 
-@media (max-width: 1280px) {
-  .comm-points-layout {
-    grid-template-columns: 1fr;
-  }
-}
 </style>
