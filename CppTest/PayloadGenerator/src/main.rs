@@ -40,30 +40,38 @@ impl BinWrite for MfcString {
 #[binrw::binwrite]
 #[brw(little)]
 struct DeviceBase {
-    // 头部我们必须写，否则 MFC 认不出对象名字
     name: MfcString,
-
-    // ID 设为 0，防止被当成长度
     id: u32,
-
-    // Flags 设为 0
     flag1: u8,
     flag2: u8,
-
     description: MfcString,
 }
 
 #[binrw::binwrite]
 #[brw(little)]
-struct ModbusSlaveSkeleton {
+struct ModbusSlaveConfig {
     base: DeviceBase,
 
-    // Body 第一字段: 描述字符串 (写个短的)
-    slave_desc: MfcString,
+    // --- 真实业务数据 ---
+    description: MfcString,
+    enabled: u8,
+    ip_address: u32, // C0 A8 01 64 (192.168.1.100)
+    port: u32,       // 502
+    timeout: u32,    // 2000
+    retry_count: u32,// 3
+    unit_id: u32,    // 1
 
-    // 暴力全零填充
-    #[brw(pad_after = 1024)]
-    safe_zone: (),
+    padding: [u8; 4], // Padding
+
+    mapping_count: u16,     // 0
+    version_reserved: u32,  // 0
+    order_count: u32,       // 0
+    channel_count: u32,     // 0
+    extra_blob_len: u16,    // 0
+
+    // 保留安全缓冲垫，确保万无一失
+    #[brw(pad_after = 128)]
+    tail_padding: (),
 }
 
 fn encode_gbk_or_ascii(value: &str) -> Vec<u8> {
@@ -74,23 +82,37 @@ fn encode_gbk_or_ascii(value: &str) -> Vec<u8> {
 }
 
 fn main() -> BinResult<()> {
+    // 构造头部：注意 Name 必须唯一，不要和现有的重复
     let base = DeviceBase {
-        name: MfcString::new("TCPIO_1_1_192_168_1_100"),
-        id: 0,
-        flag1: 0,
-        flag2: 0,
-        description: MfcString::new("Skeleton"),
+        name: MfcString::new("TCPIO_1_1_192_168_1_254"),
+        id: 0x9999,
+        flag1: 1,
+        flag2: 1,
+        description: MfcString::new("RUST_NODE"),
     };
 
-    let payload = ModbusSlaveSkeleton {
+    let config = ModbusSlaveConfig {
         base,
-        slave_desc: MfcString::new("Safe"),
-        safe_zone: (),
+        description: MfcString::new("Inject Success!"),
+        enabled: 1,
+        ip_address: 0xC0A80164,
+        port: 502,
+        timeout: 2000,
+        retry_count: 5,
+        unit_id: 1,
+        padding: [0u8; 4],
+
+        mapping_count: 0,
+        version_reserved: 0,
+        order_count: 0,
+        channel_count: 0,
+        extra_blob_len: 0,
+        tail_padding: (),
     };
 
     let mut file = std::fs::File::create("payload.bin")?;
-    payload.write(&mut file)?;
+    config.write(&mut file)?;
 
-    println!("Skeleton Payload Generated! Size: {} bytes", file.metadata()?.len());
+    println!("Payload Ready! Size: {} bytes", file.metadata()?.len());
     Ok(())
 }
