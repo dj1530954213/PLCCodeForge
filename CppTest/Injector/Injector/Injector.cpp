@@ -73,6 +73,28 @@ extern "C" __declspec(dllexport) void RunPoc()
 
         // 如果能走到这里，说明成功了！
         ::MessageBox(NULL, _T("🎉 Success: Object Hydrated!"), _T("Injector"), MB_OK);
+
+        // === 核心挂载逻辑 ===
+        void* pManager = *(void**)0x0084713C; // TCP Manager 地址
+        if (!pManager) {
+            ShowError(_T("TCP Manager Not Initialized! Open a project first."));
+        } else {
+            void** vtable = *(void***)pManager;
+            void* pAddFunc = vtable[34];
+            CObject* pSlave = obj;
+            int result = 0;
+
+            __asm {
+                push 1
+                push pSlave
+                mov ecx, pManager
+                call pAddFunc
+                mov result, eax
+            }
+
+            ::MessageBox(NULL, _T("🎉 Attached! Check the Tree View!"), _T("Success"), MB_OK);
+            obj = nullptr;
+        }
     }
     catch (CException* e) {
         TCHAR szCause[1024] = { 0 };
@@ -84,9 +106,13 @@ extern "C" __declspec(dllexport) void RunPoc()
 
         e->Delete();
     }
+    catch (...) {
+        ShowError(_T("Crash during Attachment!"));
+    }
 
-    // 清理
-    delete obj;
+    if (obj) {
+        delete obj;
+    }
     ar.Close();
     memFile.Close();
 }
