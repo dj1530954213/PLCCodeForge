@@ -79,7 +79,8 @@ extern "C" __declspec(dllexport) void RunPoc()
         ShowError(_T("Crash with 3 args."));
     }
 
-    // 暂不 delete obj，避免析构潜在崩溃
+    // POC 阶段只生不灭，避免析构潜在崩溃
+    obj = nullptr;
     ar.Close();
     memFile.Close();
 }
