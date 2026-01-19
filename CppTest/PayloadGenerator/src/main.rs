@@ -55,23 +55,22 @@ struct ModbusSlaveConfig {
     // --- 真实业务数据 ---
     description: MfcString,
     enabled: u8,
-    ip_address: u32, // C0 A8 01 64 (192.168.1.100)
-    port: u32,       // 502
-    timeout: u32,    // 2000
-    retry_count: u32,// 3
-    unit_id: u32,    // 1
+    ip_address: u32,
+    port: u32,
+    timeout: u32,
+    retry_count: u32,
+    unit_id: u32,
 
-    padding: [u8; 4], // Padding
+    padding: [u8; 4],
 
-    mapping_count: u16,     // 0
-    version_reserved: u32,  // 0
-    order_count: u32,       // 0
-    channel_count: u32,     // 0
-    extra_blob_len: u16,    // 0
+    mapping_count: u16,
+    version_reserved: u32,
+    order_count: u32,
+    channel_count: u32,
+    extra_blob_len: u16,
 
-    // 保留安全缓冲垫，确保万无一失
-    #[brw(pad_after = 128)]
-    tail_padding: (),
+    // 显式物理填充 (1KB)
+    tail_padding: [u8; 1024],
 }
 
 fn encode_gbk_or_ascii(value: &str) -> Vec<u8> {
@@ -82,7 +81,6 @@ fn encode_gbk_or_ascii(value: &str) -> Vec<u8> {
 }
 
 fn main() -> BinResult<()> {
-    // 构造头部：注意 Name 必须唯一，不要和现有的重复
     let base = DeviceBase {
         name: MfcString::new("TCPIO_1_1_192_168_1_254"),
         id: 0x9999,
@@ -107,12 +105,13 @@ fn main() -> BinResult<()> {
         order_count: 0,
         channel_count: 0,
         extra_blob_len: 0,
-        tail_padding: (),
+
+        tail_padding: [0u8; 1024],
     };
 
     let mut file = std::fs::File::create("payload.bin")?;
     config.write(&mut file)?;
 
-    println!("Payload Ready! Size: {} bytes", file.metadata()?.len());
+    println!("Payload Ready! Size: {} bytes (Verified Padding)", file.metadata()?.len());
     Ok(())
 }
