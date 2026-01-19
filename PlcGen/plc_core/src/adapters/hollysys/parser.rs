@@ -1542,13 +1542,22 @@ fn try_read_variables_safety(reader: &mut MfcReader) -> Result<Vec<Variable>> {
     }
     let mut vars = Vec::with_capacity(count);
     for _ in 0..count {
+        skip_safety_zero_padding(reader)?;
         let type_id = reader.read_u8()?;
         match type_id {
             0x15 | 0x0A => vars.push(read_variable_safety(reader)?),
+            0x18 => vars.extend(read_safety_group_variables(reader)?),
             _ => bail!("不支持的变量类型: 0x{:02X}", type_id),
         }
     }
     Ok(vars)
+}
+
+fn skip_safety_zero_padding(reader: &mut MfcReader) -> Result<()> {
+    while reader.remaining_len() > 0 && reader.peek_u8()? == 0x00 {
+        let _ = reader.read_u8()?;
+    }
+    Ok(())
 }
 
 fn skip_safety_var_header(reader: &mut MfcReader) -> Result<()> {
@@ -1558,6 +1567,114 @@ fn skip_safety_var_header(reader: &mut MfcReader) -> Result<()> {
     let buf = reader.remaining_slice();
     if buf.len() >= 4 && buf[0] == 0x00 && buf[1] == 0x02 && buf[2] == 0x41 && buf[3] == 0x78 {
         let _ = reader.read_bytes(4)?;
+        let name_start = reader.position();
+        if let Ok(_) = reader.read_mfc_string() {
+            if reader.remaining_len() >= 4 {
+                let count = reader.peek_u32()? as usize;
+                if count > 2000 && reader.remaining_len() >= 5 {
+                    let extra_pos = reader.position();
+                    let _ = reader.read_u8()?;
+                    let count2 = reader.peek_u32()? as usize;
+                    if count2 > 2000 {
+                        reader.seek_to(extra_pos)?;
+                    }
+                }
+            }
+        } else {
+            reader.seek_to(name_start)?;
+        }
+    }
+    Ok(())
+}
+
+fn read_safety_group_variables(reader: &mut MfcReader) -> Result<Vec<Variable>> {
+    let parent = read_variable_safety(reader)?;
+    let prefix = parent.name.clone();
+    let input_count = reader.read_u32()? as usize;
+    let mut vars = read_safety_group_members(reader, input_count, &prefix)?;
+    let output_count = reader.read_u32()? as usize;
+    vars.extend(read_safety_group_members(reader, output_count, &prefix)?);
+    skip_safety_group_extra(reader)?;
+    Ok(vars)
+}
+
+fn read_safety_group_members(
+    reader: &mut MfcReader,
+    count: usize,
+    prefix: &str,
+) -> Result<Vec<Variable>> {
+    if count > 2000 {
+        bail!("成员变量数量异常: {}", count);
+    }
+    let mut vars = Vec::with_capacity(count);
+    for _ in 0..count {
+        let type_id = reader.read_u8()?;
+        match type_id {
+            0x15 | 0x0A => {
+                let mut var = read_variable_safety(reader)?;
+                var.name = format!("{}.{}", prefix, var.name);
+                vars.push(var);
+            }
+            _ => bail!("不支持的成员变量类型: 0x{:02X}", type_id),
+        }
+    }
+    Ok(vars)
+}
+
+fn skip_safety_group_extra(reader: &mut MfcReader) -> Result<()> {
+    let slice = reader.remaining_slice();
+    if slice.len() < 9 {
+        return Ok(());
+    }
+    let count_a = u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]) as usize;
+    let count_b = u32::from_le_bytes([slice[4], slice[5], slice[6], slice[7]]) as usize;
+    let next_type = slice[8];
+    if count_a > 2000 || count_b > 2000 {
+        return Ok(());
+    }
+    if next_type != 0x18 && next_type != 0x15 && next_type != 0x0A {
+        return Ok(());
+    }
+    let _ = reader.read_u32()?;
+    let extra_count = reader.read_u32()? as usize;
+    if extra_count > 2000 {
+        bail!("扩展变量数量异常: {}", extra_count);
+    }
+    for _ in 0..extra_count {
+        let type_id = reader.read_u8()?;
+        match type_id {
+            0x18 => skip_safety_group(reader)?,
+            0x15 | 0x0A => {
+                let _ = read_variable_safety(reader)?;
+            }
+            _ => bail!("不支持的扩展变量类型: 0x{:02X}", type_id),
+        }
+    }
+    Ok(())
+}
+
+fn skip_safety_group(reader: &mut MfcReader) -> Result<()> {
+    let _ = read_variable_safety(reader)?;
+    let input_count = reader.read_u32()? as usize;
+    skip_safety_group_members(reader, input_count)?;
+    let output_count = reader.read_u32()? as usize;
+    skip_safety_group_members(reader, output_count)?;
+    skip_safety_group_extra(reader)?;
+    Ok(())
+}
+
+fn skip_safety_group_members(reader: &mut MfcReader, count: usize) -> Result<()> {
+    if count > 2000 {
+        bail!("成员变量数量异常: {}", count);
+    }
+    for _ in 0..count {
+        let type_id = reader.read_u8()?;
+        match type_id {
+            0x15 | 0x0A => {
+                let _ = read_variable_safety(reader)?;
+            }
+            _ => bail!("不支持的成员变量类型: 0x{:02X}", type_id),
+        }
     }
     Ok(())
 }
@@ -1883,6 +2000,9 @@ fn organize_variables(
         if let Some(members) = symbol_lookup.get(&type_name) {
             let mut group_children = Vec::new();
             for (idx, var) in flat_vars.iter().enumerate() {
+                if var.name.contains('.') {
+                    continue;
+                }
                 let base = var.name.rsplit('.').next().unwrap_or(var.name.as_str());
                 if members.contains(base) {
                     group_children.push(VariableNode::Leaf(var.clone()));
