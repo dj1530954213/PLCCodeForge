@@ -59,6 +59,7 @@ extern "C" __declspec(dllexport) void RunPoc()
         return;
     }
 
+    /*
     try {
         DWORD* vtable = *(DWORD**)pManager;
         void* pAddFunc = (void*)vtable[25];
@@ -78,6 +79,7 @@ extern "C" __declspec(dllexport) void RunPoc()
     } catch (...) {
         ShowError(_T("Crash with 3 args."));
     }
+    */
 
     // POC 阶段只生不灭，避免析构潜在崩溃
     obj = nullptr;
