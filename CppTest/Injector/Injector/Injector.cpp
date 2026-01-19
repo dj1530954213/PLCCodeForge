@@ -66,16 +66,17 @@ extern "C" __declspec(dllexport) void RunPoc()
         int result = 0;
         __asm {
             push 1
+            push 0
             push obj
             mov ecx, pManager
             call pAddFunc
             mov result, eax
         }
 
-        ::MessageBox(NULL, _T("Attached with 2 Args (Offset 100)!"), _T("Success"), MB_OK);
+        ::MessageBox(NULL, _T("Attached with 3 Args! Check Tree!"), _T("Success"), MB_OK);
         obj = nullptr;
     } catch (...) {
-        ShowError(_T("Crash at Offset 100 with 2 args"));
+        ShowError(_T("Crash with 3 args."));
     }
 
     // 暂不 delete obj，避免析构潜在崩溃
