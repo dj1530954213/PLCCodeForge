@@ -43,6 +43,23 @@ Docs/组态软件自动操作/Selectors/*.local.json
 **/x86/
 **/Win32/
 
+# Native build artifacts
+**/*.obj
+**/*.pdb
+**/*.iobj
+**/*.ipdb
+**/*.pch
+**/*.exp
+**/*.lib
+**/*.dll
+**/*.tlog
+**/*.tlog/
+**/*.recipe
+**/ipch/
+
+# Local payload outputs
+**/payload.bin
+
 # Editor and OS files
 .vscode/*
 !.vscode/extensions.json
