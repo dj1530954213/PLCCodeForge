@@ -1025,7 +1025,7 @@ fn looks_like_class_sig(reader: &MfcReader) -> bool {
 
 fn skip_network_tail(reader: &mut MfcReader) -> Result<()> {
     while reader.remaining_len() > 0 {
-        if looks_like_class_sig(reader) {
+        if looks_like_class_sig(reader) || looks_like_safety_var_table(reader) {
             break;
         }
         let _ = reader.read_u8()?;
@@ -1035,7 +1035,21 @@ fn skip_network_tail(reader: &mut MfcReader) -> Result<()> {
 
 fn seek_to_network_list_start(reader: &mut MfcReader) -> Result<()> {
     let start = reader.position();
-    let buf = reader.remaining_slice();
+    let buf = reader.inner.get_ref();
+    if let Some(offset) = find_network_list_start(&buf[start..]) {
+        reader.seek_to(start + offset)?;
+        return Ok(());
+    }
+    if start > 0 {
+        if let Some(offset) = find_network_list_start(buf) {
+            reader.seek_to(offset)?;
+            return Ok(());
+        }
+    }
+    bail!("未找到网络列表起点");
+}
+
+fn find_network_list_start(buf: &[u8]) -> Option<usize> {
     for offset in 0..buf.len().saturating_sub(8) {
         let count = u16::from_le_bytes([buf[offset], buf[offset + 1]]) as usize;
         if count == 0 || count > 5000 {
@@ -1058,10 +1072,9 @@ fn seek_to_network_list_start(reader: &mut MfcReader) -> Result<()> {
         if !name_bytes.iter().all(|b| b.is_ascii_graphic()) {
             continue;
         }
-        reader.seek_to(start + offset)?;
-        return Ok(());
+        return Some(offset);
     }
-    bail!("未找到网络列表起点");
+    None
 }
 
 #[derive(Debug, Clone)]
@@ -1083,21 +1096,45 @@ fn read_safety_topology_raw(
 ) -> Result<(Vec<SafetyTopologyEntry>, Vec<LdElement>)> {
     let mut topology = Vec::new();
     let mut inline_elements = Vec::new();
+    let start_pos = reader.position();
+    let stop_at = {
+        let class_offset = find_class_sig_ahead(reader, reader.remaining_len());
+        let var_offset = find_safety_var_table_offset(reader);
+        match (class_offset, var_offset) {
+            (Some(a), Some(b)) => Some(start_pos + a.min(b)),
+            (Some(a), None) => Some(start_pos + a),
+            (None, Some(b)) => Some(start_pos + b),
+            (None, None) => None,
+        }
+    };
     loop {
-        if looks_like_safety_var_table(reader) {
+        if looks_like_safety_var_table(reader) || looks_like_safety_var_table_ahead(reader, 16) {
             break;
         }
         if looks_like_class_sig(reader) {
             let pos = reader.position();
-            let class_name = read_class_sig(reader)?;
-            if class_name == "CLDBox" {
-                let elem = read_safety_inline_element(reader, variant, serialize_version)?;
-                inline_elements.push(elem.clone());
-                topology.push(SafetyTopologyEntry::InlineElement(elem));
-                continue;
-            }
             reader.seek_to(pos)?;
             break;
+        }
+        if let Some(stop_at) = stop_at {
+            let pos = reader.position();
+            if pos >= stop_at {
+                reader.seek_to(stop_at)?;
+                break;
+            }
+            let remaining = stop_at.saturating_sub(pos);
+            if remaining < 2 {
+                reader.seek_to(stop_at)?;
+                break;
+            }
+            if remaining < 6 {
+                if let Ok(tag) = reader.peek_u16() {
+                    if tag < 0x8000 {
+                        reader.seek_to(stop_at)?;
+                        break;
+                    }
+                }
+            }
         }
         if reader.remaining_len() < 2 {
             break;
@@ -1488,19 +1525,25 @@ fn read_variables_normal(reader: &mut MfcReader) -> Result<Vec<Variable>> {
 }
 
 fn try_read_variables_normal(reader: &mut MfcReader) -> Result<Vec<Variable>> {
+    let _ = try_read_normal_var_header(reader)?;
     let mut vars = Vec::new();
     while reader.remaining_len() > 0 {
+        skip_normal_zero_padding(reader)?;
         if reader.remaining_all_zero() {
             break;
         }
         let next = reader.peek_u8()?;
-        if next != 0x15 {
+        if next != 0x15 && next != 0x18 {
             if vars.is_empty() {
                 bail!("未对齐到 Normal 变量表");
             }
             break;
         }
-        let _ = reader.read_u8()?; // tag
+        let tag = reader.read_u8()?;
+        if tag == 0x18 {
+            vars.extend(read_normal_group_variables(reader)?);
+            continue;
+        }
         let var = read_variable_normal(reader);
         match var {
             Ok(v) => {
@@ -1679,6 +1722,85 @@ fn skip_safety_group_members(reader: &mut MfcReader, count: usize) -> Result<()>
     Ok(())
 }
 
+fn try_read_normal_var_header(reader: &mut MfcReader) -> Result<Option<usize>> {
+    let start = reader.position();
+    let name = match reader.read_mfc_string() {
+        Ok(s) => s,
+        Err(_) => {
+            reader.seek_to(start)?;
+            return Ok(None);
+        }
+    };
+    if name.is_empty() || !name.is_ascii() {
+        reader.seek_to(start)?;
+        return Ok(None);
+    }
+    if reader.remaining_len() == 0 {
+        reader.seek_to(start)?;
+        return Ok(None);
+    }
+    if reader.peek_u8()? == 0x00 {
+        let _ = reader.read_u8()?;
+    }
+    if reader.remaining_len() < 4 {
+        reader.seek_to(start)?;
+        return Ok(None);
+    }
+    let count = reader.read_u32()? as usize;
+    if count == 0 || count > 2000 {
+        reader.seek_to(start)?;
+        return Ok(None);
+    }
+    if reader.remaining_len() == 0 {
+        reader.seek_to(start)?;
+        return Ok(None);
+    }
+    let next = reader.peek_u8()?;
+    if next != 0x18 && next != 0x15 {
+        reader.seek_to(start)?;
+        return Ok(None);
+    }
+    Ok(Some(count))
+}
+
+fn skip_normal_zero_padding(reader: &mut MfcReader) -> Result<()> {
+    while reader.remaining_len() > 0 && reader.peek_u8()? == 0x00 {
+        let _ = reader.read_u8()?;
+    }
+    Ok(())
+}
+
+fn read_normal_group_variables(reader: &mut MfcReader) -> Result<Vec<Variable>> {
+    let parent = read_variable_normal(reader)?;
+    let prefix = parent.name.clone();
+    let input_count = reader.read_u32()? as usize;
+    let mut vars = read_normal_group_members(reader, input_count, &prefix)?;
+    let output_count = reader.read_u32()? as usize;
+    vars.extend(read_normal_group_members(reader, output_count, &prefix)?);
+    Ok(vars)
+}
+
+fn read_normal_group_members(
+    reader: &mut MfcReader,
+    count: usize,
+    prefix: &str,
+) -> Result<Vec<Variable>> {
+    if count > 2000 {
+        bail!("成员变量数量异常: {}", count);
+    }
+    let mut vars = Vec::with_capacity(count);
+    for _ in 0..count {
+        let type_id = reader.read_u8()?;
+        if type_id != 0x15 {
+            bail!("不支持的成员变量类型: 0x{:02X}", type_id);
+        }
+        let mut var = read_variable_normal(reader)?;
+        var.name = format!("{}.{}", prefix, var.name);
+        vars.push(var);
+    }
+    Ok(vars)
+}
+
 fn looks_like_safety_var_table(reader: &MfcReader) -> bool {
     let buf = reader.remaining_slice();
     if buf.len() < 6 {
@@ -1700,6 +1822,62 @@ fn looks_like_safety_var_table(reader: &MfcReader) -> bool {
         return false;
     }
     buf[6..6 + name_len].iter().all(|b| b.is_ascii_graphic())
+}
+
+fn looks_like_safety_var_table_ahead(reader: &MfcReader, window: usize) -> bool {
+    let buf = reader.remaining_slice();
+    if buf.len() < 4 {
+        return false;
+    }
+    let max = window.min(buf.len().saturating_sub(4));
+    for offset in 0..=max {
+        if buf[offset..].starts_with(&[0x00, 0x02, 0x41, 0x78]) {
+            return true;
+        }
+    }
+    false
+}
+
+fn find_safety_var_table_offset(reader: &MfcReader) -> Option<usize> {
+    let buf = reader.remaining_slice();
+    if buf.len() < 4 {
+        return None;
+    }
+    for offset in 0..=buf.len().saturating_sub(4) {
+        if buf[offset..].starts_with(&[0x00, 0x02, 0x41, 0x78]) {
+            return Some(offset);
+        }
+    }
+    None
+}
+
+fn find_class_sig_ahead(reader: &MfcReader, window: usize) -> Option<usize> {
+    let buf = reader.remaining_slice();
+    if buf.len() < 6 {
+        return None;
+    }
+    let max = window.min(buf.len().saturating_sub(6));
+    for offset in 0..=max {
+        if buf[offset] != 0xFF || buf[offset + 1] != 0xFF {
+            continue;
+        }
+        let name_len = u16::from_le_bytes([buf[offset + 4], buf[offset + 5]]) as usize;
+        if name_len == 0 || name_len > 64 {
+            continue;
+        }
+        if offset + 6 + name_len > buf.len() {
+            continue;
+        }
+        let name_bytes = &buf[offset + 6..offset + 6 + name_len];
+        if !name_bytes.starts_with(b"CLD") {
+            continue;
+        }
+        if !name_bytes.iter().all(|b| b.is_ascii_graphic()) {
+            continue;
+        }
+        return Some(offset);
+    }
+    None
 }
 
 fn seek_to_safety_var_table(reader: &mut MfcReader) -> Result<()> {
@@ -1748,6 +1926,20 @@ fn seek_to_normal_var_table(reader: &mut MfcReader) -> Result<()> {
     }
     let slice = &buf[start..];
     for offset in 0..slice.len().saturating_sub(8) {
+        if slice[offset] == 0x18 {
+            let mut idx = offset + 1;
+            if !scan_mfc_string_ascii(slice, &mut idx, 80)? {
+                continue;
+            }
+            if !scan_mfc_string_any(slice, &mut idx, 80)? {
+                continue;
+            }
+            if !scan_mfc_string_ascii(slice, &mut idx, 80)? {
+                continue;
+            }
+            reader.seek_to(start + offset)?;
+            return Ok(());
+        }
         if slice[offset] != 0x15 {
             continue;
         }
