@@ -61,7 +61,7 @@ extern "C" __declspec(dllexport) void RunPoc()
 
     try {
         DWORD* vtable = *(DWORD**)pManager;
-        void* pAddFunc = (void*)vtable[25];
+        void* pAddFunc = (void*)vtable[26];
 
         int result = 0;
         __asm {
