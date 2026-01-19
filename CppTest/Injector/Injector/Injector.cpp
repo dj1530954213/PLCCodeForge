@@ -52,23 +52,30 @@ extern "C" __declspec(dllexport) void RunPoc()
         return;
     }
 
-    // 2. 挂载逻辑 (暂时屏蔽)
-    /*
+    // 2. 挂载到 TCP Manager
     void* pManager = *(void**)0x0084713C;
-    if (pManager) {
-        try {
-            DWORD* vtable = *(DWORD**)pManager;
-            void* pAddFunc = (void*)vtable[34];
-            __asm {
-                push 1
-                push obj
-                mov ecx, pManager
-                call pAddFunc
-            }
-            ::MessageBox(NULL, _T("Attached!"), _T("Done"), MB_OK);
-        } catch (...) {}
+    if (!pManager) {
+        ShowError(_T("Manager NULL"));
+        return;
     }
-    */
+
+    try {
+        DWORD* vtable = *(DWORD**)pManager;
+        void* pAddFunc = (void*)vtable[25];
+
+        int result = 0;
+        __asm {
+            push obj
+            mov ecx, pManager
+            call pAddFunc
+            mov result, eax
+        }
+
+        ::MessageBox(NULL, _T("? Attached via Offset 100! Check Tree View!"), _T("Success"), MB_OK);
+        obj = nullptr;
+    } catch (...) {
+        ShowError(_T("Crash at Offset 100. Try Offset 104 next."));
+    }
 
     // 暂不 delete obj，避免析构潜在崩溃
     ar.Close();
