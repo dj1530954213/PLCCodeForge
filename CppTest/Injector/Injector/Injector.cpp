@@ -1,13 +1,12 @@
 #include <afx.h>
 #include <afxwin.h>
-#include <afxtempl.h>
 #include <vector>
 
 #define IDA_BASE 0x00400000
 #define TCP_MANAGER_IDA_ADDR 0x0084713C
 
 void ShowError(LPCTSTR msg) {
-    ::MessageBox(NULL, msg, _T("Injector Error"), MB_OK | MB_ICONERROR);
+    ::MessageBox(NULL, msg, _T("Injector Debug"), MB_OK | MB_ICONERROR);
 }
 
 extern "C" __declspec(dllexport) void RunPoc()
@@ -63,28 +62,34 @@ extern "C" __declspec(dllexport) void RunPoc()
     void** pManagerPtr = (void**)(baseAddr + offset);
 
     if (IsBadReadPtr(pManagerPtr, 4)) {
-        CString msg;
-        msg.Format(_T("Calculated address is invalid!\nBase: %p, Offset: %X, Target: %p"),
-                   baseAddr, (unsigned int)offset, pManagerPtr);
-        ShowError(msg);
+        ShowError(_T("Manager Pointer Address Invalid"));
         return;
     }
 
-    CObject* pManager = (CObject*)(*pManagerPtr);
-    if (!pManager) {
-        ShowError(_T("Manager is NULL (Open a project first)"));
+    void* pManager = *pManagerPtr;
+    if (!pManager || IsBadReadPtr(pManager, 4)) {
+        ShowError(_T("Manager Instance is NULL or Invalid (Open a project first)"));
         return;
     }
 
     try {
-        CObList* pList = (CObList*)pManager;
-        pList->AddTail(pObj);
+        DWORD* vtable = *(DWORD**)pManager;
+        void* pAddFunc = (void*)vtable[25];
 
-        ::MessageBox(NULL, _T("🎉 Success: Attached via standard MFC!"), _T("Done"), MB_OK);
+        int result = 0;
+        __asm {
+            push 1
+            push pObj
+            mov ecx, pManager
+            call pAddFunc
+            mov result, eax
+        }
+
+        ::MessageBox(NULL, _T("🎉 Attached! Check Tree View!"), _T("Success"), MB_OK);
         pObj = nullptr;
     }
     catch (...) {
-        ShowError(_T("Crash during AddTail"));
+        ShowError(_T("Crash inside Add Function (Offset 100)"));
     }
 
     if (pObj) {
