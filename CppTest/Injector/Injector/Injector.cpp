@@ -61,20 +61,22 @@ extern "C" __declspec(dllexport) void RunPoc()
 
     try {
         DWORD* vtable = *(DWORD**)pManager;
-        void* pAddFunc = (void*)vtable[26];
+        void* pAddFunc = (void*)vtable[34];
 
         int result = 0;
         __asm {
+            push 1
+            push 0
             push obj
             mov ecx, pManager
             call pAddFunc
             mov result, eax
         }
 
-        ::MessageBox(NULL, _T("Attached! Check Tree View!"), _T("Done"), MB_OK);
+        ::MessageBox(NULL, _T("Attached with 3 Args! Check Tree!"), _T("Success"), MB_OK);
         obj = nullptr;
     } catch (...) {
-        ShowError(_T("Crash during Attach"));
+        ShowError(_T("Crash with 3 Args"));
     }
 
     // 暂不 delete obj，避免析构潜在崩溃
