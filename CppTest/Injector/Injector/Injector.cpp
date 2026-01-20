@@ -58,7 +58,13 @@ extern "C" __declspec(dllexport) void RunPoc()
         return;
     }
 
-    DWORD_PTR baseAddr = (DWORD_PTR)GetModuleHandle(NULL);
+    HMODULE hMod = GetModuleHandle(_T("dllDPLogic.dll"));
+    if (!hMod) {
+        ShowError(_T("dllDPLogic.dll not loaded!"));
+        delete pObj;
+        return;
+    }
+    DWORD_PTR baseAddr = (DWORD_PTR)hMod;
     DWORD_PTR offset = TCP_MANAGER_IDA_ADDR - IDA_BASE;
     void** pManagerPtr = (void**)(baseAddr + offset);
     void* pManager = *pManagerPtr;
