@@ -46,73 +46,76 @@ impl BinWrite for MfcString {
 #[binrw::binwrite]
 #[brw(little)]
 #[derive(Debug)]
-struct DeviceBase {
-    name: MfcString,
-    id: u32,
-    flag1: u8,
-    flag2: u8,
-    description: MfcString,
-}
-
-#[binrw::binwrite]
-#[brw(little)]
-#[derive(Debug)]
 struct ModbusSlaveV026 {
-    base: DeviceBase,
-    description: MfcString,
-    enabled: u8,
-    ip_address: u32,
-    port: u32,
-    timeout: u32,
-    retry_count: u32,
-    unit_id: u32,
-    flags: [u8; 4],
-    mapping_count: u16,
-    mappings: Vec<u8>,
-    order_count: u32,
-    orders: Vec<u8>,
-    channel_count: u32,
-    channels: Vec<u8>,
-    extra_len: u16,
-    extra_data: Vec<u8>,
+    s0: MfcString,
+    s1: MfcString,
+    s2: MfcString,
+    s3: MfcString,
+    s4: MfcString,
+    s5: MfcString,
+    s6: MfcString,
+    s7: MfcString,
+
+    str_enabled: MfcString,
+    str_ip_a: MfcString,
+    str_ip_b: MfcString,
+    str_unit_id: MfcString,
+    str_port: MfcString,
+    str_param13: MfcString,
+
+    magic1: u32,
+    magic2: u32,
+    magic3: u32,
+    magic4: u32,
+    magic5: u32,
+    magic6: u32,
+    magic7: u32,
+    magic8: u32,
+    magic9: u32,
+    magic10: u32,
+
+    padding1: u32,
+    padding2: u32,
+    tail_flag: u8,
 }
 
 fn main() -> BinResult<()> {
-    let mappings: Vec<u8> = vec![];
-    let orders: Vec<u8> = vec![];
-    let channels: Vec<u8> = vec![];
-    let extra_data: Vec<u8> = vec![];
-
     let payload = ModbusSlaveV026 {
-        base: DeviceBase {
-            name: MfcString::new("TCPIO_1_1_192_168_1_222"),
-            id: 0,
-            flag1: 1,
-            flag2: 1,
-            description: MfcString::new("Rust_Gen"),
-        },
-        description: MfcString::new("V026_Strict"),
-        enabled: 1,
-        ip_address: 0xC0A801DE,
-        port: 502,
-        timeout: 2000,
-        retry_count: 3,
-        unit_id: 1,
-        flags: [0, 0, 0, 0],
-        mapping_count: mappings.len() as u16,
-        mappings,
-        order_count: orders.len() as u32,
-        orders,
-        channel_count: channels.len() as u32,
-        channels,
-        extra_len: extra_data.len() as u16,
-        extra_data,
+        s0: MfcString::new(""),
+        s1: MfcString::new(""),
+        s2: MfcString::new(""),
+        s3: MfcString::new(""),
+        s4: MfcString::new(""),
+        s5: MfcString::new(""),
+        s6: MfcString::new(""),
+        s7: MfcString::new(""),
+
+        str_enabled: MfcString::new("1"),
+        str_ip_a: MfcString::new("192.168.1.100"),
+        str_ip_b: MfcString::new("0.0.0.0"),
+        str_unit_id: MfcString::new("1"),
+        str_port: MfcString::new("502"),
+        str_param13: MfcString::new("0"),
+
+        magic1: 0,
+        magic2: 1,
+        magic3: 0xFFFFFFFF,
+        magic4: 0,
+        magic5: 0xFF000000,
+        magic6: 0,
+        magic7: 0,
+        magic8: 0xFFFFFFFF,
+        magic9: 0,
+        magic10: 0xFFFFFFFF,
+        padding1: 0,
+        padding2: 0,
+        tail_flag: 0,
     };
 
     let mut file = File::create("payload.bin")?;
     payload.write(&mut file)?;
     println!(
-        "Payload (V026 Strict) Generated. Size: {} bytes",
+        "Payload (V026 String-Based) Generated. Size: {} bytes",
         file.metadata()?.len()
     );
     Ok(())
