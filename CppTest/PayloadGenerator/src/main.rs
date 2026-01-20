@@ -25,7 +25,6 @@ impl BinWrite for MfcString {
         let bytes = GBK
             .encode(&self.0, EncoderTrap::Strict)
             .unwrap_or_else(|_| self.0.as_bytes().to_vec());
-
         let len = bytes.len();
         if len < 255 {
             (len as u8).write_options(writer, endian, ())?;
@@ -51,7 +50,7 @@ struct DeviceBase {
 
 #[binrw::binwrite]
 #[brw(little)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct MappingItem {
     p1: u32,
     p2: u16,
@@ -69,6 +68,7 @@ struct ModbusSlaveConfig {
     description: MfcString,
     enabled: u8,
     ip_address: u32,
+    version_gap: u32,
     port: u32,
     timeout: u32,
     retry_count: u32,
@@ -82,10 +82,20 @@ struct ModbusSlaveConfig {
     channels: Vec<u8>,
     extra_data_len: u16,
     extra_data: Vec<u8>,
+    tail_padding: [u8; 32],
 }
 
 fn main() -> BinResult<()> {
-    let mappings: Vec<MappingItem> = vec![];
+    let item1 = MappingItem {
+        p1: 0x00013881,
+        p2: 1,
+        p3: 0,
+        p4: 3,
+        blob: vec![0xD0, 0x07],
+        blob_len: 2,
+    };
+
+    let mappings = vec![item1];
     let orders: Vec<u8> = vec![];
     let channels: Vec<u8> = vec![];
     let extra_data: Vec<u8> = vec![];
@@ -98,9 +108,10 @@ fn main() -> BinResult<()> {
             flag2: 1,
             description: MfcString::new("Rust_Gen"),
         },
-        description: MfcString::new("Injected Slave"),
+        description: MfcString::new("Injected with Real Data"),
         enabled: 1,
         ip_address: 0xC0A801C8,
+        version_gap: 0,
         port: 502,
         timeout: 2000,
         retry_count: 3,
@@ -114,11 +125,12 @@ fn main() -> BinResult<()> {
         channels,
         extra_data_len: extra_data.len() as u16,
         extra_data,
+        tail_padding: [0u8; 32],
     };
 
     let mut file = File::create("payload.bin")?;
     payload.write(&mut file)?;
 
-    println!("Payload Ready. Size: {}", file.metadata()?.len());
+    println!("Payload Updated. Size: {} bytes", file.metadata()?.len());
     Ok(())
 }
