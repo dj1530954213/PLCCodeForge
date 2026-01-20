@@ -7,8 +7,15 @@ use std::io::{Seek, Write};
 #[derive(Debug, Clone, Default)]
 struct MfcString(String);
 
+impl MfcString {
+    fn new(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
 impl BinWrite for MfcString {
     type Args<'a> = ();
+
     fn write_options<W: Seek + Write>(
         &self,
         writer: &mut W,
@@ -19,12 +26,18 @@ impl BinWrite for MfcString {
             .encode(&self.0, EncoderTrap::Strict)
             .unwrap_or_else(|_| self.0.as_bytes().to_vec());
         let len = bytes.len();
-        if len < 255 {
+
+        if len < 0xFF {
             (len as u8).write_options(writer, endian, ())?;
-        } else {
+        } else if len < 0xFFFE {
             0xFFu8.write_options(writer, endian, ())?;
             (len as u16).write_options(writer, endian, ())?;
+        } else {
+            0xFFu8.write_options(writer, endian, ())?;
+            0xFFFFu16.write_options(writer, endian, ())?;
+            (len as u32).write_options(writer, endian, ())?;
         }
+
         writer.write_all(&bytes)?;
         Ok(())
     }
@@ -43,59 +56,44 @@ struct DeviceBase {
 
 #[binrw::binwrite]
 #[brw(little)]
-#[derive(Debug, Clone)]
-struct MappingItem {
-    p1: u32,
-    p2: u16,
-    p3: u8,
-    p4: u16,
-    blob_len: u32,
-    blob: Vec<u8>,
-}
-
-#[binrw::binwrite]
-#[brw(little)]
 #[derive(Debug)]
-struct ModbusSlaveConfig {
+struct ModbusSlaveV026 {
     base: DeviceBase,
     description: MfcString,
     enabled: u8,
     ip_address: u32,
-    version_gap: u32,
     port: u32,
     timeout: u32,
     retry_count: u32,
     unit_id: u32,
     flags: [u8; 4],
     mapping_count: u16,
-    mappings: Vec<MappingItem>,
+    mappings: Vec<u8>,
     order_count: u32,
     orders: Vec<u8>,
     channel_count: u32,
     channels: Vec<u8>,
-    extra_data_len: u16,
+    extra_len: u16,
     extra_data: Vec<u8>,
-    tail_padding: [u8; 64],
 }
 
 fn main() -> BinResult<()> {
-    let mappings: Vec<MappingItem> = vec![];
+    let mappings: Vec<u8> = vec![];
     let orders: Vec<u8> = vec![];
     let channels: Vec<u8> = vec![];
     let extra_data: Vec<u8> = vec![];
 
-    let payload = ModbusSlaveConfig {
+    let payload = ModbusSlaveV026 {
         base: DeviceBase {
-            name: MfcString("TCPIO_1_1_192_168_1_201".to_string()),
+            name: MfcString::new("TCPIO_1_1_192_168_1_222"),
             id: 0,
             flag1: 1,
             flag2: 1,
-            description: MfcString("Rust_Gen".to_string()),
+            description: MfcString::new("Rust_Gen"),
         },
-        description: MfcString("Inject_Fixed".to_string()),
+        description: MfcString::new("V026_Strict"),
         enabled: 1,
-        ip_address: 0xC0A801C9,
-        version_gap: 0,
+        ip_address: 0xC0A801DE,
         port: 502,
         timeout: 2000,
         retry_count: 3,
@@ -107,14 +105,15 @@ fn main() -> BinResult<()> {
         orders,
         channel_count: channels.len() as u32,
         channels,
-        extra_data_len: extra_data.len() as u16,
+        extra_len: extra_data.len() as u16,
         extra_data,
-        tail_padding: [0u8; 64],
     };
 
     let mut file = File::create("payload.bin")?;
     payload.write(&mut file)?;
-
-    println!("Payload Ready. Size: {} bytes", file.metadata()?.len());
+    println!(
+        "Payload (V026 Strict) Generated. Size: {} bytes",
+        file.metadata()?.len()
+    );
     Ok(())
 }
