@@ -13,7 +13,7 @@ impl MfcString {
     }
 }
 
-impl BinWrite for MfcString {
+impl binrw::BinWrite for MfcString {
     type Args<'a> = ();
 
     fn write_options<W: Seek + Write>(
