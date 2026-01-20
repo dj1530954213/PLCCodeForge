@@ -7,15 +7,8 @@ use std::io::{Seek, Write};
 #[derive(Debug, Clone, Default)]
 struct MfcString(String);
 
-impl MfcString {
-    fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-}
-
 impl BinWrite for MfcString {
     type Args<'a> = ();
-
     fn write_options<W: Seek + Write>(
         &self,
         writer: &mut W,
@@ -82,35 +75,26 @@ struct ModbusSlaveConfig {
     channels: Vec<u8>,
     extra_data_len: u16,
     extra_data: Vec<u8>,
-    tail_padding: [u8; 32],
+    tail_padding: [u8; 64],
 }
 
 fn main() -> BinResult<()> {
-    let item1 = MappingItem {
-        p1: 0x00013881,
-        p2: 1,
-        p3: 0,
-        p4: 3,
-        blob: vec![0xD0, 0x07],
-        blob_len: 2,
-    };
-
-    let mappings = vec![item1];
+    let mappings: Vec<MappingItem> = vec![];
     let orders: Vec<u8> = vec![];
     let channels: Vec<u8> = vec![];
     let extra_data: Vec<u8> = vec![];
 
     let payload = ModbusSlaveConfig {
         base: DeviceBase {
-            name: MfcString::new("TCPIO_1_1_192_168_1_200"),
+            name: MfcString("TCPIO_1_1_192_168_1_201".to_string()),
             id: 0,
             flag1: 1,
             flag2: 1,
-            description: MfcString::new("Rust_Gen"),
+            description: MfcString("Rust_Gen".to_string()),
         },
-        description: MfcString::new("Injected with Real Data"),
+        description: MfcString("Inject_Fixed".to_string()),
         enabled: 1,
-        ip_address: 0xC0A801C8,
+        ip_address: 0xC0A801C9,
         version_gap: 0,
         port: 502,
         timeout: 2000,
@@ -125,12 +109,12 @@ fn main() -> BinResult<()> {
         channels,
         extra_data_len: extra_data.len() as u16,
         extra_data,
-        tail_padding: [0u8; 32],
+        tail_padding: [0u8; 64],
     };
 
     let mut file = File::create("payload.bin")?;
     payload.write(&mut file)?;
 
-    println!("Payload Updated. Size: {} bytes", file.metadata()?.len());
+    println!("Payload Ready. Size: {} bytes", file.metadata()?.len());
     Ok(())
 }
