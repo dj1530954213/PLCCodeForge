@@ -1,4 +1,5 @@
-﻿#include <Windows.h>
+﻿#include <afxwin.h>
+#include <Windows.h>
 #include <iostream>
 // 必须包含 MinHook.h
 #include <MinHook.h> 
@@ -25,11 +26,11 @@ DWORD_PTR g_ModuleBase = 0;
 typedef void(__thiscall* tOnLButtonDown)(void* pThis, UINT nFlags, POINT point);
 typedef void(__thiscall* tOnAddLDCoil)(void* pThis);
 
-// 保存原函数的 trampoline 指针
+// 保存原函数的跳板指针
 tOnLButtonDown fpOnLButtonDown = NULL;
 
 // -------------------------------------------------------------
-// 我们的间谍函数 (Detour)
+// 我们的拦截函数
 // -------------------------------------------------------------
 void __fastcall Detour_OnLButtonDown(void* pThis, void* _edx, UINT nFlags, POINT point) {
 
@@ -47,7 +48,7 @@ void __fastcall Detour_OnLButtonDown(void* pThis, void* _edx, UINT nFlags, POINT
     fpOnLButtonDown(pThis, nFlags, point);
 }
 
-// 初始化 Hook
+// 初始化钩子
 void SetupHook() {
     g_ModuleBase = (DWORD_PTR)GetModuleHandle(L"LDMDL.dll");
     if (g_ModuleBase == 0) return;
@@ -56,20 +57,20 @@ void SetupHook() {
 
     DWORD_PTR targetAddress = g_ModuleBase + OFFSET_LBUTTON_DOWN;
 
-    // 创建 Hook
+    // 创建钩子
     if (MH_CreateHook((LPVOID)targetAddress, &Detour_OnLButtonDown, (LPVOID*)&fpOnLButtonDown) != MH_OK) {
         MessageBoxA(NULL, "Hook 创建失败！请检查偏移量。", "错误", MB_OK | MB_ICONERROR);
         return;
     }
 
-    // 启用 Hook
+    // 启用钩子
     if (MH_EnableHook(MH_ALL_HOOKS) != MH_OK) {
         MessageBoxA(NULL, "Hook 启用失败！", "错误", MB_OK | MB_ICONERROR);
         return;
     }
 }
 
-// 导出函数：供 Cheat Engine 调用测试
+// 导出函数：供作弊引擎调用测试
 extern "C" __declspec(dllexport) void RunTest() {
 
     if (g_AutoCapturedECX == nullptr) {
@@ -89,17 +90,18 @@ extern "C" __declspec(dllexport) void RunTest() {
     }
 }
 
-// DLL 入口
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
-{
-    switch (ul_reason_for_call)
-    {
-    case DLL_PROCESS_ATTACH:
-        SetupHook(); // 注入即安装
-        break;
-    case DLL_PROCESS_DETACH:
-        MH_Uninitialize(); // 清理
-        break;
+class AutoThinkBridgeApp : public CWinApp {
+public:
+    BOOL InitInstance() override {
+        CWinApp::InitInstance();
+        SetupHook();
+        return TRUE;
     }
-    return TRUE;
-}
+
+    int ExitInstance() override {
+        MH_Uninitialize();
+        return CWinApp::ExitInstance();
+    }
+};
+
+AutoThinkBridgeApp theApp;

@@ -14,15 +14,7 @@ serde = {version = "1.0.228",features = ["derive"]}
 # 二进制处理：byteorder 处理大小端，encoding_rs 处理 GBK 中文
 byteorder = "1.5.0"
 encoding_rs = "0.8.35"
+binrw = "0.13.3" # 二进制解析（binread/binwrite）
 
 log = "0.4.28"
-
-# Windows API：只引入我们需要的功能，减少编译时间
-[dependencies.windows]
-version = "0.48"
-features = [
-    "Win32_Foundation",        # 基础句柄 HWND, HANDLE
-    "Win32_System_DataExchange", # 剪贴板 OpenClipboard, SetClipboardData
-    "Win32_System_Memory",     # 内存分配 GlobalAlloc
-]
-
+serde_json = "1.0.145"

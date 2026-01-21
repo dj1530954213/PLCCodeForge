@@ -1,2 +1,3 @@
-C:\Program Files\Git\code\PLCCodeForge\DynamicInjection\AutoThinkBridge\AutoThinkBridge\dllmain.cpp;C:\Program Files\Git\code\PLCCodeForge\DynamicInjection\AutoThinkBridge\AutoThinkBridge\Release\dllmain.obj
-C:\Program Files\Git\code\PLCCodeForge\DynamicInjection\AutoThinkBridge\AutoThinkBridge\pch.cpp;C:\Program Files\Git\code\PLCCodeForge\DynamicInjection\AutoThinkBridge\AutoThinkBridge\Release\pch.obj
+c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\AutoThinkBridge\dllmain.cpp;c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\AutoThinkBridge\Release\dllmain.obj
+c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\AutoThinkBridge\Injector.cpp;c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\AutoThinkBridge\Release\Injector.obj
+c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\AutoThinkBridge\pch.cpp;c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\AutoThinkBridge\Release\pch.obj

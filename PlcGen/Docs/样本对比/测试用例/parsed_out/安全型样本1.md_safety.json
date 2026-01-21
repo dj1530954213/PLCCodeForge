@@ -1,0 +1,625 @@
+{
+  "name": "ESDV",
+  "header_strings": [
+    "MOV_CTRL",
+    "MOV_CTRL",
+    "MOV_CTRL"
+  ],
+  "variables": [
+    {
+      "name": "MOV_CTRL",
+      "type_name": "MOV_CTRL",
+      "children": [
+        {
+          "name": "CS",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "中心站控状态",
+          "var_id": 36873,
+          "addr_id": 1030,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "ZIX",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "远程就地状态，远程为1",
+          "var_id": 8322,
+          "addr_id": 1031,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "ZIA",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "故障状态，故障为1",
+          "var_id": 8299,
+          "addr_id": 1032,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "A_OPEN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "自动开阀命令",
+          "var_id": 720,
+          "addr_id": 1033,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "A_CLOSE",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "自动关阀命令",
+          "var_id": 1287,
+          "addr_id": 1034,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "ZIO",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "阀门开到位",
+          "var_id": 8313,
+          "addr_id": 1035,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "ZIC",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "阀门关到位",
+          "var_id": 8301,
+          "addr_id": 1036,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "ZIS",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "阀门运行状态",
+          "var_id": 8317,
+          "addr_id": 1037,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "DA_TIME",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "阀门超时时间",
+          "var_id": 995,
+          "addr_id": 1040,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "DA_RST",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "超时复位命令",
+          "var_id": 506,
+          "addr_id": 1044,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        }
+      ]
+    }
+  ],
+  "networks": [
+    {
+      "id": 31,
+      "label": "",
+      "comment": "",
+      "elements": [
+        {
+          "id": 33,
+          "type_code": "Box",
+          "name": "MOV_CTRL",
+          "comment": "",
+          "desc": "",
+          "instance": "MOV_CTRL_1003",
+          "pins": [
+            {
+              "name": "EN",
+              "variable": "",
+              "direction": "Input"
+            },
+            {
+              "name": "CS",
+              "variable": "CS01_SIS",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIX",
+              "variable": "ESDV_1003_RL",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIA",
+              "variable": "ESDV_1003_F",
+              "direction": "Input"
+            },
+            {
+              "name": "A_OPEN",
+              "variable": "FALSE",
+              "direction": "Input"
+            },
+            {
+              "name": "A_CLOSE",
+              "variable": "FALSE",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIO",
+              "variable": "ESDV_1003_OF",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIC",
+              "variable": "ESDV_1003_CF",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIS",
+              "variable": "FALSE",
+              "direction": "Input"
+            },
+            {
+              "name": "DA_TIME",
+              "variable": "T#100S",
+              "direction": "Input"
+            },
+            {
+              "name": "DA_RST",
+              "variable": "RESET_SIS",
+              "direction": "Input"
+            },
+            {
+              "name": "C_AM",
+              "variable": "C_AM_1003",
+              "direction": "Input"
+            },
+            {
+              "name": "S_AM",
+              "variable": "S_AM_1003",
+              "direction": "Input"
+            },
+            {
+              "name": "C_OPEN",
+              "variable": "C_OPEN_ESDV_1003",
+              "direction": "Input"
+            },
+            {
+              "name": "C_CLOSE",
+              "variable": "C_CLOSE_ESDV_1003",
+              "direction": "Input"
+            },
+            {
+              "name": "S_OPEN",
+              "variable": "S_OPEN_ESDV_1003",
+              "direction": "Input"
+            },
+            {
+              "name": "S_CLOSE",
+              "variable": "S_CLOSE_ESDV_1003",
+              "direction": "Input"
+            },
+            {
+              "name": "ENO",
+              "variable": "",
+              "direction": "Output"
+            },
+            {
+              "name": "AM",
+              "variable": "AM_ESDV_1003",
+              "direction": "Output"
+            },
+            {
+              "name": "XO",
+              "variable": "ESDV_1003_O",
+              "direction": "Output"
+            },
+            {
+              "name": "XC",
+              "variable": "ESDV_1003_C",
+              "direction": "Output"
+            },
+            {
+              "name": "DA",
+              "variable": "DA_ESDV_1003",
+              "direction": "Output"
+            },
+            {
+              "name": "C_AM",
+              "variable": "C_AM_1003",
+              "direction": "Output"
+            },
+            {
+              "name": "S_AM",
+              "variable": "S_AM_1003",
+              "direction": "Output"
+            },
+            {
+              "name": "C_OPEN",
+              "variable": "C_OPEN_ESDV_1003",
+              "direction": "Output"
+            },
+            {
+              "name": "C_CLOSE",
+              "variable": "C_CLOSE_ESDV_1003",
+              "direction": "Output"
+            },
+            {
+              "name": "S_OPEN",
+              "variable": "S_OPEN_ESDV_1003",
+              "direction": "Output"
+            },
+            {
+              "name": "S_CLOSE",
+              "variable": "S_CLOSE_ESDV_1003",
+              "direction": "Output"
+            }
+          ],
+          "connections": [],
+          "sub_type": 0
+        },
+        {
+          "id": 30,
+          "type_code": "Box",
+          "name": "MOV_CTRL",
+          "comment": "",
+          "desc": "",
+          "instance": "MOV_CTRL_1002",
+          "pins": [
+            {
+              "name": "EN",
+              "variable": "",
+              "direction": "Input"
+            },
+            {
+              "name": "CS",
+              "variable": "CS01_SIS",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIX",
+              "variable": "ESDV_1002_RL",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIA",
+              "variable": "ESDV_1002_F",
+              "direction": "Input"
+            },
+            {
+              "name": "A_OPEN",
+              "variable": "FALSE",
+              "direction": "Input"
+            },
+            {
+              "name": "A_CLOSE",
+              "variable": "FALSE",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIO",
+              "variable": "ESDV_1002_OF",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIC",
+              "variable": "ESDV_1002_CF",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIS",
+              "variable": "FALSE",
+              "direction": "Input"
+            },
+            {
+              "name": "DA_TIME",
+              "variable": "T#100S",
+              "direction": "Input"
+            },
+            {
+              "name": "DA_RST",
+              "variable": "RESET_SIS",
+              "direction": "Input"
+            },
+            {
+              "name": "C_AM",
+              "variable": "C_AM_1002",
+              "direction": "Input"
+            },
+            {
+              "name": "S_AM",
+              "variable": "S_AM_1002",
+              "direction": "Input"
+            },
+            {
+              "name": "C_OPEN",
+              "variable": "C_OPEN_ESDV_1002",
+              "direction": "Input"
+            },
+            {
+              "name": "C_CLOSE",
+              "variable": "C_CLOSE_ESDV_1002",
+              "direction": "Input"
+            },
+            {
+              "name": "S_OPEN",
+              "variable": "S_OPEN_ESDV_1002",
+              "direction": "Input"
+            },
+            {
+              "name": "S_CLOSE",
+              "variable": "S_CLOSE_ESDV_1002",
+              "direction": "Input"
+            },
+            {
+              "name": "ENO",
+              "variable": "",
+              "direction": "Output"
+            },
+            {
+              "name": "AM",
+              "variable": "AM_ESDV_1002",
+              "direction": "Output"
+            },
+            {
+              "name": "XO",
+              "variable": "ESDV_1002_O",
+              "direction": "Output"
+            },
+            {
+              "name": "XC",
+              "variable": "ESDV_1002_C",
+              "direction": "Output"
+            },
+            {
+              "name": "DA",
+              "variable": "DA_ESDV_1002",
+              "direction": "Output"
+            },
+            {
+              "name": "C_AM",
+              "variable": "C_AM_1002",
+              "direction": "Output"
+            },
+            {
+              "name": "S_AM",
+              "variable": "S_AM_1002",
+              "direction": "Output"
+            },
+            {
+              "name": "C_OPEN",
+              "variable": "C_OPEN_ESDV_1002",
+              "direction": "Output"
+            },
+            {
+              "name": "C_CLOSE",
+              "variable": "C_CLOSE_ESDV_1002",
+              "direction": "Output"
+            },
+            {
+              "name": "S_OPEN",
+              "variable": "S_OPEN_ESDV_1002",
+              "direction": "Output"
+            },
+            {
+              "name": "S_CLOSE",
+              "variable": "S_CLOSE_ESDV_1002",
+              "direction": "Output"
+            }
+          ],
+          "connections": [],
+          "sub_type": 0
+        },
+        {
+          "id": 27,
+          "type_code": "Box",
+          "name": "MOV_CTRL",
+          "comment": "",
+          "desc": "",
+          "instance": "MOV_CTRL_1001",
+          "pins": [
+            {
+              "name": "EN",
+              "variable": "",
+              "direction": "Input"
+            },
+            {
+              "name": "CS",
+              "variable": "CS01_SIS",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIX",
+              "variable": "ESDV_1001_RL",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIA",
+              "variable": "ESDV_1001_F",
+              "direction": "Input"
+            },
+            {
+              "name": "A_OPEN",
+              "variable": "FALSE",
+              "direction": "Input"
+            },
+            {
+              "name": "A_CLOSE",
+              "variable": "FALSE",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIO",
+              "variable": "ESDV_1001_OF",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIC",
+              "variable": "ESDV_1001_CF",
+              "direction": "Input"
+            },
+            {
+              "name": "ZIS",
+              "variable": "FALSE",
+              "direction": "Input"
+            },
+            {
+              "name": "DA_TIME",
+              "variable": "T#100S",
+              "direction": "Input"
+            },
+            {
+              "name": "DA_RST",
+              "variable": "RESET_SIS",
+              "direction": "Input"
+            },
+            {
+              "name": "C_AM",
+              "variable": "C_AM_1001",
+              "direction": "Input"
+            },
+            {
+              "name": "S_AM",
+              "variable": "S_AM_1001",
+              "direction": "Input"
+            },
+            {
+              "name": "C_OPEN",
+              "variable": "C_OPEN_ESDV_1001",
+              "direction": "Input"
+            },
+            {
+              "name": "C_CLOSE",
+              "variable": "C_CLOSE_ESDV_1001",
+              "direction": "Input"
+            },
+            {
+              "name": "S_OPEN",
+              "variable": "S_OPEN_ESDV_1001",
+              "direction": "Input"
+            },
+            {
+              "name": "S_CLOSE",
+              "variable": "S_CLOSE_ESDV_1001",
+              "direction": "Input"
+            },
+            {
+              "name": "ENO",
+              "variable": "",
+              "direction": "Output"
+            },
+            {
+              "name": "AM",
+              "variable": "AM_ESDV_1001",
+              "direction": "Output"
+            },
+            {
+              "name": "XO",
+              "variable": "ESDV_1001_O",
+              "direction": "Output"
+            },
+            {
+              "name": "XC",
+              "variable": "ESDV_1001_C",
+              "direction": "Output"
+            },
+            {
+              "name": "DA",
+              "variable": "DA_ESDV_1001",
+              "direction": "Output"
+            },
+            {
+              "name": "C_AM",
+              "variable": "C_AM_1001",
+              "direction": "Output"
+            },
+            {
+              "name": "S_AM",
+              "variable": "S_AM_1001",
+              "direction": "Output"
+            },
+            {
+              "name": "C_OPEN",
+              "variable": "C_OPEN_ESDV_1001",
+              "direction": "Output"
+            },
+            {
+              "name": "C_CLOSE",
+              "variable": "C_CLOSE_ESDV_1001",
+              "direction": "Output"
+            },
+            {
+              "name": "S_OPEN",
+              "variable": "S_OPEN_ESDV_1001",
+              "direction": "Output"
+            },
+            {
+              "name": "S_CLOSE",
+              "variable": "S_CLOSE_ESDV_1001",
+              "direction": "Output"
+            }
+          ],
+          "connections": [],
+          "sub_type": 0
+        },
+        {
+          "id": 32,
+          "type_code": "Assign",
+          "name": "CLDAssign",
+          "comment": "",
+          "desc": "type_id=0x0008",
+          "instance": "",
+          "pins": [],
+          "connections": [
+            1,
+            33
+          ],
+          "sub_type": 0
+        }
+      ]
+    }
+  ]
+}

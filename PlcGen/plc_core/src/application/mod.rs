@@ -1,1 +1,3 @@
-mod service;
+pub mod service;
+
+pub use service::PouService;

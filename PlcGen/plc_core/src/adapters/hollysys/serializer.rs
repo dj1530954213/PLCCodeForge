@@ -11,7 +11,7 @@ use encoding_rs::GBK;
 use log::debug;
 use crate::adapters::hollysys::protocol::PlcVariant;
 use super::config::HollysysConfig;
-use crate::ast::{ElementType, LdElement, Network, PinDirection, SafetyTopologyToken, UniversalPou, Variable};
+use crate::ast::{ElementType, LdElement, Network, PinDirection, SafetyTopologyToken, UniversalPou, Variable, VariableNode};
 
 /// 辅助类：处理 MFC 特有的二进制写入规则
 struct MfcWriter<W:Write>{
@@ -433,6 +433,7 @@ impl PouSerializer{
             ElementType::Box => "CLDBox",
             ElementType::Contact => "CLDContact",
             ElementType::Coil => "CLDOutput",
+            ElementType::Assign => "CLDAssign",
             _ => "CLDElement",
         };
 
@@ -445,6 +446,9 @@ impl PouSerializer{
             ElementType::Box => self.write_box(w, elem)?,
             ElementType::Contact => self.write_contact(w, elem)?,
             ElementType::Coil => self.write_output(w, elem)?,
+            ElementType::Assign => {
+                bail!("CLDAssign 序列化尚未实现");
+            }
             ElementType::Network => {
                 // 理论上网络不应该走到这里
                 bail!("ElementType::Network 不能走 write_element");
@@ -510,10 +514,10 @@ impl PouSerializer{
         Ok(())
     }
 
-    /// 功能块（CLDBox）：Base + (Normal版可选u32*2) + flag + CString + PinList。
+    /// 功能块（CLDBox）：Base + (Normal版固定u32*2) + flag + CString + PinList。
     fn write_box(&self, w: &mut MfcWriter<Vec<u8>>, elem: &LdElement) -> Result<()> {
-        if self.config.variant == PlcVariant::Normal && self.config.serialize_version >= 6 {
-            // Normal 版序列化版本 >= 6 时会多出两个 u32（用途未知）
+        if self.config.variant == PlcVariant::Normal {
+            // Normal 版写端无条件输出两个 u32（与 Serialize storing 分支一致）
             w.write_u32(0)?;
             w.write_u32(0)?;
         }
@@ -540,7 +544,7 @@ impl PouSerializer{
     }
 
     /// 写入单个引脚：Normal/Safety 的格式不同。
-    fn write_pin(&self, w: &mut MfcWriter<Vec<u8>>, pin: &crate::ast::BoxPin, direction: PinDirection) -> Result<()> {
+    fn write_pin(&self, w: &mut MfcWriter<Vec<u8>>, pin: &crate::ast::BoxPin, _direction: PinDirection) -> Result<()> {
         match self.config.variant {
             PlcVariant::Safety => {
                 // Safety 版：紧凑格式，只写 name + var
@@ -548,18 +552,12 @@ impl PouSerializer{
                 w.write_mfc_string(&pin.variable)?;
             }
             PlcVariant::Normal => {
-                // Normal 版：标准格式，含 flag 与可选 addr
-                w.write_u16(1)?; // flag 固定为 1（样本显示）
+                // Normal 版：u8,u8 + name + var + binding_id
+                w.write_u8(1)?; // flag0 常见为 0x01
+                w.write_u8(0)?; // flag1 常见为 0x00
                 w.write_mfc_string(&pin.name)?;
-
-                // 未绑定的变量在 Normal 样本中常用 "???" 占位
-                let var_name = if pin.variable.is_empty() { "???" } else { pin.variable.as_str() };
-                w.write_mfc_string(var_name)?;
-
-                if direction == PinDirection::Input {
-                    // 输入引脚会带 addr，占位值一般为 0xFFFFFFFF
-                    w.write_u32(0xFFFF_FFFF)?;
-                }
+                w.write_mfc_string(&pin.variable)?;
+                w.write_u32(0xFFFF_FFFF)?; // binding_id，未绑定默认 -1
             }
         }
         Ok(())
@@ -572,6 +570,8 @@ impl PouSerializer{
             (PlcVariant::Safety, ElementType::Contact) => 0x04,
             (PlcVariant::Normal, ElementType::Coil) => 0x06,
             (PlcVariant::Safety, ElementType::Coil) => 0x05,
+            (PlcVariant::Normal, ElementType::Assign) => 0x09,
+            (PlcVariant::Safety, ElementType::Assign) => 0x08,
             (_, ElementType::Box) => 0x03,
             // Network 不应落在这里
             (_, ElementType::Network) => {
@@ -584,16 +584,32 @@ impl PouSerializer{
     // =========================================================
     // 核心逻辑：变量表写入 (Custom Tag 0x15)
     // =========================================================
-    fn write_variables(&self, w: &mut MfcWriter<Vec<u8>>, pou: &UniversalPou) -> Result<()> {
-        if self.config.variant == PlcVariant::Safety {
-            if pou.variables.len() > u32::MAX as usize {
-                bail!("变量数量超出 u32 上限: {}", pou.variables.len());
+    fn flatten_variable_nodes(nodes: &[VariableNode], out: &mut Vec<Variable>) {
+        for node in nodes {
+            match node {
+                VariableNode::Leaf(var) => out.push(var.clone()),
+                VariableNode::Group { children, .. } => Self::flatten_variable_nodes(children, out),
             }
-            w.write_u32(pou.variables.len() as u32)?;
-            if pou.variables.is_empty() {
+        }
+    }
+
+    fn collect_variables(nodes: &[VariableNode]) -> Vec<Variable> {
+        let mut vars = Vec::new();
+        Self::flatten_variable_nodes(nodes, &mut vars);
+        vars
+    }
+
+    fn write_variables(&self, w: &mut MfcWriter<Vec<u8>>, pou: &UniversalPou) -> Result<()> {
+        let flat_vars = Self::collect_variables(&pou.variables);
+        if self.config.variant == PlcVariant::Safety {
+            if flat_vars.len() > u32::MAX as usize {
+                bail!("变量数量超出 u32 上限: {}", flat_vars.len());
+            }
+            w.write_u32(flat_vars.len() as u32)?;
+            if flat_vars.is_empty() {
                 return Ok(());
             }
-        } else if pou.variables.is_empty() {
+        } else if flat_vars.is_empty() {
             return Ok(());
         }
 
@@ -607,7 +623,7 @@ impl PouSerializer{
         let mut next_var_id: u16 = 1;
         let mut var_id_map: HashMap<String, u16> = HashMap::new();
 
-        for var in &pou.variables {
+        for var in &flat_vars {
             w.write_u8(0x15)?; // TypeID: Local Variable
             let var_id = assign_var_id(var, &mut var_id_map, &mut next_var_id)?;
 

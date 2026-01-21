@@ -2,7 +2,7 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
-      <FullPath>C:\Program Files\Git\code\PLCCodeForge\DynamicInjection\AutoThinkBridge\Release\AutoThinkBridge.dll</FullPath>
+      <FullPath>c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\Release\AutoThinkBridge.dll</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />

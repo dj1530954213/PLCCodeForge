@@ -1,2 +1,1 @@
-mod clipboard;
-mod hollysys;
+pub mod hollysys;

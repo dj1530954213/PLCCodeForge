@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read, Seek};
 use std::path::Path;
 
-use anyhow::{Result, bail, Context};
+use anyhow::{Result, bail};
 use binrw::{binread, BinRead, BinResult, Endian};
 use encoding_rs::GBK;
 use log::{debug, warn};
@@ -45,26 +45,26 @@ impl BinRead for MfcString {
 
 /// 引脚序列化的两种形态：
 /// - Compact：仅 Name/Var（Safety 常见）。
-/// - Standard：含 Flag（u16）以及可选 Addr（Normal 常见）。
+/// - Standard：u8,u8 + Name + Var + u32（Normal 常见）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PinFormat {
     Compact,
-    Standard { has_addr: bool },
+    Standard,
 }
 
 impl PinFormat {
-    /// 输入引脚：Normal 里通常包含 Addr；Safety 使用紧凑格式。
+    /// 输入引脚：Normal 使用标准格式；Safety 使用紧凑格式。
     pub fn for_input(variant: Variant) -> Self {
         match variant {
-            Variant::Normal => PinFormat::Standard { has_addr: true },
+            Variant::Normal => PinFormat::Standard,
             Variant::Safety => PinFormat::Compact,
         }
     }
 
-    /// 输出引脚：Normal 里无 Addr；Safety 使用紧凑格式。
+    /// 输出引脚：Normal 使用标准格式；Safety 使用紧凑格式。
     pub fn for_output(variant: Variant) -> Self {
         match variant {
-            Variant::Normal => PinFormat::Standard { has_addr: false },
+            Variant::Normal => PinFormat::Standard,
             Variant::Safety => PinFormat::Compact,
         }
     }
@@ -118,16 +118,18 @@ pub struct BoxVersionFields {
     pub extra_b: u32,
 }
 
-/// 引脚结构：根据 PinFormat 决定是否带 flag/addr。
+/// 引脚结构：根据 PinFormat 决定是否带 flag/binding_id。
 #[binread]
 #[br(little, import(format: PinFormat))]
 pub struct CLDPin {
-    #[br(if(matches!(format, PinFormat::Standard { .. })))]
-    pub flag: Option<u16>,
+    #[br(if(matches!(format, PinFormat::Standard)))]
+    pub flag0: Option<u8>,
+    #[br(if(matches!(format, PinFormat::Standard)))]
+    pub flag1: Option<u8>,
     pub name: MfcString,
     pub var: MfcString,
-    #[br(if(matches!(format, PinFormat::Standard { has_addr: true })))]
-    pub addr: Option<u32>,
+    #[br(if(matches!(format, PinFormat::Standard)))]
+    pub binding_id: Option<u32>,
 }
 
 /// CLDBox（功能块）：Base + 可选版本字段 + flag + geo + 输入/输出引脚列表。
@@ -269,6 +271,61 @@ impl<'a> MfcReader<'a> {
     }
 }
 
+fn read_len32_string(reader: &mut MfcReader, max_len: usize) -> Result<Option<String>> {
+    if reader.remaining_len() < 4 {
+        return Ok(None);
+    }
+    let len = reader.peek_u32()? as usize;
+    if len == 0 || len > max_len {
+        return Ok(None);
+    }
+    if reader.remaining_len() < 4 + len {
+        return Ok(None);
+    }
+    let _ = reader.read_u32()?;
+    let buf = reader.read_bytes(len)?;
+    let (cow, _, _) = GBK.decode(&buf);
+    Ok(Some(cow.into_owned()))
+}
+
+fn read_element_string(reader: &mut MfcReader, variant: Variant, max_len: usize) -> Result<String> {
+    if variant == Variant::Safety {
+        if let Some(value) = read_len32_string(reader, max_len)? {
+            return Ok(value);
+        }
+    }
+    reader.read_mfc_string()
+}
+
+fn read_element_fields(
+    reader: &mut MfcReader,
+    variant: Variant,
+) -> Result<(String, String, String, Vec<i32>)> {
+    let name = read_element_string(reader, variant, 120)?;
+    let (comment, desc) = if variant == Variant::Normal {
+        (
+            read_element_string(reader, variant, 160)?,
+            read_element_string(reader, variant, 200)?,
+        )
+    } else {
+        (String::new(), String::new())
+    };
+    let conn_count = reader.read_u32()? as usize;
+    if conn_count > 20000 {
+        bail!("连接数量异常: {}", conn_count);
+    }
+    let mut connections = Vec::new();
+    if conn_count > 0 {
+        connections = Vec::with_capacity(conn_count);
+        for _ in 0..conn_count {
+            let conn_u32 = reader.read_u32()?;
+            let conn = checked_i32(conn_u32, "element.conn_id")?;
+            connections.push(conn);
+        }
+    }
+    Ok((name, comment, desc, connections))
+}
+
 /// 读取类签名 (MFC Class Signature)
 fn read_class_sig(reader: &mut MfcReader) -> Result<String> {
     let magic = reader.read_u16()?;
@@ -291,8 +348,6 @@ fn read_header(reader: &mut MfcReader, variant: Variant) -> Result<String> {
     // [2] 时间戳（Normal 才有）
     if variant == Variant::Normal {
         let _ = reader.read_u32()?;
-    } else {
-        let _ = reader.read_u16()?; // Safety: 额外保留字段
     }
 
     // [3] 第二次名称 + 对齐
@@ -326,7 +381,8 @@ fn read_header(reader: &mut MfcReader, variant: Variant) -> Result<String> {
             let _ = reader.read_mfc_string()?; // Normal: 额外 BOOL
         }
         Variant::Safety => {
-            let _ = reader.read_u32()?;       // Safety: 额外 u32=0
+            let _ = reader.read_u32()?;       // Safety: 额外 flag3
+            let _ = reader.read_u32()?;       // Safety: 额外 flag4
         }
     }
 
@@ -361,31 +417,14 @@ fn read_network(reader: &mut MfcReader, variant: Variant) -> Result<Network> {
     })
 }
 
-fn read_element_base(reader: &mut MfcReader, variant: Variant) -> Result<(i32, u8, String, String, String, Vec<i32>)> {
+fn read_element_base(
+    reader: &mut MfcReader,
+    variant: Variant,
+) -> Result<(i32, u8, String, String, String, Vec<i32>)> {
     let id_u32 = reader.read_u32()?;
     let id = checked_i32(id_u32, "element.id")?;
     let type_id = reader.read_u8()?;
-    let name = reader.read_mfc_string()?;
-    let comment = reader.read_mfc_string()?;
-    let desc = reader.read_mfc_string()?;
-    let mut connections = Vec::new();
-    match variant {
-        Variant::Normal => {
-            let conn_count = reader.read_u32()? as usize;
-            if conn_count > 0 {
-                connections = Vec::with_capacity(conn_count);
-                for _ in 0..conn_count {
-                    let conn_u32 = reader.read_u32()?;
-                    let conn = checked_i32(conn_u32, "element.conn_id")?;
-                    connections.push(conn);
-                }
-            }
-        }
-        Variant::Safety => {
-            // Safety 连接表不使用，conn_count 的存在与宽度在样本中不稳定。
-            // 这里不主动读取，交由具体元素解析逻辑做兼容处理。
-        }
-    }
+    let (name, comment, desc, connections) = read_element_fields(reader, variant)?;
     Ok((id, type_id, name, comment, desc, connections))
 }
 
@@ -435,22 +474,25 @@ fn read_output(reader: &mut MfcReader, variant: Variant, serialize_version: u32)
     })
 }
 
-fn read_pin(reader: &mut MfcReader, variant: Variant, direction: PinDirection) -> Result<BoxPin> {
+fn read_pin(
+    reader: &mut MfcReader,
+    variant: Variant,
+    _serialize_version: u32,
+    direction: PinDirection,
+) -> Result<BoxPin> {
     match variant {
         Variant::Safety => {
-            let name = reader.read_mfc_string()?;
-            let variable = reader.read_mfc_string()?;
+            let name = read_element_string(reader, variant, 80)?;
+            let variable = read_element_string(reader, variant, 200)?;
             Ok(BoxPin { name, variable, direction })
         }
         Variant::Normal => {
-            let _ = reader.read_u16()?; // flag
+            let _ = reader.read_u8()?; // flag0
+            let _ = reader.read_u8()?; // flag1
             let name = reader.read_mfc_string()?;
-            let mut variable = reader.read_mfc_string()?;
-            if variable == "???" {
-                variable.clear();
-            }
+            let variable = reader.read_mfc_string()?;
             if direction == PinDirection::Input {
-                let _ = reader.read_u32()?; // addr
+                let _ = reader.read_u32()?; // binding_id
             }
             Ok(BoxPin { name, variable, direction })
         }
@@ -470,20 +512,24 @@ fn read_box(reader: &mut MfcReader, variant: Variant, serialize_version: u32) ->
     if variant == Variant::Safety && reader.remaining_len() >= 2 && reader.peek_u16()? == 0x0100 {
         let _ = reader.read_u16()?;
     }
-    let instance = reader.read_mfc_string()?;
+    let instance = read_element_string(reader, variant, 200)?;
 
     let input_count = reader.read_u32()? as usize;
     let mut pins = Vec::new();
     for _ in 0..input_count {
-        pins.push(read_pin(reader, variant, PinDirection::Input)?);
+        pins.push(read_pin(reader, variant, serialize_version, PinDirection::Input)?);
     }
 
     let output_count = reader.read_u32()? as usize;
     for _ in 0..output_count {
-        pins.push(read_pin(reader, variant, PinDirection::Output)?);
+        pins.push(read_pin(reader, variant, serialize_version, PinDirection::Output)?);
     }
 
-    if variant == Variant::Safety {
+    if variant == Variant::Safety
+        && !looks_like_class_sig(reader)
+        && !looks_like_safety_var_table(reader)
+        && !looks_like_element_object(reader, variant)
+    {
         // Safety 的部分 CLDBox 在引脚后仍包含内部数据块（如嵌套拓扑）。
         // 直接跳到下一个类签名，保持顶层 CObList 对齐。
         skip_network_tail(reader)?;
@@ -500,6 +546,107 @@ fn read_box(reader: &mut MfcReader, variant: Variant, serialize_version: u32) ->
         connections,
         sub_type: 0,
     })
+}
+
+fn read_element_dynamic(
+    reader: &mut MfcReader,
+    variant: Variant,
+    serialize_version: u32,
+) -> Result<LdElement> {
+    let (id, type_id, name, comment, desc, connections) = read_element_base(reader, variant)?;
+    let type_code = element_type_from_id(variant, type_id)?;
+    match type_code {
+        ElementType::Box => {
+            if variant == Variant::Normal && serialize_version >= 6 {
+                let _ = reader.read_u32()?;
+                let _ = reader.read_u32()?;
+            }
+            if variant == Variant::Safety {
+                skip_safety_box_padding(reader)?;
+            }
+            let _ = reader.read_u8()?; // flag
+            if variant == Variant::Safety && reader.remaining_len() >= 2 && reader.peek_u16()? == 0x0100 {
+                let _ = reader.read_u16()?;
+            }
+            let instance = read_element_string(reader, variant, 200)?;
+
+            let input_count = reader.read_u32()? as usize;
+            let mut pins = Vec::new();
+            for _ in 0..input_count {
+                pins.push(read_pin(reader, variant, serialize_version, PinDirection::Input)?);
+            }
+
+            let output_count = reader.read_u32()? as usize;
+            for _ in 0..output_count {
+                pins.push(read_pin(reader, variant, serialize_version, PinDirection::Output)?);
+            }
+
+            if variant == Variant::Safety
+                && !looks_like_class_sig(reader)
+                && !looks_like_safety_var_table(reader)
+                && !looks_like_element_object(reader, variant)
+            {
+                skip_network_tail(reader)?;
+            }
+
+            Ok(LdElement {
+                id,
+                type_code,
+                name,
+                comment,
+                desc,
+                instance,
+                pins,
+                connections,
+                sub_type: 0,
+            })
+        }
+        ElementType::Contact => {
+            if variant == Variant::Safety {
+                let _ = skip_safety_reserved_u16(reader)?;
+            }
+            let sub_type = reader.read_u8()?;
+            if variant == Variant::Normal {
+                let _ = reader.read_mfc_string()?;
+            }
+            Ok(LdElement {
+                id,
+                type_code,
+                name,
+                comment,
+                desc,
+                instance: String::new(),
+                pins: Vec::new(),
+                connections,
+                sub_type,
+            })
+        }
+        ElementType::Coil => {
+            if variant == Variant::Safety {
+                let _ = skip_safety_reserved_u16(reader)?;
+            }
+            let sub_type = reader.read_u8()?;
+            let _ = reader.read_u8()?; // flag2
+            if variant == Variant::Normal && serialize_version > 0 {
+                let _ = reader.read_u8()?; // flag3
+            }
+            let _ = reader.read_mfc_string()?;
+            Ok(LdElement {
+                id,
+                type_code,
+                name,
+                comment,
+                desc,
+                instance: String::new(),
+                pins: Vec::new(),
+                connections,
+                sub_type,
+            })
+        }
+        _ => {
+            bail!("动态元素类型不支持: {:?}", type_code);
+        }
+    }
 }
 
 #[derive(Default)]
@@ -520,10 +667,17 @@ impl ClassTable {
     }
 }
 
-fn read_class_name(reader: &mut MfcReader, table: &mut ClassTable) -> Result<Option<String>> {
+#[derive(Debug, Clone)]
+enum ClassTag {
+    None,
+    Known(String),
+    UnknownRef(u16),
+}
+
+fn read_class_tag(reader: &mut MfcReader, table: &mut ClassTable) -> Result<ClassTag> {
     let tag = reader.read_u16()?;
     if tag == 0x0000 {
-        return Ok(None);
+        return Ok(ClassTag::None);
     }
     if tag == 0xFFFF {
         let _schema = reader.read_u16()?;
@@ -532,13 +686,16 @@ fn read_class_name(reader: &mut MfcReader, table: &mut ClassTable) -> Result<Opt
         let (cow, _, _) = GBK.decode(&name_bytes);
         let name = cow.into_owned();
         table.insert(name.clone());
-        Ok(Some(name))
-    } else if tag & 0x8000 != 0 {
-        let class_id = tag & 0x7FFF;
-        table.get(class_id).map(Some)
-    } else {
-        bail!("类签名 Tag 错误: 0x{:04X}", tag);
+        return Ok(ClassTag::Known(name));
     }
+    if tag & 0x8000 != 0 {
+        let class_id = tag & 0x7FFF;
+        if class_id == 0 || class_id as usize > table.classes.len() {
+            return Ok(ClassTag::UnknownRef(class_id));
+        }
+        return table.get(class_id).map(ClassTag::Known);
+    }
+    bail!("类签名 Tag 错误: 0x{:04X}", tag);
 }
 
 fn read_networks(reader: &mut MfcReader, variant: Variant, serialize_version: u32) -> Result<Vec<Network>> {
@@ -546,463 +703,486 @@ fn read_networks(reader: &mut MfcReader, variant: Variant, serialize_version: u3
         return read_networks_safety(reader, serialize_version);
     }
 
-    seek_to_network_list_start(reader)?;
-    let total = reader.read_u16()? as usize;
+    let list = seek_to_network_list_start(reader)?;
+    let stop_at = find_normal_var_table_offset(reader).map(|offset| reader.position() + offset);
+    let mut remaining = list.count;
     let mut networks: Vec<Network> = Vec::new();
     let mut current: Option<Network> = None;
     let mut class_table = ClassTable::default();
 
-    for _ in 0..total {
-        let class_name = match read_class_name(reader, &mut class_table)? {
-            Some(name) => name,
-            None => continue,
-        };
-        match class_name.as_str() {
-            "CLDNetwork" => {
-                if let Some(net) = current.take() {
-                    networks.push(net);
-                }
-                let net = read_network(reader, variant)?;
-                skip_network_tail(reader)?;
-                current = Some(net);
+    loop {
+        if reader.remaining_len() == 0 {
+            break;
+        }
+        if let Some(stop_at) = stop_at {
+            if reader.position() >= stop_at {
+                break;
             }
-            "CLDContact" => {
-                let elem = read_contact(reader, variant)?;
-                if let Some(net) = current.as_mut() {
-                    net.elements.push(elem);
+        }
+        if remaining == Some(0) {
+            break;
+        }
+
+        let pos = reader.position();
+        let class_tag = read_class_tag(reader, &mut class_table)?;
+        if let Some(rem) = remaining.as_mut() {
+            *rem = rem.saturating_sub(1);
+        }
+
+        match class_tag {
+            ClassTag::None => {}
+            ClassTag::Known(class_name) => match class_name.as_str() {
+                "CLDNetwork" => {
+                    if let Some(net) = current.take() {
+                        networks.push(net);
+                    }
+                    if !looks_like_network(reader, variant, stop_at) {
+                        skip_network_tail(reader)?;
+                        continue;
+                    }
+                    let net = read_network(reader, variant)?;
+                    skip_network_tail(reader)?;
+                    current = Some(net);
+                }
+                "CLDContact" => {
+                    let elem = read_contact(reader, variant)?;
+                    if let Some(net) = current.as_mut() {
+                        net.elements.push(elem);
+                    } else {
+                        bail!("元素出现在网络之前: {}", class_name);
+                    }
+                }
+                "CLDOutput" => {
+                    let elem = read_output(reader, variant, serialize_version)?;
+                    if let Some(net) = current.as_mut() {
+                        net.elements.push(elem);
+                    } else {
+                        bail!("元素出现在网络之前: {}", class_name);
+                    }
+                }
+                "CLDBox" => {
+                    let elem = read_box(reader, variant, serialize_version)?;
+                    if let Some(net) = current.as_mut() {
+                        net.elements.push(elem);
+                    } else {
+                        bail!("元素出现在网络之前: {}", class_name);
+                    }
+                }
+                "CLDAssign" => {
+                    let _ = reader.read_u32()?;
+                    let _ = reader.read_u32()?;
+                    let _ = reader.read_u32()?;
+                    let _ = reader.read_u32()?;
+                }
+                "CLDElement" => {
+                    let _ = read_element_base(reader, variant)?;
+                }
+                _ => {
+                    bail!("不支持的类签名: {}", class_name);
+                }
+            },
+            ClassTag::UnknownRef(_) => {
+                if let Some(type_id) = peek_element_type_id(reader) {
+                    if is_element_type_id(variant, type_id) {
+                        let elem = read_element_dynamic(reader, variant, serialize_version)?;
+                        if let Some(net) = current.as_mut() {
+                            net.elements.push(elem);
+                        } else {
+                            bail!("元素出现在网络之前: UnknownRef");
+                        }
+                    } else {
+                        skip_network_tail(reader)?;
+                    }
                 } else {
-                    bail!("元素出现在网络之前: {}", class_name);
+                    break;
                 }
             }
-            "CLDOutput" => {
-                let elem = read_output(reader, variant, serialize_version)?;
-                if let Some(net) = current.as_mut() {
-                    net.elements.push(elem);
-                } else {
-                    bail!("元素出现在网络之前: {}", class_name);
-                }
-            }
-            "CLDBox" => {
-                let elem = read_box(reader, variant, serialize_version)?;
-                if let Some(net) = current.as_mut() {
-                    net.elements.push(elem);
-                } else {
-                    bail!("元素出现在网络之前: {}", class_name);
-                }
-            }
-            "CLDAssign" => {
-                let _ = reader.read_u32()?;
-                let _ = reader.read_u32()?;
-                let _ = reader.read_u32()?;
-                let _ = reader.read_u32()?;
-            }
-            "CLDElement" => {
-                if let Some(net) = current.take() {
-                    networks.push(net);
-                }
-                seek_to_normal_var_table(reader)?;
-                return Ok(networks);
-            }
-            _ => {
-                bail!("不支持的类签名: {}", class_name);
-            }
+        }
+
+        if reader.position() == pos {
+            break;
         }
     }
 
     if let Some(net) = current.take() {
         networks.push(net);
     }
+    if let Some(stop_at) = stop_at {
+        if reader.position() < stop_at {
+            reader.seek_to(stop_at)?;
+        }
+    }
+    Ok(networks)
+}
+
+#[derive(Debug, Clone)]
+struct SafetyNode {
+    elem: LdElement,
+    children: Vec<SafetyNode>,
+    label: Option<String>,
+    comment: Option<String>,
+}
+
+fn read_safety_string(reader: &mut MfcReader, max_len: usize) -> Result<String> {
+    if reader.remaining_len() < 4 {
+        bail!("Safety 字符串长度不足");
+    }
+    let len = reader.peek_u32()? as usize;
+    if len <= max_len && reader.remaining_len() >= 4 + len {
+        let _ = reader.read_u32()?;
+        let buf = reader.read_bytes(len)?;
+        let (cow, _, _) = GBK.decode(&buf);
+        return Ok(cow.into_owned());
+    }
+    reader.read_mfc_string()
+}
+
+fn read_safety_string_optional(reader: &mut MfcReader, max_len: usize) -> Result<Option<String>> {
+    if reader.remaining_len() < 4 {
+        return Ok(None);
+    }
+    let len = reader.peek_u32()? as usize;
+    if len > max_len || reader.remaining_len() < 4 + len {
+        return Ok(None);
+    }
+    let _ = reader.read_u32()?;
+    let buf = reader.read_bytes(len)?;
+    let (cow, _, _) = GBK.decode(&buf);
+    Ok(Some(cow.into_owned()))
+}
+
+fn element_type_from_safety_id(type_id: u8) -> Option<ElementType> {
+    match type_id {
+        0x03 => Some(ElementType::Box),
+        0x04 => Some(ElementType::Contact),
+        0x05 => Some(ElementType::Coil),
+        0x08 => Some(ElementType::Assign),
+        0x09 => Some(ElementType::Network),
+        _ => None,
+    }
+}
+
+fn read_safety_base(
+    reader: &mut MfcReader,
+    expected_type: Option<u8>,
+) -> Result<(i32, u8, String, Vec<i32>, u32)> {
+    let id_u32 = reader.read_u32()?;
+    let id = checked_i32(id_u32, "safety.element.id")?;
+    let type_id = reader.read_u8()?;
+    if let Some(expect) = expected_type {
+        if expect != type_id {
+            debug!(
+                "safety element type mismatch: expected=0x{:02X}, got=0x{:02X}",
+                expect, type_id
+            );
+        }
+    }
+    let name = read_safety_string(reader, 120)?;
+    let conn_count = reader.read_u32()? as usize;
+    if conn_count > 20000 {
+        bail!("Safety 连接数量异常: {}", conn_count);
+    }
+    let mut connections = Vec::with_capacity(conn_count);
+    for _ in 0..conn_count {
+        let conn_u32 = reader.read_u32()?;
+        let conn = checked_i32(conn_u32, "safety.element.conn_id")?;
+        connections.push(conn);
+    }
+    let child_count = reader.read_u32()?;
+    if child_count > 20000 {
+        bail!("Safety 子元素数量异常: {}", child_count);
+    }
+    Ok((id, type_id, name, connections, child_count))
+}
+
+fn read_safety_pin(reader: &mut MfcReader, direction: PinDirection) -> Result<BoxPin> {
+    let name = read_safety_string(reader, 80)?;
+    let variable = read_safety_string(reader, 200)?;
+    Ok(BoxPin { name, variable, direction })
+}
+
+fn read_safety_node(
+    reader: &mut MfcReader,
+    expected_type: Option<u8>,
+    serialize_version: u32,
+) -> Result<SafetyNode> {
+    let (id, type_id, name, connections, child_count) = read_safety_base(reader, expected_type)?;
+    let mut children = Vec::with_capacity(child_count as usize);
+    for _ in 0..child_count {
+        let child_type = reader.read_u8()?;
+        children.push(read_safety_node(reader, Some(child_type), serialize_version)?);
+    }
+
+    let mut label = None;
+    let mut comment = None;
+    let mut instance = String::new();
+    let mut pins = Vec::new();
+    let mut sub_type = 0u8;
+    let type_code = element_type_from_safety_id(type_id).unwrap_or(ElementType::Assign);
+
+    match type_code {
+        ElementType::Network => {
+            label = Some(read_safety_string(reader, 120)?);
+            comment = Some(read_safety_string(reader, 200)?);
+        }
+        ElementType::Box => {
+            let _flag = reader.read_u8()?;
+            let inst_comment = read_safety_string(reader, 200)?;
+            let inst_name = read_safety_string(reader, 200)?;
+            instance = inst_name;
+            let input_count = reader.read_u32()? as usize;
+            if input_count > 2000 {
+                bail!("Safety Box 输入数量异常: {}", input_count);
+            }
+            for _ in 0..input_count {
+                pins.push(read_safety_pin(reader, PinDirection::Input)?);
+            }
+            let output_count = reader.read_u32()? as usize;
+            if output_count > 2000 {
+                bail!("Safety Box 输出数量异常: {}", output_count);
+            }
+            for _ in 0..output_count {
+                pins.push(read_safety_pin(reader, PinDirection::Output)?);
+            }
+            if !inst_comment.is_empty() {
+                comment = Some(inst_comment);
+            }
+        }
+        ElementType::Contact => {
+            if reader.remaining_len() >= 2 && reader.peek_u16()? == 0x0000 {
+                let _ = reader.read_u16()?;
+            }
+            sub_type = reader.read_u8()?;
+        }
+        ElementType::Coil => {
+            if reader.remaining_len() >= 2 && reader.peek_u16()? == 0x0000 {
+                let _ = reader.read_u16()?;
+            }
+            sub_type = reader.read_u8()?;
+            let _ = reader.read_u8()?;
+            let _ = read_safety_string_optional(reader, 200)?;
+        }
+        ElementType::Assign => {}
+    }
+
+    Ok(SafetyNode {
+        elem: LdElement {
+            id,
+            type_code,
+            name,
+            comment: comment.clone().unwrap_or_default(),
+            desc: String::new(),
+            instance,
+            pins,
+            connections,
+            sub_type,
+        },
+        children,
+        label,
+        comment,
+    })
+}
+
+fn read_safety_element_list(
+    reader: &mut MfcReader,
+    serialize_version: u32,
+) -> Result<Vec<SafetyNode>> {
+    let count = reader.read_u32()? as usize;
+    if count > 20000 {
+        bail!("Safety 列表数量异常: {}", count);
+    }
+    let mut nodes = Vec::with_capacity(count);
+    for _ in 0..count {
+        let type_id = reader.read_u8()?;
+        nodes.push(read_safety_node(reader, Some(type_id), serialize_version)?);
+    }
+    Ok(nodes)
+}
+
+fn collect_safety_elements(node: &SafetyNode, out: &mut Vec<LdElement>) {
+    match node.elem.type_code {
+        ElementType::Box | ElementType::Contact | ElementType::Coil => {
+            out.push(node.elem.clone());
+        }
+        _ => {}
+    }
+    for child in &node.children {
+        collect_safety_elements(child, out);
+    }
+}
+
+fn collect_safety_networks(node: &SafetyNode, out: &mut Vec<Network>) {
+    if node.elem.type_code == ElementType::Network {
+        let mut elements = Vec::new();
+        for child in &node.children {
+            collect_safety_elements(child, &mut elements);
+        }
+        out.push(Network {
+            id: node.elem.id,
+            label: node.label.clone().unwrap_or_default(),
+            comment: node.comment.clone().unwrap_or_default(),
+            elements,
+            safety_topology: Vec::new(),
+        });
+    } else {
+        for child in &node.children {
+            collect_safety_networks(child, out);
+        }
+    }
+}
+
+fn read_networks_safety_tree(reader: &mut MfcReader, serialize_version: u32) -> Result<Vec<Network>> {
+    let nodes = read_safety_element_list(reader, serialize_version)?;
+    let mut networks = Vec::new();
+    for node in &nodes {
+        collect_safety_networks(node, &mut networks);
+    }
+    if networks.is_empty() && !nodes.is_empty() {
+        let mut elements = Vec::new();
+        for node in &nodes {
+            collect_safety_elements(node, &mut elements);
+        }
+        networks.push(Network {
+            id: 0,
+            label: String::new(),
+            comment: String::new(),
+            elements,
+            safety_topology: Vec::new(),
+        });
+    }
     Ok(networks)
 }
 
 fn read_networks_safety(reader: &mut MfcReader, serialize_version: u32) -> Result<Vec<Network>> {
-    seek_to_network_list_start(reader)?;
-    let total = reader.read_u16()? as usize;
+    let start = reader.position();
+    if let Ok(nets) = read_networks_safety_tree(reader, serialize_version) {
+        if !nets.is_empty() {
+            return Ok(nets);
+        }
+    }
+    reader.seek_to(start)?;
+    read_networks_safety_class(reader, serialize_version)
+}
 
-    let mut raw_networks: Vec<Network> = Vec::new();
-    let mut network_rung_ids: Vec<Option<Vec<i32>>> = Vec::new();
-    let mut element_pool: HashMap<i32, LdElement> = HashMap::new();
-    let mut element_order: HashMap<i32, usize> = HashMap::new();
-    let mut network_order: Vec<(usize, usize)> = Vec::new();
+fn read_networks_safety_class(reader: &mut MfcReader, serialize_version: u32) -> Result<Vec<Network>> {
+    let list = seek_to_network_list_start(reader)?;
+    let stop_at = find_safety_var_table_offset(reader).map(|offset| reader.position() + offset);
+    let mut remaining = list.count;
+    let mut networks: Vec<Network> = Vec::new();
+    let mut current: Option<Network> = None;
     let mut class_table = ClassTable::default();
 
-    for index in 0..total {
-        if looks_like_safety_var_table(reader) {
+    loop {
+        if reader.remaining_len() == 0 {
             break;
         }
-        let _start_pos = reader.position();
-        let class_name = match read_class_name(reader, &mut class_table)
-            .with_context(|| format!("safety list parse failed at index={} pos={}", index, reader.position()))?
-        {
-            Some(name) => name,
-            None => continue,
-        };
-        match class_name.as_str() {
-            "CLDNetwork" => {
-                let mut net = read_network(reader, Variant::Safety)?;
-                let (raw, inline_elements) =
-                    read_safety_topology_raw(reader, Variant::Safety, serialize_version)?;
-                net.safety_topology = resolve_safety_topology(raw)?;
-                raw_networks.push(net);
-                network_rung_ids.push(None);
-                network_order.push((index, raw_networks.len() - 1));
-                for elem in inline_elements {
-                    element_order.entry(elem.id).or_insert(index);
-                    element_pool.entry(elem.id).or_insert(elem);
+        if let Some(stop_at) = stop_at {
+            if reader.position() >= stop_at {
+                break;
+            }
+        }
+        if remaining == Some(0) {
+            break;
+        }
+
+        let pos = reader.position();
+        let class_tag = read_class_tag(reader, &mut class_table)?;
+        if let Some(rem) = remaining.as_mut() {
+            *rem = rem.saturating_sub(1);
+        }
+
+        match class_tag {
+            ClassTag::None => {}
+            ClassTag::Known(class_name) => match class_name.as_str() {
+                "CLDNetwork" => {
+                    if let Some(net) = current.take() {
+                        networks.push(net);
+                    }
+                    let id = if reader.remaining_len() >= 4 {
+                        reader.read_u32().unwrap_or(0) as i32
+                    } else {
+                        0
+                    };
+                    current = Some(Network {
+                        id,
+                        label: String::new(),
+                        comment: String::new(),
+                        elements: Vec::new(),
+                        safety_topology: Vec::new(),
+                    });
+                    skip_network_tail(reader)?;
                 }
-            }
-            "CLDBox" => {
-                let elem = read_box(reader, Variant::Safety, serialize_version)?;
-                element_order.entry(elem.id).or_insert(index);
-                element_pool.insert(elem.id, elem);
-            }
-            "CLDContact" => {
-                let elem = read_contact(reader, Variant::Safety)?;
-                element_order.entry(elem.id).or_insert(index);
-                element_pool.insert(elem.id, elem);
-            }
-            "CLDOutput" => {
-                let elem = read_output(reader, Variant::Safety, serialize_version)?;
-                element_order.entry(elem.id).or_insert(index);
-                element_pool.insert(elem.id, elem);
-            }
-            "CLDAssign" => {
-                let elem = read_safety_assign(reader)?;
-                element_order.entry(elem.id).or_insert(index);
-                element_pool.insert(elem.id, elem);
-            }
-            "CLDElement" => {
-                let (rung_ids, maybe_topology) =
-                    read_safety_rung_list_with_topology(reader, serialize_version)?;
-                if let Some((raw, inline_elements)) = maybe_topology {
-                    if let Some(last) = raw_networks.last_mut() {
-                        let tokens = resolve_safety_topology(raw)?;
-                        last.safety_topology.extend(tokens);
-                        if !rung_ids.is_empty() {
-                            if let Some(entry) = network_rung_ids.last_mut() {
-                                *entry = Some(rung_ids);
-                            }
+                "CLDContact" => {
+                    let elem = read_contact(reader, Variant::Safety)?;
+                    if let Some(net) = current.as_mut() {
+                        net.elements.push(elem);
+                    } else {
+                        bail!("元素出现在网络之前: {}", class_name);
+                    }
+                }
+                "CLDOutput" => {
+                    let elem = read_output(reader, Variant::Safety, serialize_version)?;
+                    if let Some(net) = current.as_mut() {
+                        net.elements.push(elem);
+                    } else {
+                        bail!("元素出现在网络之前: {}", class_name);
+                    }
+                }
+                "CLDBox" => {
+                    let elem = read_box(reader, Variant::Safety, serialize_version)?;
+                    if let Some(net) = current.as_mut() {
+                        net.elements.push(elem);
+                    } else {
+                        bail!("元素出现在网络之前: {}", class_name);
+                    }
+                }
+                "CLDAssign" => {
+                    let elem = read_safety_assign(reader)?;
+                    if let Some(net) = current.as_mut() {
+                        net.elements.push(elem);
+                    } else {
+                        bail!("元素出现在网络之前: {}", class_name);
+                    }
+                }
+                "CLDElement" => {
+                    let _ = read_element_base(reader, Variant::Safety)?;
+                }
+                _ => {
+                    skip_network_tail(reader)?;
+                }
+            },
+            ClassTag::UnknownRef(_) => {
+                if let Some(type_id) = peek_element_type_id(reader) {
+                    if is_element_type_id(Variant::Safety, type_id) {
+                        let elem = read_element_dynamic(reader, Variant::Safety, serialize_version)?;
+                        if let Some(net) = current.as_mut() {
+                            net.elements.push(elem);
+                        } else {
+                            bail!("元素出现在网络之前: UnknownRef");
                         }
                     } else {
-                        let net = Network {
-                            id: rung_ids.first().copied().unwrap_or(0),
-                            label: String::new(),
-                            comment: String::new(),
-                            elements: Vec::new(),
-                            safety_topology: resolve_safety_topology(raw)?,
-                        };
-                        raw_networks.push(net);
-                        network_rung_ids.push(Some(rung_ids));
-                        network_order.push((index, raw_networks.len() - 1));
+                        skip_network_tail(reader)?;
                     }
-                    for elem in inline_elements {
-                        element_order.entry(elem.id).or_insert(index);
-                        element_pool.entry(elem.id).or_insert(elem);
-                    }
+                } else {
+                    break;
                 }
             }
-            _ => {
-                bail!("不支持的类签名: {}", class_name);
-            }
+        }
+
+        if reader.position() == pos {
+            break;
         }
     }
 
-    let mut raw_order_map: HashMap<usize, usize> = HashMap::new();
-    for (order, net_idx) in &network_order {
-        raw_order_map.insert(*net_idx, *order);
+    if let Some(net) = current.take() {
+        networks.push(net);
     }
-
-    let mut final_networks: Vec<Network> = Vec::new();
-    let mut final_network_order: Vec<(usize, usize)> = Vec::new();
-    let mut used_ids: HashSet<i32> = HashSet::new();
-
-    for (raw_idx, net) in raw_networks.into_iter().enumerate() {
-        let order = raw_order_map.get(&raw_idx).cloned().unwrap_or(usize::MAX);
-        let tokens = &net.safety_topology;
-        let rung_ids = network_rung_ids
-            .get(raw_idx)
-            .and_then(|v| v.clone())
-            .unwrap_or_default();
-        let net_end_indices: Vec<usize> = tokens
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, token)| matches!(token, SafetyTopologyToken::NetEnd).then_some(idx))
-            .collect();
-        let rung_indices: Vec<usize> = tokens
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, token)| match token {
-                SafetyTopologyToken::ElementRef { type_id, .. } if *type_id == 0x0009 => Some(idx),
-                SafetyTopologyToken::InlineElement(elem) if elem.type_code == ElementType::Network => {
-                    Some(idx)
-                }
-                _ => None,
-            })
-            .collect();
-
-        if log::log_enabled!(log::Level::Debug) {
-            let mut markers = Vec::with_capacity(tokens.len());
-            for (idx, token) in tokens.iter().enumerate() {
-                let mark = match token {
-                    SafetyTopologyToken::ElementRef { type_id, .. } if *type_id == 0x0009 => "R",
-                    SafetyTopologyToken::ElementRef { .. } => "E",
-                    SafetyTopologyToken::InlineElement(_) => "I",
-                    SafetyTopologyToken::Element(_) => "F",
-                    SafetyTopologyToken::BranchOpen
-                    | SafetyTopologyToken::BranchClose
-                    | SafetyTopologyToken::SeriesNext
-                    | SafetyTopologyToken::NetEnd
-                    | SafetyTopologyToken::BranchNext => "B",
-                    SafetyTopologyToken::Raw(_) => "X",
-                };
-                markers.push(format!("{}:{}", idx, mark));
-            }
-            debug!(
-                "safety topology: tokens={} rung_indices={:?} markers={}",
-                tokens.len(),
-                rung_indices,
-                markers.join(" ")
-            );
-        }
-
-        let mut collect_elements = |slice: &[SafetyTopologyToken]| -> Vec<LdElement> {
-            let mut elements = Vec::new();
-            let mut ids: HashSet<i32> = HashSet::new();
-
-            for token in slice {
-                match token {
-                    SafetyTopologyToken::ElementRef { id, type_id } => {
-                        if *type_id == 0x0009 {
-                            continue;
-                        }
-                        let id_i32 = match checked_i32(*id, "safety.element_ref.id") {
-                            Ok(value) => value,
-                            Err(_) => continue,
-                        };
-                        if ids.contains(&id_i32) {
-                            continue;
-                        }
-                        if let Some(elem) = element_pool.get(&id_i32) {
-                            if elem.type_code != ElementType::Assign {
-                                elements.push(elem.clone());
-                                ids.insert(id_i32);
-                            }
-                            used_ids.insert(id_i32);
-                            continue;
-                        }
-                        if let Some(elem) = placeholder_from_ref(id_i32, *type_id) {
-                            if elem.type_code != ElementType::Assign {
-                                elements.push(elem);
-                                ids.insert(id_i32);
-                            }
-                        }
-                    }
-                    SafetyTopologyToken::InlineElement(elem) => {
-                        if elem.type_code == ElementType::Network || elem.type_code == ElementType::Assign {
-                            continue;
-                        }
-                        let id = (**elem).id;
-                        elements.push((**elem).clone());
-                        ids.insert(id);
-                        used_ids.insert(id);
-                    }
-                    SafetyTopologyToken::Element(elem) => {
-                        if elem.type_code == ElementType::Network || elem.type_code == ElementType::Assign {
-                            continue;
-                        }
-                        let id = (**elem).id;
-                        elements.push((**elem).clone());
-                        ids.insert(id);
-                        used_ids.insert(id);
-                    }
-                    _ => {}
-                }
-            }
-
-            elements
-        };
-
-        if !rung_ids.is_empty() {
-            let mut spans: Vec<(usize, usize)> = Vec::new();
-            let mut start = 0usize;
-            let mut seen_element = false;
-            for (idx, token) in tokens.iter().enumerate() {
-                let is_elem = match token {
-                    SafetyTopologyToken::ElementRef { type_id, .. } => {
-                        matches!(*type_id, 0x03 | 0x04 | 0x05)
-                    }
-                    SafetyTopologyToken::InlineElement(elem) => {
-                        matches!(elem.type_code, ElementType::Box | ElementType::Contact | ElementType::Coil)
-                    }
-                    SafetyTopologyToken::Element(elem) => {
-                        matches!(elem.type_code, ElementType::Box | ElementType::Contact | ElementType::Coil)
-                    }
-                    _ => false,
-                };
-                if is_elem {
-                    if seen_element && spans.len() + 1 < rung_ids.len() {
-                        spans.push((start, idx));
-                        start = idx;
-                    }
-                    seen_element = true;
-                }
-            }
-            if start < tokens.len() {
-                spans.push((start, tokens.len()));
-            }
-            let mut rung_ids_used = rung_ids.clone();
-            if spans.len() == rung_ids_used.len() {
-                spans.reverse();
-                rung_ids_used.reverse();
-            }
-            for (span_order, (start, end)) in spans.into_iter().enumerate() {
-                let start = start.min(tokens.len());
-                let end = end.min(tokens.len());
-                let slice = if start < end { &tokens[start..end] } else { &tokens[0..0] };
-                let elements = collect_elements(slice);
-                let rung_id = rung_ids_used.get(span_order).copied().unwrap_or(net.id);
-                final_networks.push(Network {
-                    id: rung_id,
-                    label: format!("Rung {}", span_order + 1),
-                    comment: String::new(),
-                    elements,
-                    safety_topology: slice.to_vec(),
-                });
-                let order_key = order.saturating_mul(1024) + span_order;
-                final_network_order.push((order_key, final_networks.len() - 1));
-            }
-            continue;
-        }
-
-        if !net_end_indices.is_empty() {
-            let resolve_rung_id = |slice: &[SafetyTopologyToken], span_order: usize| -> i32 {
-                if let Some(id) = rung_ids.get(span_order) {
-                    return *id;
-                }
-                for token in slice {
-                    match token {
-                        SafetyTopologyToken::ElementRef { id, type_id } if *type_id == 0x0009 => {
-                            if let Ok(rung_id) = checked_i32(*id, "safety.rung.id") {
-                                return rung_id;
-                            }
-                        }
-                        SafetyTopologyToken::InlineElement(elem)
-                            if elem.type_code == ElementType::Network =>
-                        {
-                            return elem.id;
-                        }
-                        SafetyTopologyToken::Element(elem) if elem.type_code == ElementType::Network => {
-                            return elem.id;
-                        }
-                        _ => {}
-                    }
-                }
-                net.id
-            };
-            let mut spans: Vec<(usize, usize)> = Vec::new();
-            let mut start = 0usize;
-            for end_idx in net_end_indices {
-                spans.push((start, end_idx.saturating_add(1)));
-                start = end_idx.saturating_add(1);
-            }
-            if start < tokens.len() {
-                spans.push((start, tokens.len()));
-            }
-
-            for (span_order, (start, end)) in spans.into_iter().enumerate() {
-                let start = start.min(tokens.len());
-                let end = end.min(tokens.len());
-                let slice = if start < end { &tokens[start..end] } else { &tokens[0..0] };
-                let elements = collect_elements(slice);
-
-                final_networks.push(Network {
-                    id: resolve_rung_id(slice, span_order),
-                    label: format!("Rung {}", span_order + 1),
-                    comment: String::new(),
-                    elements,
-                    safety_topology: slice.to_vec(),
-                });
-                let order_key = order.saturating_mul(1024) + span_order;
-                final_network_order.push((order_key, final_networks.len() - 1));
-            }
-            continue;
-        }
-
-        if rung_indices.is_empty() {
-            let elements = collect_elements(tokens);
-            final_networks.push(Network { elements, ..net });
-            final_network_order.push((order, final_networks.len() - 1));
-            continue;
-        }
-
-        let mut rung_refs: Vec<(usize, i32)> = Vec::with_capacity(rung_indices.len());
-        for &idx in &rung_indices {
-            match tokens.get(idx) {
-                Some(SafetyTopologyToken::ElementRef { id, type_id }) if *type_id == 0x0009 => {
-                    let rung_id = checked_i32(*id, "safety.rung.id").unwrap_or(net.id);
-                    rung_refs.push((idx, rung_id));
-                }
-                Some(SafetyTopologyToken::InlineElement(elem))
-                    if elem.type_code == ElementType::Network =>
-                {
-                    rung_refs.push((idx, elem.id));
-                }
-                _ => {}
-            }
-        }
-        if rung_refs.is_empty() {
-            continue;
-        }
-
-        let mut spans: Vec<(usize, usize, i32)> = Vec::with_capacity(rung_refs.len() + 1);
-        let (first_idx, first_id) = rung_refs[0];
-        spans.push((0, first_idx, first_id));
-        if rung_refs.len() > 1 {
-            for i in 0..(rung_refs.len() - 1) {
-                let (start_idx, rung_id) = rung_refs[i];
-                let end_idx = rung_refs[i + 1].0;
-                spans.push((start_idx.saturating_add(1), end_idx, rung_id));
-            }
-        }
-        let (last_idx, last_id) = *rung_refs.last().unwrap();
-        spans.push((last_idx.saturating_add(1), tokens.len(), last_id));
-
-        for (span_order, (start, end, rung_id)) in spans.into_iter().enumerate() {
-            let start = start.min(tokens.len());
-            let end = end.min(tokens.len());
-            let slice = if start < end { &tokens[start..end] } else { &tokens[0..0] };
-            let elements = collect_elements(slice);
-
-            final_networks.push(Network {
-                id: rung_id,
-                label: format!("Rung {}", span_order + 1),
-                comment: String::new(),
-                elements,
-                safety_topology: slice.to_vec(),
-            });
-            let order_key = order.saturating_mul(1024) + span_order;
-            final_network_order.push((order_key, final_networks.len() - 1));
+    if let Some(stop_at) = stop_at {
+        if reader.position() < stop_at {
+            reader.seek_to(stop_at)?;
         }
     }
-
-    if !element_pool.is_empty() && !final_networks.is_empty() {
-        let mut orphans: Vec<(usize, LdElement)> = element_pool
-            .iter()
-            .filter(|(id, elem)| !used_ids.contains(id) && elem.type_code != ElementType::Assign)
-            .map(|(id, elem)| {
-                let order = element_order.get(id).cloned().unwrap_or(usize::MAX);
-                (order, elem.clone())
-            })
-            .collect();
-        orphans.sort_by_key(|(order, _)| *order);
-        for (order, elem) in orphans {
-            if let Some(net_idx) = nearest_network_index(&final_network_order, order) {
-                final_networks[net_idx].elements.push(elem);
-            }
-        }
-    }
-
-    Ok(final_networks)
+    Ok(networks)
 }
 
 fn looks_like_class_sig(reader: &MfcReader) -> bool {
@@ -1023,6 +1203,80 @@ fn looks_like_class_sig(reader: &MfcReader) -> bool {
     buf[6..6 + name_len].iter().all(|b| b.is_ascii_graphic())
 }
 
+fn is_element_type_id(variant: Variant, type_id: u8) -> bool {
+    match variant {
+        Variant::Normal => matches!(type_id, 0x03 | 0x05 | 0x06),
+        Variant::Safety => matches!(type_id, 0x03 | 0x04 | 0x05),
+    }
+}
+
+fn peek_element_type_id(reader: &MfcReader) -> Option<u8> {
+    let buf = reader.remaining_slice();
+    if buf.len() < 5 {
+        return None;
+    }
+    Some(buf[4])
+}
+
+fn looks_like_element_object(reader: &MfcReader, variant: Variant) -> bool {
+    let buf = reader.remaining_slice();
+    if buf.len() < 10 {
+        return false;
+    }
+    let tag = u16::from_le_bytes([buf[0], buf[1]]);
+    if tag & 0x8000 == 0 {
+        return false;
+    }
+    let type_id = buf[6];
+    if !is_element_type_id(variant, type_id) {
+        return false;
+    }
+    let mut idx = 7usize;
+    if !scan_mfc_string_any(buf, &mut idx, 80).unwrap_or(false) {
+        return false;
+    }
+    if !scan_mfc_string_any(buf, &mut idx, 80).unwrap_or(false) {
+        return false;
+    }
+    if !scan_mfc_string_any(buf, &mut idx, 120).unwrap_or(false) {
+        return false;
+    }
+    true
+}
+
+fn looks_like_network(reader: &MfcReader, variant: Variant, limit: Option<usize>) -> bool {
+    let buf_all = reader.remaining_slice();
+    let header_len = match variant {
+        Variant::Normal => 4 + 2 + 2 + 2 + 2,
+        Variant::Safety => 4 + 2 + 4 + 4,
+    };
+    let buf = match limit {
+        Some(stop_at) => {
+            let remaining = stop_at.saturating_sub(reader.position());
+            if remaining == 0 {
+                return false;
+            }
+            if remaining < buf_all.len() {
+                &buf_all[..remaining]
+            } else {
+                buf_all
+            }
+        }
+        None => buf_all,
+    };
+    if buf.len() < header_len + 2 {
+        return false;
+    }
+    let mut idx = header_len;
+    if !scan_mfc_string_any(buf, &mut idx, 80).unwrap_or(false) {
+        return false;
+    }
+    if !scan_mfc_string_any(buf, &mut idx, 200).unwrap_or(false) {
+        return false;
+    }
+    true
+}
+
 fn skip_network_tail(reader: &mut MfcReader) -> Result<()> {
     while reader.remaining_len() > 0 {
         if looks_like_class_sig(reader) || looks_like_safety_var_table(reader) {
@@ -1033,23 +1287,53 @@ fn skip_network_tail(reader: &mut MfcReader) -> Result<()> {
     Ok(())
 }
 
-fn seek_to_network_list_start(reader: &mut MfcReader) -> Result<()> {
+struct NetworkListStart {
+    count: Option<usize>,
+    count_len: usize,
+    offset: usize,
+}
+
+fn seek_to_network_list_start(reader: &mut MfcReader) -> Result<NetworkListStart> {
     let start = reader.position();
     let buf = reader.inner.get_ref();
-    if let Some(offset) = find_network_list_start(&buf[start..]) {
-        reader.seek_to(start + offset)?;
-        return Ok(());
+    if let Some(info) = find_network_list_start(&buf[start..]) {
+        reader.seek_to(start + info.offset + info.count_len)?;
+        return Ok(info);
     }
     if start > 0 {
-        if let Some(offset) = find_network_list_start(buf) {
-            reader.seek_to(offset)?;
-            return Ok(());
+        if let Some(info) = find_network_list_start(buf) {
+            reader.seek_to(info.offset + info.count_len)?;
+            return Ok(info);
         }
     }
     bail!("未找到网络列表起点");
 }
 
-fn find_network_list_start(buf: &[u8]) -> Option<usize> {
+fn find_network_list_start(buf: &[u8]) -> Option<NetworkListStart> {
+    for offset in 0..buf.len().saturating_sub(10) {
+        let count = u32::from_le_bytes([buf[offset], buf[offset + 1], buf[offset + 2], buf[offset + 3]]) as usize;
+        if count == 0 || count > 10000 {
+            continue;
+        }
+        if u16::from_le_bytes([buf[offset + 4], buf[offset + 5]]) != 0xFFFF {
+            continue;
+        }
+        let name_len = u16::from_le_bytes([buf[offset + 8], buf[offset + 9]]) as usize;
+        if name_len == 0 || name_len > 64 {
+            continue;
+        }
+        if offset + 10 + name_len > buf.len() {
+            continue;
+        }
+        let name_bytes = &buf[offset + 10..offset + 10 + name_len];
+        if name_bytes != b"CLDNetwork" {
+            continue;
+        }
+        if !name_bytes.iter().all(|b| b.is_ascii_graphic()) {
+            continue;
+        }
+        return Some(NetworkListStart { count: Some(count), count_len: 4, offset });
+    }
     for offset in 0..buf.len().saturating_sub(8) {
         let count = u16::from_le_bytes([buf[offset], buf[offset + 1]]) as usize;
         if count == 0 || count > 5000 {
@@ -1066,13 +1350,33 @@ fn find_network_list_start(buf: &[u8]) -> Option<usize> {
             continue;
         }
         let name_bytes = &buf[offset + 8..offset + 8 + name_len];
-        if !name_bytes.starts_with(b"CLD") {
+        if name_bytes != b"CLDNetwork" {
             continue;
         }
         if !name_bytes.iter().all(|b| b.is_ascii_graphic()) {
             continue;
         }
-        return Some(offset);
+        return Some(NetworkListStart { count: Some(count), count_len: 2, offset });
+    }
+    for offset in 0..buf.len().saturating_sub(6) {
+        if u16::from_le_bytes([buf[offset], buf[offset + 1]]) != 0xFFFF {
+            continue;
+        }
+        let name_len = u16::from_le_bytes([buf[offset + 4], buf[offset + 5]]) as usize;
+        if name_len == 0 || name_len > 64 {
+            continue;
+        }
+        if offset + 6 + name_len > buf.len() {
+            continue;
+        }
+        let name_bytes = &buf[offset + 6..offset + 6 + name_len];
+        if name_bytes != b"CLDNetwork" {
+            continue;
+        }
+        if !name_bytes.iter().all(|b| b.is_ascii_graphic()) {
+            continue;
+        }
+        return Some(NetworkListStart { count: None, count_len: 0, offset });
     }
     None
 }
@@ -1191,22 +1495,7 @@ fn read_safety_inline_element(
         });
     }
 
-    let name = reader.read_mfc_string()?;
-    let comment = reader.read_mfc_string()?;
-    let desc = reader.read_mfc_string()?;
-
-    let mut connections = Vec::new();
-    if variant == Variant::Normal {
-        let conn_count = reader.read_u32()? as usize;
-        if conn_count > 0 {
-            connections = Vec::with_capacity(conn_count);
-            for _ in 0..conn_count {
-                let conn_u32 = reader.read_u32()?;
-                let conn = checked_i32(conn_u32, "inline_element.conn_id")?;
-                connections.push(conn);
-            }
-        }
-    }
+    let (name, comment, desc, connections) = read_element_fields(reader, variant)?;
     match type_code {
         ElementType::Box => {
             if variant == Variant::Safety {
@@ -1216,17 +1505,17 @@ fn read_safety_inline_element(
             if variant == Variant::Safety && reader.remaining_len() >= 2 && reader.peek_u16()? == 0x0100 {
                 let _ = reader.read_u16()?;
             }
-            let instance = reader.read_mfc_string()?;
+            let instance = read_element_string(reader, variant, 200)?;
 
             let input_count = reader.read_u32()? as usize;
             let mut pins = Vec::new();
             for _ in 0..input_count {
-                pins.push(read_pin(reader, variant, PinDirection::Input)?);
+                pins.push(read_pin(reader, variant, serialize_version, PinDirection::Input)?);
             }
 
             let output_count = reader.read_u32()? as usize;
             for _ in 0..output_count {
-                pins.push(read_pin(reader, variant, PinDirection::Output)?);
+                pins.push(read_pin(reader, variant, serialize_version, PinDirection::Output)?);
             }
 
             Ok(LdElement {
@@ -1563,8 +1852,11 @@ fn try_read_variables_normal(reader: &mut MfcReader) -> Result<Vec<Variable>> {
 
 fn read_variables_safety(reader: &mut MfcReader) -> Result<Vec<Variable>> {
     let start = reader.position();
+    let looks_like = looks_like_safety_var_table(reader);
     if let Ok(vars) = try_read_variables_safety(reader) {
-        return Ok(vars);
+        if !vars.is_empty() || looks_like {
+            return Ok(vars);
+        }
     }
     reader.seek_to(start)?;
     seek_to_safety_var_table(reader)?;
@@ -1918,6 +2210,39 @@ fn seek_to_safety_var_table(reader: &mut MfcReader) -> Result<()> {
     bail!("未找到 Safety 变量表起点");
 }
 
+fn find_normal_var_table_offset(reader: &MfcReader) -> Option<usize> {
+    let buf = reader.remaining_slice();
+    if buf.len() < 8 {
+        return None;
+    }
+    for offset in 0..buf.len().saturating_sub(8) {
+        let mut idx = offset;
+        if !scan_mfc_string_ascii(buf, &mut idx, 80).unwrap_or(false) {
+            continue;
+        }
+        if idx < buf.len() && buf[idx] == 0x00 {
+            idx += 1;
+        }
+        if idx + 4 > buf.len() {
+            continue;
+        }
+        let count = u32::from_le_bytes([buf[idx], buf[idx + 1], buf[idx + 2], buf[idx + 3]]) as usize;
+        idx += 4;
+        if count == 0 || count > 2000 {
+            continue;
+        }
+        if idx >= buf.len() {
+            continue;
+        }
+        let tag = buf[idx];
+        if tag != 0x18 && tag != 0x15 {
+            continue;
+        }
+        return Some(idx);
+    }
+    None
+}
+
 fn seek_to_normal_var_table(reader: &mut MfcReader) -> Result<()> {
     let start = reader.position();
     let buf = reader.inner.get_ref();
@@ -1925,37 +2250,8 @@ fn seek_to_normal_var_table(reader: &mut MfcReader) -> Result<()> {
         bail!("已到达文件末尾，无法寻找变量表");
     }
     let slice = &buf[start..];
-    for offset in 0..slice.len().saturating_sub(8) {
-        if slice[offset] == 0x18 {
-            let mut idx = offset + 1;
-            if !scan_mfc_string_ascii(slice, &mut idx, 80)? {
-                continue;
-            }
-            if !scan_mfc_string_any(slice, &mut idx, 80)? {
-                continue;
-            }
-            if !scan_mfc_string_ascii(slice, &mut idx, 80)? {
-                continue;
-            }
-            reader.seek_to(start + offset)?;
-            return Ok(());
-        }
-        if slice[offset] != 0x15 {
-            continue;
-        }
-        let mut idx = offset + 1;
-        if !scan_mfc_string_ascii(slice, &mut idx, 80)? {
-            continue;
-        }
-        if !scan_mfc_string_ascii(slice, &mut idx, 80)? {
-            continue;
-        }
-        if !scan_mfc_string_any(slice, &mut idx, 120)? {
-            continue;
-        }
-        if !scan_mfc_string_ascii(slice, &mut idx, 16)? {
-            continue;
-        }
+    let probe = MfcReader::new(slice);
+    if let Some(offset) = find_normal_var_table_offset(&probe) {
         reader.seek_to(start + offset)?;
         return Ok(());
     }
@@ -2255,12 +2551,24 @@ fn organize_variables(
 }
 
 fn read_string_array(reader: &mut MfcReader) -> Result<Vec<String>> {
-    let _reserved = reader.read_u32()?;
-    // 对齐到 2 字节后读取数量（样本中为 u16）
+    let start = reader.position();
     if reader.position() % 2 != 0 {
         let _ = reader.read_u8()?;
     }
     let count = reader.read_u16()? as usize;
+    if count > 1000 {
+        reader.seek_to(start)?;
+        let _ = reader.read_u32()?;
+        if reader.position() % 2 != 0 {
+            let _ = reader.read_u8()?;
+        }
+        let count = reader.read_u16()? as usize;
+        return read_string_array_items(reader, count);
+    }
+    read_string_array_items(reader, count)
+}
+
+fn read_string_array_items(reader: &mut MfcReader, count: usize) -> Result<Vec<String>> {
     let mut items = Vec::with_capacity(count);
     for _ in 0..count {
         items.push(reader.read_mfc_string()?);

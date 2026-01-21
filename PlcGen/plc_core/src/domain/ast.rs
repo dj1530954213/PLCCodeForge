@@ -10,12 +10,12 @@ pub struct UniversalPou{
     /// Safety 头部中的 CStringArray 列表（引用/依赖项）
     #[serde(default)]
     pub header_strings:Vec<String>,
-    ///梯形图逻辑网络列表
-    pub networks:Vec<Network>,
-    /// 变量表 (定义 Input, Output, Local 变量)
+    /// 变量表节点 (支持层级结构)
     /// default: 如果 JSON 没传这个字段，默认为空列表
     #[serde(default)]
-    pub variables:Vec<Variable>
+    pub variables:Vec<VariableNode>,
+    ///梯形图逻辑网络列表
+    pub networks:Vec<Network>
 }
 
 #[derive(Serialize, Deserialize, Debug,Clone)]
@@ -47,6 +47,19 @@ pub struct Variable{
 }
 
 #[derive(Serialize, Deserialize, Debug,Clone)]
+#[serde(untagged)]
+pub enum VariableNode{
+    Leaf(Variable),
+    Group{
+        name:String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        type_name:Option<String>,
+        children:Vec<VariableNode>,
+    },
+}
+
+
+#[derive(Serialize, Deserialize, Debug,Clone)]
 pub struct Network{
     pub id:i32,
     pub label:String,//梯级标号
@@ -57,7 +70,7 @@ pub struct Network{
     /// - Safety 多元素网络必须提供该流，否则序列化器会拒绝写入
     /// - 单元素网络可为空（样本中不出现 Token 流）
     /// - 该流是“原子写入”的序列，可按 u16/u32 组合精确控制字节布局
-    #[serde(default)]
+    #[serde(skip_serializing, default)]
     pub safety_topology:Vec<SafetyTopologyToken>,
 }
 
@@ -65,6 +78,7 @@ pub struct Network{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ElementType {
     Network = 0x09, // 梯级本身也是一种 Element
+    Assign = 0x08,  // 赋值/映射
     Box = 0x03,     // 功能块 (MOVE, ADD, TON)
     Contact = 0x04, // 触点 (常开/常闭)
     Coil = 0x05,    // 线圈 (输出)

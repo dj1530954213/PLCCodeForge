@@ -1,5 +1,5 @@
-^C:\PROGRAM FILES\GIT\CODE\PLCCODEFORGE\DYNAMICINJECTION\AUTOTHINKBRIDGE\AUTOTHINKBRIDGE\RELEASE\DLLMAIN.OBJ|C:\PROGRAM FILES\GIT\CODE\PLCCODEFORGE\DYNAMICINJECTION\AUTOTHINKBRIDGE\AUTOTHINKBRIDGE\RELEASE\PCH.OBJ
-C:\Program Files\Git\code\PLCCodeForge\DynamicInjection\AutoThinkBridge\Release\AutoThinkBridge.lib
-C:\Program Files\Git\code\PLCCodeForge\DynamicInjection\AutoThinkBridge\Release\AutoThinkBridge.EXP
-C:\Program Files\Git\code\PLCCodeForge\DynamicInjection\AutoThinkBridge\AutoThinkBridge\Release\AutoThinkBridge.IPDB
-C:\Program Files\Git\code\PLCCodeForge\DynamicInjection\AutoThinkBridge\AutoThinkBridge\Release\AutoThinkBridge.iobj
+^C:\PROGRAM FILES\GIT\CODE\PLCCODEFORGE\CPPTEST\AUTOTHINKBRIDGE\AUTOTHINKBRIDGE\RELEASE\DLLMAIN.OBJ|C:\PROGRAM FILES\GIT\CODE\PLCCODEFORGE\CPPTEST\AUTOTHINKBRIDGE\AUTOTHINKBRIDGE\RELEASE\INJECTOR.OBJ|C:\PROGRAM FILES\GIT\CODE\PLCCODEFORGE\CPPTEST\AUTOTHINKBRIDGE\AUTOTHINKBRIDGE\RELEASE\PCH.OBJ
+c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\Release\AutoThinkBridge.lib
+c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\Release\AutoThinkBridge.EXP
+c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\AutoThinkBridge\Release\AutoThinkBridge.IPDB
+c:\Program Files\Git\code\PLCCodeForge\CppTest\AutoThinkBridge\AutoThinkBridge\Release\AutoThinkBridge.iobj

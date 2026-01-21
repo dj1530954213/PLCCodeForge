@@ -1,0 +1,151 @@
+{
+  "function_blocks": [
+    {
+      "name": "AI_ALARM_IO_PLC",
+      "members": [
+        "IN",
+        "ENG_MAX",
+        "ENG_MIN",
+        "MAIN_EN",
+        "MAIN_V",
+        "HH_LIMIT",
+        "H_LIMIT",
+        "L_LIMIT",
+        "LL_LIMIT",
+        "HH_A_EN",
+        "H_A_EN",
+        "L_A_EN",
+        "LL_A_EN",
+        "OUT",
+        "HH_ALARM",
+        "H_ALARM",
+        "L_ALARM",
+        "LL_ALARM"
+      ]
+    },
+    {
+      "name": "AI_ALARM_IO_SIS",
+      "members": [
+        "IN",
+        "ENG_MAX",
+        "ENG_MIN",
+        "MAIN_EN",
+        "MAIN_V",
+        "HH_LIMIT",
+        "H_LIMIT",
+        "L_LIMIT",
+        "LL_LIMIT",
+        "HH_A_EN",
+        "H_A_EN",
+        "L_A_EN",
+        "LL_A_EN",
+        "OUT",
+        "HH_ALARM",
+        "H_ALARM",
+        "L_ALARM",
+        "LL_ALARM"
+      ]
+    },
+    {
+      "name": "AO_CNRT",
+      "members": [
+        "IN",
+        "ENG_MAX",
+        "ENG_Min"
+      ]
+    },
+    {
+      "name": "XV_CTRL",
+      "members": [
+        "ZIO",
+        "ZIC",
+        "RUN",
+        "RL",
+        "FA",
+        "DA_TIME",
+        "DA_RST",
+        "CS",
+        "A_OPEN",
+        "A_CLOSE",
+        "C_AM",
+        "S_AM",
+        "C_OPEN",
+        "S_OPEN",
+        "C_CLOSE",
+        "S_CLOSE",
+        "AM",
+        "XO",
+        "XC",
+        "DA"
+      ]
+    },
+    {
+      "name": "PID_CTRL",
+      "members": [
+        "CS",
+        "RL",
+        "Fault",
+        "PZIO",
+        "PZIC",
+        "XZ",
+        "PV_P",
+        "PV_F",
+        "OUT_ENG_MAX",
+        "OUT_ENG_MIN",
+        "C_AM",
+        "S_AM",
+        "C_FP",
+        "S_FP",
+        "C_SP_P",
+        "C_SP_F",
+        "C_M_OUT",
+        "S_SP_P",
+        "S_SP_F",
+        "S_M_OUT",
+        "P_P",
+        "P_I",
+        "P_D",
+        "F_P",
+        "F_I",
+        "F_D",
+        "ENO",
+        "AM",
+        "FP",
+        "OUT",
+        "OUT_CH"
+      ]
+    },
+    {
+      "name": "MOV_CTRL",
+      "members": [
+        "CS",
+        "ZIX",
+        "ZIA",
+        "A_OPEN",
+        "A_CLOSE",
+        "ZIO",
+        "ZIC",
+        "ZIS",
+        "DA_TIME",
+        "DA_RST",
+        "C_AM",
+        "S_AM",
+        "C_OPEN",
+        "C_CLOSE",
+        "S_OPEN",
+        "S_CLOSE",
+        "AM",
+        "XO",
+        "XC",
+        "DA"
+      ]
+    },
+    {
+      "name": "MOVE",
+      "members": [
+        "IN1",
+        "OUT1"
+      ]
+    }
+  ]
+}
