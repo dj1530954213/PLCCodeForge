@@ -8,22 +8,28 @@ import TextEditor from "../components/revogrid/TextEditor.vue";
 import SelectEditor from "../components/revogrid/SelectEditor.vue";
 import NumberEditor from "../components/revogrid/NumberEditor.vue";
 import BatchEditDialog from "../components/BatchEditDialog.vue";
+import PointsHeader from "../components/points/PointsHeader.vue";
+import RunPanel from "../components/points/RunPanel.vue";
+import ValidationBar from "../components/points/ValidationBar.vue";
+import ValidationDrawer from "../components/points/ValidationDrawer.vue";
 
 import { COMM_BYTE_ORDERS_32, COMM_DATA_TYPES } from "../constants";
 import { formatHumanAddressFrom0Based, parseHumanAddress, spanForArea, inferNextAddress } from "../services/address";
 import { buildBatchPointsTemplate, previewBatchPointsTemplate } from "../services/batchAdd";
-import { computeFillAddressEdits, computeFillDownEdits, type SelectionRange } from "../services/fill";
-import { UndoManager, createBatchAddUndoAction, createBatchEditUndoAction, createDeleteRowsUndoAction } from "../services/undoRedo";
+import type { SelectionRange } from "../services/fill";
+import { createBatchAddUndoAction, createBatchEditUndoAction, createDeleteRowsUndoAction } from "../services/undoRedo";
 import { useKeyboardShortcuts, createStandardShortcuts } from "../composables/useKeyboardShortcuts";
 import { computeBatchEdits, applyBatchEdits, type BatchEditRequest } from "../services/batchEdit";
 import { getSupportedDataTypes } from "../services/dataTypes";
+import { usePointsRun } from "../composables/usePointsRun";
+import { usePointsGrid } from "../composables/usePointsGrid";
+import { usePointsFill } from "../composables/usePointsFill";
+import { usePointsUndo } from "../composables/usePointsUndo";
 
 import type {
   BatchInsertMode,
   ByteOrder32,
   CommPoint,
-  CommRunError,
-  CommRunLatestResponse,
   ConnectionProfile,
   DataType,
   PointsV1,
@@ -37,9 +43,6 @@ import {
   commPointsLoad,
   commPointsSave,
   commProjectUiStatePatchV1,
-  commRunLatestObs,
-  commRunStartObs,
-  commRunStopObs,
 } from "../api";
 import { useCommDeviceContext } from "../composables/useDeviceContext";
 import { useCommWorkspaceRuntime } from "../composables/useWorkspaceRuntime";
@@ -49,16 +52,6 @@ const workspaceRuntime = useCommWorkspaceRuntime();
 
 const BYTE_ORDERS: ByteOrder32[] = COMM_BYTE_ORDERS_32;
 
-type RunUiState = "idle" | "starting" | "running" | "stopping" | "error";
-type LogLevel = "info" | "success" | "warning" | "error";
-
-interface LogEntry {
-  ts: string;
-  step: string;
-  level: LogLevel;
-  message: string;
-}
-
 interface ValidationIssue {
   pointKey: string;
   hmiName: string;
@@ -66,6 +59,11 @@ interface ValidationIssue {
   message: string;
   field?: keyof PointRow;
 }
+
+type ValidationIssueJump = {
+  pointKey: string;
+  field?: string;
+};
 
 interface BackendFieldIssue {
   pointKey?: string;
@@ -95,96 +93,39 @@ const gridAutoSizeColumn = {
 const activeChannelName = ref<string>("");
 const gridRows = ref<PointRow[]>([]);
 
-const selectedRangeRows = ref<{ rowStart: number; rowEnd: number } | null>(null);
-let lastRowSelectionIndex: number | null = null;
-
-const explicitSelectedKeys = computed<string[]>(() => gridRows.value.filter((r) => r.__selected).map((r) => r.pointKey));
-
-const rangeSelectedKeys = computed<string[]>(() => {
-  const span = selectedRangeRows.value;
-  if (!span) return [];
-  const start = Math.max(0, Math.min(span.rowStart, span.rowEnd));
-  const end = Math.min(gridRows.value.length - 1, Math.max(span.rowStart, span.rowEnd));
-  if (end < 0 || start > end) return [];
-  const out: string[] = [];
-  for (let i = start; i <= end; i++) {
-    const row = gridRows.value[i];
-    if (row) out.push(row.pointKey);
-  }
-  return out;
-});
-
-const effectiveSelectedKeys = computed<string[]>(() => {
-  if (rangeSelectedKeys.value.length > 0) return rangeSelectedKeys.value;
-  if (explicitSelectedKeys.value.length > 0) return explicitSelectedKeys.value;
-  return [];
-});
-
-const effectiveSelectedKeySet = computed(() => new Set(effectiveSelectedKeys.value));
-const effectiveSelectedRows = computed(() => gridRows.value.filter((r) => effectiveSelectedKeySet.value.has(r.pointKey)));
-
-const selectedCount = computed(() => effectiveSelectedKeys.value.length);
-
-function clearExplicitRowSelection() {
-  if (!gridRows.value.some((r) => r.__selected)) return;
-  gridRows.value.forEach((r) => {
-    r.__selected = false;
-  });
-  gridRows.value = [...gridRows.value];
-}
-
-function applyRangeSelection(range: { y: number; y1: number } | null) {
-  if (!range || typeof range.y !== "number" || typeof range.y1 !== "number") return;
-  const rowStart = Math.min(range.y, range.y1);
-  const rowEnd = Math.max(range.y, range.y1);
-  if (!Number.isFinite(rowStart) || !Number.isFinite(rowEnd) || rowEnd < 0) return;
-  selectedRangeRows.value = { rowStart: Math.max(0, rowStart), rowEnd: Math.max(0, rowEnd) };
-  clearExplicitRowSelection();
-  lastRowSelectionIndex = rowEnd;
-}
-
-function onGridSetRange(e: any) {
-  applyRangeSelection(e?.detail ?? null);
-}
-
-function onGridSelectionChange(e: any) {
-  applyRangeSelection(e?.detail?.newRange ?? null);
-}
-
-function onGridClearRegion() {
-  selectedRangeRows.value = null;
+function getValidationError(): string | null {
+  return gridRows.value.map(validateRowForRun).find((v) => Boolean(v)) ?? null;
 }
 
 const showAllValidation = ref(false);
 const touchedRowKeys = ref<Record<string, boolean>>({});
 const pointsRevision = ref(0);
 const validationPanelOpen = ref(false);
-const fillMode = ref<"copy" | "series">("copy");
 const focusedIssueCell = ref<{ pointKey: string; field: keyof PointRow } | null>(null);
 
-const fillModeLabel = computed(() => (fillMode.value === "copy" ? "同值填充" : "序列递增"));
-
-const start0ByPointKey = ref<Record<string, number>>({});
-
-const runUiState = ref<RunUiState>("idle");
-const runId = ref<string | null>(null);
-const latest = ref<CommRunLatestResponse | null>(null);
-const runError = ref<CommRunError | null>(null);
-const logs = ref<LogEntry[]>([]);
-const pollMs = ref<number>(1000);
-const runtimeByPointKey = ref<Record<string, SampleResult>>({});
-const autoRestartPending = ref(false);
-const AUTO_RESTART_DELAY_MS = 600;
-const resumeAfterFix = ref(false);
-
-const runPointsRevision = ref<number | null>(null);
-const configChangedDuringRun = computed(() => {
-  return isRunning.value && runPointsRevision.value !== null && pointsRevision.value !== runPointsRevision.value;
+const {
+  selectedRangeRows,
+  effectiveSelectedKeySet,
+  effectiveSelectedRows,
+  selectedCount,
+  onGridSetRange,
+  onGridSelectionChange,
+  onGridClearRegion,
+  gridApi,
+  attachGridSelectionListeners,
+  detachSelectionListeners: detachGridSelectionListeners,
+  getSelectedRange,
+  getRowClass,
+} = usePointsGrid({
+  gridRef,
+  gridRows,
+  appendRows,
+  clearFocus: () => {
+    focusedIssueCell.value = null;
+  },
 });
 
-const isStarting = computed(() => runUiState.value === "starting");
-const isRunning = computed(() => runUiState.value === "running");
-const isStopping = computed(() => runUiState.value === "stopping");
+const start0ByPointKey = ref<Record<string, number>>({});
 
 const activeProfile = computed<ConnectionProfile | null>(() => {
   const name = activeChannelName.value;
@@ -192,10 +133,47 @@ const activeProfile = computed<ConnectionProfile | null>(() => {
   return profiles.value.profiles.find((p) => p.channelName === name) ?? null;
 });
 
+const runtimeByPointKey = ref<Record<string, SampleResult>>({});
+
 const dataTypeOptions = computed<DataType[]>(() => {
   const profile = activeProfile.value;
   return profile ? getSupportedDataTypes(profile.readArea) : COMM_DATA_TYPES;
 });
+
+const {
+  runUiState,
+  runId,
+  latest,
+  runError,
+  runErrorTitle,
+  pollMs,
+  autoRestartPending,
+  resumeAfterFix,
+  configChangedDuringRun,
+  isStarting,
+  isRunning,
+  isStopping,
+  pushLog,
+  startRun,
+  stopRun,
+  markPointsChanged,
+  dispose: disposeRun,
+} = usePointsRun({
+  projectId,
+  activeDeviceId,
+  activeProfile,
+  points,
+  pointsRevision,
+  showAllValidation,
+  getValidationError,
+  syncFromGridAndMapAddresses,
+  onLatestResults: applyLatestToGridRows,
+  workspaceRuntime,
+});
+
+function updatePollMs(value: number) {
+  pollMs.value = value;
+}
 
 function resolveDataTypeForArea(area: RegisterArea, preferred?: DataType | null): DataType {
   const supported = getSupportedDataTypes(area);
@@ -295,6 +273,13 @@ const validationIssues = computed<ValidationIssue[]>(() => {
   return out;
 });
 
+const validationIssuesView = computed(() =>
+  validationIssues.value.map((issue) => ({
+    ...issue,
+    fieldLabel: formatFieldLabel(issue.field),
+  }))
+);
+
 const validationIssueByPointKey = computed<Record<string, string>>(() => {
   const out: Record<string, string> = {};
   for (const issue of validationIssues.value) {
@@ -344,33 +329,6 @@ function formatBackendReason(reason?: string): string {
   return trimmed;
 }
 
-function formatRunErrorKind(kind: CommRunError["kind"]): string {
-  switch (kind) {
-    case "ConfigError":
-      return "配置错误";
-    case "RunNotFound":
-      return "运行不存在";
-    case "InternalError":
-      return "内部错误";
-    default:
-      return "未知错误";
-  }
-}
-
-function formatRunErrorMessage(message?: string): string {
-  const raw = String(message ?? "").trim();
-  if (!raw) return "未知错误";
-  if (/[\u4e00-\u9fa5]/.test(raw)) return raw;
-  if (raw === "profiles is empty") return "连接配置为空";
-  if (raw === "points is empty") return "点位列表为空";
-  if (raw === "invalid points/profiles configuration") return "点位或连接配置无效";
-  return raw;
-}
-
-function formatRunErrorTitle(err: CommRunError): string {
-  return `${formatRunErrorKind(err.kind)}：${formatRunErrorMessage(err.message)}`;
-}
-
 function formatQualityLabel(quality?: Quality | string | null): string {
   switch (quality) {
     case "Ok":
@@ -391,8 +349,6 @@ function formatQualityLabel(quality?: Quality | string | null): string {
       return String(quality);
   }
 }
-
-const runErrorTitle = computed(() => (runError.value ? formatRunErrorTitle(runError.value) : ""));
 
 const backendFieldIssues = computed<BackendFieldIssue[]>(() => runError.value?.details?.missingFields ?? []);
 const backendFieldIssuesView = computed(() =>
@@ -420,222 +376,7 @@ const validationSummary = computed(() => {
   return `运行已阻止 · ${parts.join(" / ")}`;
 });
 
-let timer: number | null = null;
-function clearTimer() {
-  if (timer !== null) {
-    window.clearInterval(timer);
-    timer = null;
-  }
-}
-
-function pushLog(step: string, level: LogLevel, message: string) {
-  logs.value.unshift({ ts: new Date().toISOString(), step, level, message });
-  if (logs.value.length > 20) logs.value.length = 20;
-}
-
-let autoRestartTimer: number | null = null;
-function clearAutoRestartTimer() {
-  if (autoRestartTimer !== null) {
-    window.clearTimeout(autoRestartTimer);
-    autoRestartTimer = null;
-  }
-  autoRestartPending.value = false;
-}
-
-type AutoRestartMode = "restart" | "start";
-
-function scheduleAutoRestart(reason: string, mode: AutoRestartMode) {
-  if (isStarting.value || isStopping.value) return;
-  if (mode === "restart" && !isRunning.value) return;
-  if (mode === "start" && isRunning.value) return;
-  clearAutoRestartTimer();
-  autoRestartPending.value = true;
-  autoRestartTimer = window.setTimeout(() => {
-    autoRestartTimer = null;
-    autoRestartPending.value = false;
-    pushLog("run_restart", "info", `自动重启：${reason}`);
-    if (mode === "restart") {
-      if (!isRunning.value) return;
-      void restartRun();
-    } else {
-      if (isRunning.value) return;
-      void startRun();
-    }
-  }, AUTO_RESTART_DELAY_MS);
-}
-
-function markPointsChanged() {
-  pointsRevision.value += 1;
-
-  if (hasValidationIssues.value) {
-    if (isRunning.value) {
-      const first = validationIssues.value[0];
-      resumeAfterFix.value = true;
-      runError.value = makeUiConfigError(first.message);
-      void stopRun("validation");
-    }
-    return;
-  }
-
-  if (resumeAfterFix.value && !isRunning.value) {
-    resumeAfterFix.value = false;
-    runError.value = null;
-    scheduleAutoRestart("配置已修复", "start");
-    return;
-  }
-
-  scheduleAutoRestart("配置变更", "restart");
-}
-
-function makeUiConfigError(message: string): CommRunError {
-  return {
-    kind: "ConfigError",
-    message,
-    details: {
-      projectId: projectId.value,
-      deviceId: activeDeviceId.value || undefined,
-    },
-  };
-}
-
-function gridApi(): any | null {
-  const v = gridRef.value as any;
-  if (!v) return null;
-  if (
-    typeof v.getSource === "function" ||
-    typeof v.scrollToRow === "function" ||
-    typeof v.getSelectedRange === "function"
-  )
-    return v;
-  if (
-    v.$el &&
-    (typeof v.$el.getSource === "function" ||
-      typeof v.$el.scrollToRow === "function" ||
-      typeof v.$el.getSelectedRange === "function")
-  )
-    return v.$el;
-  return v.$el ?? v;
-}
-
-function gridElement(): HTMLElement | null {
-  const v = gridRef.value as any;
-  const el = v?.$el ?? v;
-  if (el && typeof el.addEventListener === "function") return el as HTMLElement;
-  return null;
-}
-
-let detachGridSelectionListeners: (() => void) | null = null;
-function attachGridSelectionListeners() {
-  if (detachGridSelectionListeners) return;
-  const el = gridElement();
-  if (!el?.addEventListener) return;
-
-  const onSetRange = (ev: any) => {
-    applyRangeSelection(ev?.detail ?? null);
-  };
-
-  const onClearRegion = () => {
-    selectedRangeRows.value = null;
-  };
-
-  const onRowHeaderMouseDown = (ev: MouseEvent) => {
-    if (ev.button !== 0) return;
-    const target = ev.target as HTMLElement | null;
-    if (!target) return;
-    const headerRoot = target.closest(".rowHeaders");
-    if (!headerRoot) return;
-    const cell = target.closest<HTMLElement>("[data-rgRow],[data-rgrow],[data-rg-row]");
-    if (!cell) return;
-    const rawIndex =
-      cell.getAttribute("data-rgRow") ??
-      cell.getAttribute("data-rgrow") ??
-      cell.getAttribute("data-rg-row");
-    const rowIndex = Number(rawIndex);
-    if (!Number.isFinite(rowIndex) || rowIndex < 0 || rowIndex >= gridRows.value.length) return;
-
-    const isMultiSelect = ev.ctrlKey || ev.metaKey;
-    const isRangeSelect = ev.shiftKey;
-
-    if (isRangeSelect) {
-      const anchor = lastRowSelectionIndex ?? rowIndex;
-      selectedRangeRows.value = {
-        rowStart: Math.min(anchor, rowIndex),
-        rowEnd: Math.max(anchor, rowIndex),
-      };
-      clearExplicitRowSelection();
-    } else {
-      selectedRangeRows.value = null;
-      if (!isMultiSelect) {
-        gridRows.value.forEach((r, idx) => {
-          r.__selected = idx === rowIndex;
-        });
-      } else {
-        const row = gridRows.value[rowIndex];
-        if (row) row.__selected = !row.__selected;
-      }
-      gridRows.value = [...gridRows.value];
-    }
-
-    lastRowSelectionIndex = rowIndex;
-    focusedIssueCell.value = null;
-    ev.preventDefault();
-  };
-
-  let autofillDragging = false;
-  let autofillAppendPending = false;
-  let lastAutoAppendAt = 0;
-  const AUTOFILL_APPEND_CHUNK = 10;
-  const AUTOFILL_APPEND_THROTTLE_MS = 200;
-
-  const onAutofillMouseDown = (ev: MouseEvent) => {
-    const target = ev.target as HTMLElement | null;
-    if (!target) return;
-    if (!target.closest(".autofill-handle")) return;
-    autofillDragging = true;
-    lastAutoAppendAt = 0;
-  };
-
-  const onAutofillMouseMove = (ev: MouseEvent) => {
-    if (!autofillDragging || ev.buttons !== 1) return;
-    const host = gridElement();
-    if (!host) return;
-    const rect = host.getBoundingClientRect();
-    const threshold = 6;
-    if (ev.clientY < rect.bottom - threshold) return;
-    const now = Date.now();
-    if (now - lastAutoAppendAt < AUTOFILL_APPEND_THROTTLE_MS) return;
-    if (autofillAppendPending) return;
-
-    lastAutoAppendAt = now;
-    autofillAppendPending = true;
-    const baseRow = gridRows.value[gridRows.value.length - 1] ?? null;
-    appendRows(AUTOFILL_APPEND_CHUNK, baseRow)
-      .catch(() => {})
-      .finally(() => {
-        autofillAppendPending = false;
-      });
-  };
-
-  const onAutofillMouseUp = () => {
-    autofillDragging = false;
-  };
-
-  el.addEventListener("setrange", onSetRange as any);
-  el.addEventListener("clearregion", onClearRegion as any);
-  el.addEventListener("mousedown", onRowHeaderMouseDown as any);
-  el.addEventListener("mousedown", onAutofillMouseDown as any);
-  document.addEventListener("mousemove", onAutofillMouseMove as any);
-  document.addEventListener("mouseup", onAutofillMouseUp as any);
-
-  detachGridSelectionListeners = () => {
-    el.removeEventListener("setrange", onSetRange as any);
-    el.removeEventListener("clearregion", onClearRegion as any);
-    el.removeEventListener("mousedown", onRowHeaderMouseDown as any);
-    el.removeEventListener("mousedown", onAutofillMouseDown as any);
-    document.removeEventListener("mousemove", onAutofillMouseMove as any);
-    document.removeEventListener("mouseup", onAutofillMouseUp as any);
-  };
-}
+ 
 
 function validateHmiName(row: PointRow): string | null {
   return normalizeHmiName(row.hmiName) ? null : "变量名称（HMI）不能为空";
@@ -768,6 +509,31 @@ const colIndexByProp = computed<Record<string, number>>(() => {
     out[String(columns.value[i].prop)] = i;
   }
   return out;
+});
+
+const {
+  fillMode,
+  fillModeLabel,
+  handleFillCommand,
+  applyFill,
+  applyFillDown,
+  applyFillSeries,
+} = usePointsFill({
+  gridRows,
+  columns,
+  colIndexByProp,
+  activeProfile,
+  gridApi,
+  getSelectedRange,
+  syncFromGridAndMapAddresses,
+  markPointsChanged,
+  rowSelectedProp: COL_ROW_SELECTED,
+});
+
+const { undoManager, handleUndo, handleRedo } = usePointsUndo({
+  onAfterChange: () => {
+    void rebuildPlan();
+  },
 });
 
 function makeRowFromPoint(p: CommPoint): PointRow {
@@ -1324,18 +1090,6 @@ async function confirmBatchAdd() {
   }
 }
 
-async function getSelectedRange(): Promise<{ rowStart: number; rowEnd: number; colStart: number; colEnd: number } | null> {
-  const grid = gridApi();
-  if (!grid) return null;
-  const range = await grid.getSelectedRange();
-  if (!range) return null;
-  const rowStart = Math.min(range.y, range.y1);
-  const rowEnd = Math.max(range.y, range.y1);
-  const colStart = Math.min(range.x, range.x1);
-  const colEnd = Math.max(range.x, range.x1);
-  return { rowStart, rowEnd, colStart, colEnd };
-}
-
 async function removeSelectedRows() {
   let selected = effectiveSelectedRows.value;
   if (selected.length === 0) {
@@ -1375,179 +1129,6 @@ async function removeSelectedRows() {
   await rebuildPlan();
   ElMessage.success(`已删除 ${count} 行`);
 }
-
-function handleFillCommand(command: string) {
-  if (command === "copy" || command === "series") {
-    fillMode.value = command as "copy" | "series";
-  }
-}
-
-async function applyFill() {
-  if (fillMode.value === "copy") {
-    await fillDownFromSelection();
-    return;
-  }
-  await fillSeriesFromSelection();
-}
-
-async function applyFillDown(range: SelectionRange) {
-  const { rowStart, rowEnd, colStart, colEnd } = range;
-  if (rowEnd <= rowStart) {
-    ElMessage.warning("请框选至少两行");
-    return;
-  }
-
-  const grid = gridApi();
-  if (!grid) return;
-  const propsByColIndex = columns.value.map((c) => String(c.prop ?? ""));
-  const skipProps = new Set([
-    COL_ROW_SELECTED,
-    "pointKey",
-    "quality",
-    "valueDisplay",
-    "errorMessage",
-    "timestamp",
-    "durationMs",
-  ]);
-  const { edits, changed } = computeFillDownEdits({
-    rows: gridRows.value,
-    propsByColIndex,
-    range: { rowStart, rowEnd, colStart, colEnd },
-    skipProps,
-  });
-  for (const e of edits) {
-    await grid.setDataAt({ row: e.rowIndex, col: e.colIndex, rowType: "rgRow", colType: "rgCol", val: e.value });
-  }
-  const touched = gridRows.value.slice(rowStart, rowEnd + 1).map((r) => r.pointKey);
-  await syncFromGridAndMapAddresses(touched);
-  markPointsChanged();
-  ElMessage.success(`已向下填充：${rowEnd - rowStart} 行 × ${colEnd - colStart + 1} 列（${changed} 单元格）`);
-}
-
-async function fillDownFromSelection() {
-  const sel = await getSelectedRange();
-  if (!sel) {
-    ElMessage.warning("请先框选一个单元格区域");
-    return;
-  }
-  await applyFillDown(sel);
-}
-
-function incrementStringSuffix(input: string, step: number): string | null {
-  const match = String(input).match(/^(.*?)(\d+)$/);
-  if (!match) return null;
-  const prefix = match[1];
-  const rawNum = match[2];
-  const num = Number(rawNum);
-  if (!Number.isFinite(num)) return null;
-  const next = num + step;
-  const padded = String(next).padStart(rawNum.length, "0");
-  return `${prefix}${padded}`;
-}
-
-async function applyFillSeries(range: SelectionRange) {
-  const { rowStart, rowEnd, colStart, colEnd } = range;
-  if (rowEnd <= rowStart && colEnd <= colStart) {
-    ElMessage.warning("请框选至少两个单元格");
-    return;
-  }
-
-  const grid = gridApi();
-  if (!grid) return;
-
-  const propsByColIndex = columns.value.map((c) => String(c.prop ?? ""));
-  const skipProps = new Set([
-    COL_ROW_SELECTED,
-    "pointKey",
-    "quality",
-    "valueDisplay",
-    "errorMessage",
-    "timestamp",
-    "durationMs",
-  ]);
-
-  const baseRow = gridRows.value[rowStart];
-  if (!baseRow) return;
-
-  const addrCol = colIndexByProp.value["modbusAddress"];
-  const includeAddress = addrCol >= colStart && addrCol <= colEnd;
-  const profile = activeProfile.value;
-
-  if (includeAddress && !profile) {
-    ElMessage.error("请先选择连接");
-    return;
-  }
-
-  if (includeAddress) {
-    const active = profile;
-    if (!active) {
-      ElMessage.error("请先选择连接");
-      return;
-    }
-
-    const computed = computeFillAddressEdits({
-      rows: gridRows.value,
-      range: { rowStart, rowEnd },
-      readArea: active.readArea,
-    });
-    if (!computed.ok) {
-      ElMessage.error(computed.message);
-      return;
-    }
-
-    for (const e of computed.edits) {
-      const parsed = parseHumanAddress(e.value, active.readArea);
-      if (!parsed.ok) {
-        ElMessage.error(parsed.message);
-        return;
-      }
-      const row = gridRows.value[e.rowIndex];
-      const len = row ? spanForArea(active.readArea, row.dataType) : null;
-      if (len === null) {
-        ElMessage.error(`数据类型 ${row?.dataType ?? "?"} 与读取区域 ${active.readArea} 不匹配（行 ${e.rowIndex + 1}）`);
-        return;
-      }
-    }
-
-    for (const e of computed.edits) {
-      await grid.setDataAt({ row: e.rowIndex, col: addrCol, rowType: "rgRow", colType: "rgCol", val: e.value });
-    }
-  }
-
-  for (let r = rowStart; r <= rowEnd; r++) {
-    const step = r - rowStart;
-    for (let c = colStart; c <= colEnd; c++) {
-      if (includeAddress && c === addrCol) continue;
-      const prop = String(propsByColIndex[c] ?? "");
-      if (!prop || skipProps.has(prop)) continue;
-      const baseVal = (baseRow as any)[prop];
-      let nextVal = baseVal;
-      if (typeof baseVal === "number" && Number.isFinite(baseVal)) {
-        nextVal = baseVal + step;
-      } else if (typeof baseVal === "string") {
-        nextVal = incrementStringSuffix(baseVal, step) ?? baseVal;
-      }
-      await grid.setDataAt({ row: r, col: c, rowType: "rgRow", colType: "rgCol", val: nextVal });
-    }
-  }
-
-  const touched = gridRows.value.slice(rowStart, rowEnd + 1).map((r) => r.pointKey);
-  await syncFromGridAndMapAddresses(touched);
-  markPointsChanged();
-  ElMessage.success(`已序列填充：${rowEnd - rowStart + 1} 行`);
-}
-
-async function fillSeriesFromSelection() {
-  const sel = await getSelectedRange();
-  if (!sel) {
-    ElMessage.warning("请先框选一个单元格区域");
-    return;
-  }
-  await applyFillSeries(sel);
-}
-
-// 撤销管理器
-const undoManager = new UndoManager(20);
 
 // 批量编辑对话框
 const batchEditDialogVisible = ref(false);
@@ -1658,26 +1239,6 @@ async function confirmReplaceHmiNames() {
   ElMessage.success(`已替换 ${changes.length} 行 / ${totalCount} 处`);
 }
 
-function handleUndo() {
-  if (!undoManager.canUndo()) {
-  ElMessage.warning("没有可撤销的操作");
-    return;
-  }
-  undoManager.undo();
-  void rebuildPlan();
-  ElMessage.success("已撤销");
-}
-
-function handleRedo() {
-  if (!undoManager.canRedo()) {
-  ElMessage.warning("没有可重做的操作");
-    return;
-  }
-  undoManager.redo();
-  void rebuildPlan();
-  ElMessage.success("已重做");
-}
-
 async function syncFromGridAndMapAddresses(touchedKeys?: string[]) {
   const grid = gridApi();
   if (!grid) return;
@@ -1715,13 +1276,6 @@ async function syncFromGridAndMapAddresses(touchedKeys?: string[]) {
     for (const key of touchedKeys) next[String(key)] = true;
     touchedRowKeys.value = next;
   }
-}
-
-async function startPolling() {
-  clearTimer();
-  timer = window.setInterval(pollLatest, pollMs.value);
-  await pollLatest();
-  pushLog("poll", "info", `轮询间隔 ${pollMs.value}ms`);
 }
 
 function applyLatestToGridRows(results: SampleResult[]) {
@@ -1766,170 +1320,6 @@ function applyLatestToGridRows(results: SampleResult[]) {
   }
 }
 
-async function startRun() {
-  if (runUiState.value === "starting" || runUiState.value === "running") return;
-  clearAutoRestartTimer();
-  runUiState.value = "starting";
-  runError.value = null;
-  latest.value = null;
-  runPointsRevision.value = null;
-  pushLog("run_start", "info", "点击启动");
-
-  showAllValidation.value = true;
-  await syncFromGridAndMapAddresses();
-  const invalid = gridRows.value.map(validateRowForRun).find((v) => Boolean(v));
-  if (invalid) {
-    runError.value = makeUiConfigError(invalid);
-    pushLog("run_start", "error", formatRunErrorTitle(runError.value));
-    ElMessage.error(invalid);
-    runUiState.value = "error";
-    return;
-  }
-
-  try {
-    const profile = activeProfile.value;
-    if (!profile) {
-      const err = makeUiConfigError("未选择连接");
-      runError.value = err;
-      pushLog("run_start", "error", formatRunErrorTitle(err));
-      ElMessage.error(formatRunErrorMessage(err.message));
-      runUiState.value = "error";
-      return;
-    }
-
-    const channelPoints = points.value.points.filter((p) => p.channelName === profile.channelName);
-    if (channelPoints.length === 0) {
-      const err = makeUiConfigError("点位为空：请先新增点位并保存");
-      runError.value = err;
-      pushLog("run_start", "error", formatRunErrorTitle(err));
-      ElMessage.error(formatRunErrorMessage(err.message));
-      runUiState.value = "error";
-      return;
-    }
-
-    const planToUse = await commPlanBuild(
-      { profiles: { schemaVersion: 1, profiles: [profile] }, points: { schemaVersion: 1, points: channelPoints } },
-      projectId.value,
-      activeDeviceId.value
-    );
-    pushLog("run_start", "info", `读取计划生成完成：${planToUse.jobs.length} 个任务`);
-
-    pushLog("run_start", "info", "调用 comm_run_start_obs（后端 spawn，不阻塞 UI）");
-    const resp = await commRunStartObs(
-      {
-        profiles: { schemaVersion: 1, profiles: [profile] },
-        points: { schemaVersion: 1, points: channelPoints },
-        plan: planToUse,
-      },
-      projectId.value,
-      activeDeviceId.value
-    );
-
-    if (!resp.ok || !resp.runId) {
-      const err =
-        resp.error ??
-        ({
-          kind: "InternalError",
-          message: "comm_run_start_obs 失败（ok=false 且 error 为空）",
-        } as CommRunError);
-      runError.value = err;
-      pushLog("run_start", "error", formatRunErrorTitle(err));
-      ElMessage.error(formatRunErrorTitle(err));
-      runUiState.value = "error";
-      return;
-    }
-
-    runId.value = resp.runId;
-    runUiState.value = "running";
-    runPointsRevision.value = pointsRevision.value;
-    pushLog("run_start", "success", `采集已启动：运行ID=${resp.runId}`);
-    ElMessage.success(`采集已启动：运行ID=${resp.runId}`);
-
-    await startPolling();
-  } catch (e: unknown) {
-    const err = makeUiConfigError(String((e as any)?.message ?? e ?? "未知错误"));
-    runError.value = err;
-    pushLog("run_start", "error", formatRunErrorTitle(err));
-    ElMessage.error(formatRunErrorTitle(err));
-    runUiState.value = "error";
-  }
-}
-
-async function pollLatest() {
-  const id = runId.value;
-  if (!id) return;
-  const resp = await commRunLatestObs(id);
-  if (!resp.ok || !resp.value) {
-    const err =
-      resp.error ??
-      ({
-        kind: "InternalError",
-        message: "comm_run_latest_obs 失败（ok=false 且 error 为空）",
-      } as CommRunError);
-    runError.value = err;
-    pushLog("run_latest", "error", formatRunErrorTitle(err));
-    runUiState.value = "error";
-    clearTimer();
-    if (runId.value) {
-      void commRunStopObs(id, projectId.value).catch(() => {
-        // ignore stop errors after latest failure
-      });
-    }
-    return;
-  }
-
-  latest.value = resp.value;
-  applyLatestToGridRows(resp.value.results);
-  pushLog("run_latest", "success", `采集成功：总数 ${resp.value.stats.total} / 正常 ${resp.value.stats.ok}`);
-}
-
-async function stopRun(reason: "manual" | "restart" | "validation" = "manual") {
-  if (!runId.value || runUiState.value !== "running") return;
-  clearAutoRestartTimer();
-  if (reason !== "validation") {
-    resumeAfterFix.value = false;
-  }
-  runUiState.value = "stopping";
-  const id = runId.value;
-  const reasonLabel =
-    reason === "validation" ? "配置无效自动停止" : reason === "restart" ? "重启前停止" : "点击停止";
-  pushLog("run_stop", "info", reasonLabel);
-
-  try {
-    const resp = await commRunStopObs(id, projectId.value);
-    if (!resp.ok) {
-      const err =
-        resp.error ??
-        ({
-          kind: "InternalError",
-          message: "comm_run_stop_obs 失败（ok=false 且 error 为空）",
-        } as CommRunError);
-      runError.value = err;
-      pushLog("run_stop", "error", formatRunErrorTitle(err));
-      ElMessage.error(formatRunErrorTitle(err));
-      runUiState.value = "error";
-      return;
-    }
-    pushLog("run_stop", "success", "已停止");
-    ElMessage.success("采集已停止");
-    runUiState.value = "idle";
-    clearTimer();
-  } catch (e: unknown) {
-    const err = makeUiConfigError(String((e as any)?.message ?? e ?? "未知错误"));
-    runError.value = err;
-    pushLog("run_stop", "error", formatRunErrorTitle(err));
-    ElMessage.error(formatRunErrorTitle(err));
-    runUiState.value = "error";
-  }
-}
-
-async function restartRun() {
-  if (!isRunning.value || !runId.value) return;
-  clearAutoRestartTimer();
-  pushLog("run_restart", "info", "点击重启");
-  await stopRun("restart");
-  await startRun();
-}
 
 function collectTouchedPointKeysFromAfterEdit(e: any): string[] {
   const keys = new Set<string>();
@@ -2006,12 +1396,7 @@ async function onBeforeAutofill(e: any) {
   }
 }
 
-function getRowClass(row: any): string {
-  const pointRow = row?.model as PointRow | undefined;
-  return pointRow && effectiveSelectedKeySet.value.has(pointRow.pointKey) ? 'row-selected' : '';
-}
-
-async function jumpToIssue(issue: ValidationIssue) {
+async function jumpToIssue(issue: ValidationIssueJump) {
   const rowIndex = gridRows.value.findIndex((r) => r.pointKey === issue.pointKey);
   if (rowIndex < 0) return;
 
@@ -2029,21 +1414,22 @@ async function jumpToIssue(issue: ValidationIssue) {
   }
 
   if (issue.field) {
-    const colIndex = colIndexByProp.value[String(issue.field)];
+    const colKey = String(issue.field);
+    const colIndex = colIndexByProp.value[colKey];
     if (typeof grid.scrollToColumnIndex === "function" && typeof colIndex === "number") {
       await grid.scrollToColumnIndex(colIndex);
     } else if (typeof grid.scrollToColumnProp === "function") {
-      await grid.scrollToColumnProp(issue.field);
+      await grid.scrollToColumnProp(colKey);
     } else if (typeof grid.scrollToCoordinate === "function" && typeof colIndex === "number") {
       await grid.scrollToCoordinate({ x: colIndex, y: rowIndex });
     }
   }
 }
 
-async function handleJumpToIssue(issue: ValidationIssue) {
+async function handleJumpToIssue(issue: ValidationIssueJump) {
   validationPanelOpen.value = false;
-  if (issue.field) {
-    focusedIssueCell.value = { pointKey: issue.pointKey, field: issue.field };
+  if (issue.field && Object.prototype.hasOwnProperty.call(colIndexByProp.value, issue.field)) {
+    focusedIssueCell.value = { pointKey: issue.pointKey, field: issue.field as keyof PointRow };
   } else {
     focusedIssueCell.value = null;
   }
@@ -2069,13 +1455,6 @@ watch(activeChannelName, async (v) => {
   await rebuildPlan();
 });
 
-watch(pollMs, (v) => {
-  if (!isRunning.value) return;
-  clearTimer();
-  timer = window.setInterval(pollLatest, v);
-  pushLog("poll", "info", `轮询间隔变更：${v}ms`);
-});
-
 watch(activeDevice, (device) => {
   if (!device) {
     profiles.value = { schemaVersion: 1, profiles: [] };
@@ -2087,11 +1466,6 @@ watch(activeDevice, (device) => {
     activeChannelName.value = device.profile.channelName;
   }
   void rebuildPlan();
-});
-
-watch(latest, (value) => {
-  workspaceRuntime.stats.value = value?.stats ?? null;
-  workspaceRuntime.updatedAtUtc.value = value?.updatedAtUtc ?? "";
 });
 
 watch(activeDeviceId, () => {
@@ -2112,26 +1486,14 @@ useKeyboardShortcuts(createStandardShortcuts({
 }));
 
 onBeforeUnmount(() => {
-  clearTimer();
-  clearAutoRestartTimer();
+  disposeRun();
   detachGridSelectionListeners?.();
 });
 </script>
 
 <template>
   <div class="comm-subpage comm-subpage--points">
-      <header class="comm-hero comm-animate" style="--delay: 0ms">
-        <div class="comm-hero-title">
-          <div class="comm-title">点位配置</div>
-          <div class="comm-subtitle">
-            实时采集 <span v-if="activeDevice">· {{ activeDevice.deviceName }}</span>
-          </div>
-        </div>
-        <div class="comm-hero-actions">
-          <el-button @click="loadAll">加载</el-button>
-          <el-button type="primary" @click="savePoints">保存</el-button>
-        </div>
-      </header>
+    <PointsHeader :active-device-name="activeDevice?.deviceName" @load="loadAll" @save="savePoints" />
 
       <el-alert
         class="comm-hint-bar comm-animate"
@@ -2143,48 +1505,22 @@ onBeforeUnmount(() => {
       />
 
       <div class="comm-points-stack">
-        <section class="comm-panel comm-panel--run comm-animate" style="--delay: 120ms">
-          <div class="comm-run-grid">
-            <div class="comm-profile-block">
-              <div class="comm-label">连接配置</div>
-              <div v-if="activeProfile" class="comm-profile-meta">
-                <span class="comm-chip">{{ activeProfile.protocolType }}</span>
-                <span class="comm-chip">{{ activeProfile.channelName }}</span>
-                <span class="comm-chip">区域 {{ activeProfile.readArea }}</span>
-                <span class="comm-chip">地址按点位配置</span>
-              </div>
-              <div v-else class="comm-profile-empty">请先在左侧配置连接</div>
-            </div>
-
-            <div class="comm-run-actions">
-              <el-button type="primary" :loading="isStarting" :disabled="isRunning || isStopping" @click="startRun">开始运行</el-button>
-              <el-button type="danger" :loading="isStopping" :disabled="!isRunning" @click="stopRun('manual')">停止</el-button>
-              <el-select v-model="pollMs" style="width: 160px">
-                <el-option :value="500" label="轮询 500ms" />
-                <el-option :value="1000" label="轮询 1s" />
-                <el-option :value="2000" label="轮询 2s" />
-              </el-select>
-            </div>
-          </div>
-
-          <div class="comm-run-meta">
-            <div class="comm-run-tags">
-              <el-tag v-if="isRunning && configChangedDuringRun" type="warning" effect="light">
-                {{ autoRestartPending ? "配置已变更：即将自动重启" : "配置已变更：重启中" }}
-              </el-tag>
-              <el-tag v-if="runUiState === 'running'" type="success">运行中</el-tag>
-              <el-tag v-else-if="runUiState === 'starting'" type="warning">启动中</el-tag>
-              <el-tag v-else-if="runUiState === 'stopping'" type="warning">停止中</el-tag>
-              <el-tag v-else-if="runUiState === 'error'" type="danger">错误</el-tag>
-              <el-tag v-else type="info">空闲</el-tag>
-            </div>
-            <div class="comm-run-tags">
-              <el-tag v-if="runId" type="info">运行ID={{ runId }}</el-tag>
-              <el-tag v-if="resumeAfterFix && !isRunning" type="warning">配置无效：修复后自动恢复</el-tag>
-              <el-tag v-if="latest" type="info">更新时间={{ latest.updatedAtUtc }}</el-tag>
-            </div>
-          </div>
-        </section>
+        <RunPanel
+          :active-profile="activeProfile"
+          :is-starting="isStarting"
+          :is-running="isRunning"
+          :is-stopping="isStopping"
+          :poll-ms="pollMs"
+          :run-ui-state="runUiState"
+          :config-changed-during-run="configChangedDuringRun"
+          :auto-restart-pending="autoRestartPending"
+          :run-id="runId"
+          :resume-after-fix="resumeAfterFix"
+          :latest-updated-at="latest?.updatedAtUtc"
+          @start="startRun"
+          @stop="stopRun('manual')"
+          @update:poll-ms="updatePollMs"
+        />
 
         <el-alert
           v-if="runError"
@@ -2196,21 +1532,11 @@ onBeforeUnmount(() => {
           :title="runErrorTitle"
         />
 
-        <div
-          class="comm-status-bar comm-animate"
-          style="--delay: 160ms"
-          :class="{ 'is-error': hasValidationIssues || hasBackendFieldIssues }"
-        >
-          <div class="comm-status-left">
-            <div class="comm-status-title">配置校验</div>
-            <div class="comm-status-desc">{{ validationSummary }}</div>
-          </div>
-          <div class="comm-status-actions">
-            <el-button size="small" :disabled="!hasValidationIssues && !hasBackendFieldIssues" @click="validationPanelOpen = true">
-              查看详情
-            </el-button>
-          </div>
-        </div>
+        <ValidationBar
+          :summary="validationSummary"
+          :has-issues="hasValidationIssues || hasBackendFieldIssues"
+          @open="validationPanelOpen = true"
+        />
 
         <section class="comm-panel comm-panel--table comm-animate comm-points-main" style="--delay: 180ms">
           <div class="comm-toolbar">
@@ -2273,62 +1599,14 @@ onBeforeUnmount(() => {
         </section>
       </div>
 
-    <el-drawer
+    <ValidationDrawer
       v-model="validationPanelOpen"
-      title="配置校验"
-      size="min(92vw, 960px)"
-      :append-to-body="true"
-      class="comm-validation-panel"
-    >
-      <div class="comm-validation-drawer">
-        <el-empty v-if="!hasValidationIssues && !hasBackendFieldIssues" description="暂无校验错误" />
-
-        <template v-else>
-          <el-alert
-            v-if="hasValidationIssues"
-            type="error"
-            show-icon
-            :closable="false"
-            :title="`前端校验阻断错误 ${validationIssues.length} 条`"
-            style="margin-bottom: 12px"
-          />
-          <div v-if="hasValidationIssues" class="comm-validation-table">
-            <el-table :data="validationIssues" size="small" style="width: 100%">
-              <el-table-column prop="hmiName" label="变量名称（HMI）" min-width="160" />
-              <el-table-column prop="modbusAddress" label="点位地址" width="120" />
-              <el-table-column label="字段" min-width="140">
-                <template #default="{ row }">{{ formatFieldLabel(row.field) }}</template>
-              </el-table-column>
-              <el-table-column prop="message" label="原因" min-width="240" class-name="comm-validation-reason" />
-              <el-table-column label="定位" width="96" align="center" fixed="right">
-                <template #default="{ row }">
-                  <el-button type="primary" link size="small" @click="handleJumpToIssue(row)">定位</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-
-          <el-divider v-if="hasBackendFieldIssues" style="margin: 16px 0" />
-
-          <el-alert
-            v-if="hasBackendFieldIssues"
-            type="warning"
-            show-icon
-            :closable="false"
-            :title="`后端校验字段问题 ${backendFieldIssues.length} 条`"
-            style="margin-bottom: 12px"
-          />
-          <div v-if="hasBackendFieldIssues" class="comm-validation-table">
-            <el-table :data="backendFieldIssuesView" size="small" style="width: 100%">
-              <el-table-column prop="hmiName" label="变量名称（HMI）" min-width="160" />
-              <el-table-column prop="pointKey" label="pointKey（稳定键）" min-width="200" show-overflow-tooltip />
-              <el-table-column prop="fieldLabel" label="字段" min-width="140" />
-              <el-table-column prop="reasonLabel" label="原因" min-width="240" class-name="comm-validation-reason" />
-            </el-table>
-          </div>
-        </template>
-      </div>
-    </el-drawer>
+      :validation-issues="validationIssuesView"
+      :has-validation-issues="hasValidationIssues"
+      :backend-issues="backendFieldIssuesView"
+      :has-backend-issues="hasBackendFieldIssues"
+      @jump="handleJumpToIssue"
+    />
 
     <el-dialog v-model="batchAddDrawerOpen" title="批量新增（模板）" width="980px">
       <el-row :gutter="12">
@@ -2448,13 +1726,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.comm-validation-drawer {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-}
-
 .comm-replace-hint {
   margin-top: 6px;
   font-size: 12px;
@@ -2473,12 +1744,6 @@ onBeforeUnmount(() => {
   gap: 14px;
 }
 
-.comm-profile-empty {
-  font-size: 12px;
-  color: var(--comm-muted);
-  padding: 4px 0;
-}
-
 @media (max-width: 1100px) {
   :deep(.comm-run-grid) {
     grid-template-columns: 1fr;
@@ -2489,23 +1754,6 @@ onBeforeUnmount(() => {
   }
 }
 
-:deep(.comm-validation-panel .el-drawer__body) {
-  padding: 16px 18px 20px;
-  overflow: auto;
-}
-
-.comm-validation-table {
-  border: 1px solid var(--comm-border);
-  border-radius: 12px;
-  overflow: auto;
-  max-height: min(46vh, 420px);
-}
-
-:deep(.comm-validation-reason .cell) {
-  white-space: normal;
-  line-height: 1.4;
-}
-
 :deep(.comm-grid) {
   width: 100%;
 }
@@ -2514,12 +1762,12 @@ onBeforeUnmount(() => {
   background: #e6eef2;
   color: var(--comm-text);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   border-bottom: 1px solid var(--comm-border);
 }
 
 :deep(.comm-grid .rgCell) {
-  font-size: 13px;
+  font-size: 14px;
   padding: 0 8px;
   border-color: rgba(201, 213, 220, 0.8);
   background: #ffffff;
@@ -2581,7 +1829,7 @@ onBeforeUnmount(() => {
   padding: 0 8px;
   border: 1px solid rgba(201, 213, 220, 0.9);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 14px;
   outline: none;
   background: #ffffff;
   color: var(--comm-text);

@@ -3,9 +3,7 @@ import { createRouter, createWebHashHistory } from "vue-router";
 import ProjectsPage from "../comm/pages/Projects.vue";
 import WorkspaceLandingPage from "../comm/pages/WorkspaceLanding.vue";
 import ProjectWorkspacePage from "../comm/pages/ProjectWorkspace.vue";
-import ConnectionPage from "../comm/pages/Connection.vue";
 import PointsPage from "../comm/pages/Points.vue";
-import RunPage from "../comm/pages/Run.vue";
 import ExportPage from "../comm/pages/Export.vue";
 import AdvancedPage from "../comm/pages/Advanced.vue";
 import ImportUnionPage from "../comm/pages/ImportUnion.vue";
@@ -24,9 +22,9 @@ export const router = createRouter({
       component: ProjectWorkspacePage,
       children: [
         { path: "", redirect: "points" },
-        { path: "connection", component: ConnectionPage },
+        { path: "connection", redirect: "points" },
         { path: "points", component: PointsPage },
-        { path: "run", component: RunPage },
+        { path: "run", redirect: "points" },
         { path: "export", component: ExportPage },
         {
           path: "advanced",
