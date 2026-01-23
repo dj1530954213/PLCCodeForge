@@ -19,6 +19,16 @@ import type { SelectionRange } from "../services/fill";
 import type { UndoManager } from "../services/undoRedo";
 import type { PointRowLike } from "./usePointsRows";
 
+export type BatchAddTemplate = {
+  count: number;
+  startAddressHuman: string;
+  dataType: DataType;
+  byteOrder: ByteOrder32;
+  hmiNameTemplate: string;
+  scaleTemplate: string;
+  insertMode: BatchInsertMode;
+};
+
 type ReplaceScope = "selected" | "all";
 type RowSpan = { rowStart: number; rowEnd: number };
 type LogLevel = "info" | "success" | "warning" | "error";
@@ -61,15 +71,7 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
   } = options;
 
   const batchAddDrawerOpen = ref(false);
-  const batchAddTemplate = ref<{
-    count: number;
-    startAddressHuman: string;
-    dataType: DataType;
-    byteOrder: ByteOrder32;
-    hmiNameTemplate: string;
-    scaleTemplate: string;
-    insertMode: BatchInsertMode;
-  }>({
+  const batchAddTemplate = ref<BatchAddTemplate>({
     count: 10,
     startAddressHuman: "",
     dataType: "UInt16",

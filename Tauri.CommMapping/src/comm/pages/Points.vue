@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { ElMessage } from "element-plus";
 import Grid, { VGridVueEditor, type ColumnRegular, type Editors } from "@revolist/vue3-datagrid";
 import type { ColumnAutoSizeMode } from "@revolist/revogrid";
 
@@ -25,6 +24,7 @@ import { usePointsUndo } from "../composables/usePointsUndo";
 import { usePointsBatchOps } from "../composables/usePointsBatchOps";
 import { usePointsRows } from "../composables/usePointsRows";
 import { usePointsRowOps } from "../composables/usePointsRowOps";
+import { usePointsPersistence } from "../composables/usePointsPersistence";
 import {
   formatBackendReason,
   formatFieldLabel,
@@ -40,7 +40,6 @@ import type {
   ProfilesV1,
   RegisterArea,
 } from "../api";
-import { loadPoints as loadPointsData, savePoints as savePointsData } from "../services/points";
 import { patchProjectUiState } from "../services/projects";
 import { useCommDeviceContext } from "../composables/useDeviceContext";
 import { useCommWorkspaceRuntime } from "../composables/useWorkspaceRuntime";
@@ -88,6 +87,7 @@ const touchedRowKeys = ref<Record<string, boolean>>({});
 const pointsRevision = ref(0);
 const validationPanelOpen = ref(false);
 const focusedIssueCell = ref<{ pointKey: string; field: keyof PointRow } | null>(null);
+const suppressChannelWatch = ref(false);
 
 function markTouchedKeys(keys: string[]) {
   const next = { ...touchedRowKeys.value };
@@ -401,89 +401,25 @@ rowOps = usePointsRowOps({
 
 const { addSingleRow, removeSelectedRows } = rowOps;
 
-let suppressChannelWatch = false;
-
-async function loadAll() {
-  try {
-    const pid = projectId.value.trim();
-    const did = activeDeviceId.value.trim();
-    if (!pid || !did) {
-      profiles.value = { schemaVersion: 1, profiles: [] };
-      points.value = { schemaVersion: 1, points: [] };
-      activeChannelName.value = "";
-      return;
-    }
-
-    const device = activeDevice.value;
-    profiles.value = device
-      ? { schemaVersion: 1, profiles: [JSON.parse(JSON.stringify(device.profile)) as ConnectionProfile] }
-      : { schemaVersion: 1, profiles: [] };
-    points.value = await loadPointsData(pid, did);
-    showAllValidation.value = false;
-    touchedRowKeys.value = {};
-    selectedRangeRows.value = null;
-    markPointsChanged();
-
-    suppressChannelWatch = true;
-    const profile = profiles.value.profiles[0];
-    if (profile) {
-      activeChannelName.value = profile.channelName;
-    } else if (points.value.points.length > 0) {
-      activeChannelName.value = points.value.points[0].channelName;
-    } else {
-      activeChannelName.value = "";
-    }
-
-    const t = project.value?.uiState?.pointsBatchTemplate;
-    if (t && t.schemaVersion === 1) {
-      batchAddTemplate.value = {
-        count: Math.max(1, Math.min(500, Math.floor(t.count || 10))),
-        startAddressHuman: String(t.startAddressHuman ?? "").trim(),
-        dataType: t.dataType ?? batchAddTemplate.value.dataType,
-        byteOrder: t.byteOrder ?? batchAddTemplate.value.byteOrder,
-        hmiNameTemplate: String(t.hmiNameTemplate ?? batchAddTemplate.value.hmiNameTemplate),
-        scaleTemplate: String(t.scaleTemplate ?? batchAddTemplate.value.scaleTemplate),
-        insertMode: t.insertMode === "afterSelection" ? "afterSelection" : "append",
-      };
-    }
-
-    suppressChannelWatch = false;
-    await rebuildPlan();
-    ElMessage.success("已加载点位与连接配置");
-  } catch (e: unknown) {
-    ElMessage.error(String((e as any)?.message ?? e ?? "加载失败"));
-  }
-}
-
-async function savePoints() {
-  showAllValidation.value = true;
-  await syncFromGridAndMapAddresses();
-  const invalid = gridRows.value.map(validateRowForRun).find((v) => Boolean(v));
-  if (invalid) {
-    ElMessage.error(invalid);
-    return;
-  }
-  if (!activeDeviceId.value.trim()) {
-    ElMessage.error("未选择设备");
-    return;
-  }
-  await savePointsData(points.value, projectId.value, activeDeviceId.value);
-  if (project.value) {
-    const devices = project.value.devices ?? [];
-    const idx = devices.findIndex((d) => d.deviceId === activeDeviceId.value);
-    if (idx >= 0) {
-      const nextDevices = [...devices];
-      nextDevices[idx] = {
-        ...nextDevices[idx],
-        points: { ...points.value, points: [...points.value.points] },
-      };
-      project.value = { ...project.value, devices: nextDevices };
-    }
-  }
-  ElMessage.success("已保存点位");
-  showAllValidation.value = false;
-  touchedRowKeys.value = {};
-}
+const { loadAll, savePoints } = usePointsPersistence({
+  projectId,
+  activeDeviceId,
+  project,
+  activeDevice,
+  profiles,
+  points,
+  gridRows,
+  activeChannelName,
+  batchAddTemplate,
+  showAllValidation,
+  touchedRowKeys,
+  selectedRangeRows,
+  suppressChannelWatch,
+  markPointsChanged,
+  rebuildPlan,
+  validateRowForRun,
+  syncFromGridAndMapAddresses,
+});
 
 function collectTouchedPointKeysFromAfterEdit(e: any): string[] {
   const keys = new Set<string>();
@@ -608,7 +544,7 @@ onMounted(() => {
 });
 
 watch(activeChannelName, async (v) => {
-  if (suppressChannelWatch) return;
+  if (suppressChannelWatch.value) return;
   selectedRangeRows.value = null;
   const pid = projectId.value.trim();
   if (pid) {
