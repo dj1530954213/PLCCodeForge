@@ -1,48 +1,23 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { ElMessage } from "element-plus";
-
-import type {
-  AddressBase,
-  CommImportUnionXlsxResponse,
-  CommWarning,
-  ImportUnionOptions,
-  ImportUnionThrownError,
-  PointsV1,
-  ProfilesV1,
-} from "../api";
-import { commImportUnionXlsx, commPointsLoad, commPointsSave, commProfilesLoad, commProfilesSave } from "../api";
-import { unionToCommPoints } from "../mappers/unionToCommPoints";
 import { useCommDeviceContext } from "../composables/useDeviceContext";
+import { useImportUnion } from "../composables/useImportUnion";
 
 const { projectId, activeDeviceId } = useCommDeviceContext();
-
-const filePath = ref<string>("");
-const strict = ref<boolean>(true);
-const sheetName = ref<string>("");
-const addressBase = ref<AddressBase>("one");
-
-const importing = ref(false);
-const generating = ref(false);
-
-const last = ref<CommImportUnionXlsxResponse | null>(null);
-const lastError = ref<ImportUnionThrownError | null>(null);
-
-const mapperWarnings = ref<CommWarning[]>([]);
-const mapperDecisions = ref<any[]>([]);
-const mapperConflictReport = ref<any | null>(null);
-
-const savedSummary = ref<{
-  points: number;
-  profiles: number;
-  reusedPointKeys: number;
-  createdPointKeys: number;
-  skipped: number;
-} | null>(null);
-
-const warnings = computed(() => last.value?.warnings ?? []);
-const diagnostics = computed(() => last.value?.diagnostics ?? lastError.value?.diagnostics ?? null);
-const allWarnings = computed(() => [...warnings.value, ...mapperWarnings.value]);
+const {
+  filePath,
+  strict,
+  sheetName,
+  addressBase,
+  importing,
+  generating,
+  lastError,
+  mapperConflictReport,
+  savedSummary,
+  diagnostics,
+  allWarnings,
+  importNow,
+  importAndGenerate,
+} = useImportUnion({ projectId, activeDeviceId });
 
 function downloadJson(filename: string, value: unknown) {
   const text = JSON.stringify(value, null, 2);
@@ -55,113 +30,6 @@ function downloadJson(filename: string, value: unknown) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
-
-function mergeProfiles(existing: ProfilesV1, imported: ProfilesV1): ProfilesV1 {
-  const out: ProfilesV1 = { schemaVersion: 1, profiles: [] };
-  const seen = new Set<string>();
-
-  const keyOf = (p: any) => `${p.protocolType}|${p.channelName}|${p.deviceId}`;
-  for (const p of existing.profiles ?? []) {
-    const key = keyOf(p);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.profiles.push(p);
-  }
-  for (const p of imported.profiles ?? []) {
-    const key = keyOf(p);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.profiles.push(p);
-  }
-  return out;
-}
-
-async function importNow() {
-  if (importing.value) return;
-  importing.value = true;
-
-  last.value = null;
-  lastError.value = null;
-  savedSummary.value = null;
-  mapperWarnings.value = [];
-  mapperDecisions.value = [];
-  mapperConflictReport.value = null;
-
-  if (!filePath.value.trim()) {
-    ElMessage.error("请填写联合 xlsx 文件路径");
-    importing.value = false;
-    return;
-  }
-
-  const options: ImportUnionOptions = {
-    strict: strict.value,
-    sheetName: sheetName.value.trim() ? sheetName.value.trim() : undefined,
-    addressBase: addressBase.value,
-  };
-
-  try {
-    last.value = await commImportUnionXlsx(filePath.value.trim(), options);
-    ElMessage.success(
-      `导入成功：points=${last.value.points.points.length}, profiles=${last.value.profiles.profiles.length}, warnings=${warnings.value.length}`
-    );
-  } catch (e: unknown) {
-    lastError.value = e as ImportUnionThrownError;
-    ElMessage.error(`${lastError.value.kind}: ${lastError.value.message}`);
-  } finally {
-    importing.value = false;
-  }
-}
-
-async function importAndGenerate() {
-  if (generating.value) return;
-  generating.value = true;
-  try {
-    await importNow();
-    if (!last.value || lastError.value) return;
-
-    const pid = projectId.value.trim();
-    const did = activeDeviceId.value.trim();
-    if (!pid || !did) {
-      ElMessage.error("未选择设备");
-      return;
-    }
-
-    const [existingPoints, existingProfiles] = await Promise.all([
-      commPointsLoad(pid, did).catch(() => ({ schemaVersion: 1, points: [] } as PointsV1)),
-      commProfilesLoad(pid, did).catch(() => ({ schemaVersion: 1, profiles: [] } as ProfilesV1)),
-    ]);
-
-    const mapped = await unionToCommPoints({
-      imported: last.value.points,
-      importedProfiles: last.value.profiles,
-      existing: existingPoints,
-      existingProfiles,
-      yieldEvery: 500,
-    });
-
-    mapperWarnings.value = mapped.warnings;
-    mapperDecisions.value = mapped.decisions ?? [];
-    mapperConflictReport.value = mapped.conflictReport ?? null;
-
-    await commPointsSave(mapped.points, pid, did);
-
-    const mergedProfiles = mergeProfiles(existingProfiles, last.value.profiles);
-    if (mergedProfiles.profiles.length > 0) {
-      await commProfilesSave(mergedProfiles, pid, did);
-    }
-
-    savedSummary.value = {
-      points: mapped.points.points.length,
-      profiles: mergedProfiles.profiles.length,
-      reusedPointKeys: mapped.reusedPointKeys,
-      createdPointKeys: mapped.createdPointKeys,
-      skipped: mapped.skipped,
-    };
-    ElMessage.success(`已生成并保存：points=${savedSummary.value.points}, profiles=${savedSummary.value.profiles}`);
-  } finally {
-    generating.value = false;
-  }
 }
 </script>
 

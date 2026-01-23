@@ -1,7 +1,7 @@
 import { computed, inject, provide, ref, watch, type ComputedRef, type Ref } from "vue";
 
 import type { CommDeviceV1, CommProjectDataV1 } from "../api";
-import { commProjectLoadV1, commProjectSaveV1, commProjectUiStatePatchV1 } from "../api";
+import { loadProjectData, patchProjectUiState, saveProjectData } from "../services/projects";
 
 export interface CommDeviceContext {
   projectId: Ref<string>;
@@ -40,7 +40,7 @@ export function provideCommDeviceContext(projectId: Ref<string>): CommDeviceCont
   const patchActiveDevice = async (pid: string, nextId: string) => {
     if (!pid || !nextId) return;
     try {
-      await commProjectUiStatePatchV1(pid, { activeDeviceId: nextId });
+      await patchProjectUiState(pid, { activeDeviceId: nextId });
     } catch {
       // Ignore UI-state patch errors to avoid blocking core flows.
     }
@@ -55,7 +55,7 @@ export function provideCommDeviceContext(projectId: Ref<string>): CommDeviceCont
     }
     loading.value = true;
     try {
-      const data = await commProjectLoadV1(pid);
+      const data = await loadProjectData(pid);
       project.value = data;
       const nextId = chooseActiveDeviceId(data);
       suppressPatch = true;
@@ -73,7 +73,7 @@ export function provideCommDeviceContext(projectId: Ref<string>): CommDeviceCont
   };
 
   const saveProject = async (next: CommProjectDataV1) => {
-    await commProjectSaveV1(next);
+    await saveProjectData(next);
     project.value = next;
     const nextId = chooseActiveDeviceId(next);
     suppressPatch = true;

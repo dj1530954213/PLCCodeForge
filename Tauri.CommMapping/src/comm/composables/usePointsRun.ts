@@ -8,12 +8,7 @@ import type {
   PointsV1,
   SampleResult,
 } from "../api";
-import {
-  commPlanBuild,
-  commRunLatestObs,
-  commRunStartObs,
-  commRunStopObs,
-} from "../api";
+import { buildPlan, runLatestObs, runStartObs, runStopObs } from "../services/run";
 import type { CommWorkspaceRuntime } from "./useWorkspaceRuntime";
 
 type RunUiState = "idle" | "starting" | "running" | "stopping" | "error";
@@ -190,7 +185,7 @@ export function usePointsRun(options: UsePointsRunOptions) {
         return;
       }
 
-      const planToUse = await commPlanBuild(
+      const planToUse = await buildPlan(
         { profiles: { schemaVersion: 1, profiles: [profile] }, points: { schemaVersion: 1, points: channelPoints } },
         options.projectId.value,
         options.activeDeviceId.value
@@ -198,7 +193,7 @@ export function usePointsRun(options: UsePointsRunOptions) {
       pushLog("run_start", "info", `读取计划生成完成：${planToUse.jobs.length} 个任务`);
 
       pushLog("run_start", "info", "调用 comm_run_start_obs（后端 spawn，不阻塞 UI）");
-      const resp = await commRunStartObs(
+      const resp = await runStartObs(
         {
           profiles: { schemaVersion: 1, profiles: [profile] },
           points: { schemaVersion: 1, points: channelPoints },
@@ -241,7 +236,7 @@ export function usePointsRun(options: UsePointsRunOptions) {
   async function pollLatest() {
     const id = runId.value;
     if (!id) return;
-    const resp = await commRunLatestObs(id);
+    const resp = await runLatestObs(id);
     if (!resp.ok || !resp.value) {
       const err =
         resp.error ??
@@ -254,7 +249,7 @@ export function usePointsRun(options: UsePointsRunOptions) {
       runUiState.value = "error";
       clearTimer();
       if (runId.value) {
-        void commRunStopObs(id, options.projectId.value).catch(() => {
+        void runStopObs(id, options.projectId.value).catch(() => {
           // ignore stop errors after latest failure
         });
       }
@@ -279,7 +274,7 @@ export function usePointsRun(options: UsePointsRunOptions) {
     pushLog("run_stop", "info", reasonLabel);
 
     try {
-      const resp = await commRunStopObs(id, options.projectId.value);
+      const resp = await runStopObs(id, options.projectId.value);
       if (!resp.ok) {
         const err =
           resp.error ??

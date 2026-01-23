@@ -10,7 +10,10 @@ import type {
   SampleResult,
   RunStats,
 } from "../api";
-import { commExportDeliveryXlsx, commExportXlsx, commPointsLoad, commProfilesLoad, commRunLatest } from "../api";
+import { exportDeliveryXlsx, exportXlsx } from "../services/export";
+import { loadPoints } from "../services/points";
+import { loadProfiles } from "../services/profiles";
+import { runLatest } from "../services/run";
 
 interface UseExportXlsxOptions {
   projectId: Ref<string>;
@@ -47,8 +50,8 @@ export function useExportXlsx(options: UseExportXlsxOptions) {
       return null;
     }
 
-    const profiles: ProfilesV1 = await commProfilesLoad(pid, did);
-    const points: PointsV1 = await commPointsLoad(pid, did);
+    const profiles: ProfilesV1 = await loadProfiles(pid, did);
+    const points: PointsV1 = await loadPoints(pid, did);
     if (profiles.profiles.length === 0 || points.points.length === 0) {
       ElMessage.error("profiles/points 为空，请先配置并保存");
       return null;
@@ -62,7 +65,7 @@ export function useExportXlsx(options: UseExportXlsxOptions) {
       const payload = await loadProfilesAndPoints();
       if (!payload) return;
       isExporting.value = true;
-      last.value = await commExportXlsx(
+      last.value = await exportXlsx(
         { outPath: outPath.value.trim(), profiles: payload.profiles, points: payload.points },
         payload.pid,
         payload.did
@@ -89,7 +92,7 @@ export function useExportXlsx(options: UseExportXlsxOptions) {
         const runId = runIdForResults.value.trim();
         if (runId) {
           try {
-            const latest = await commRunLatest(runId);
+            const latest = await runLatest(runId);
             if (latest.results.length > 0) {
               results = latest.results;
               stats = latest.stats;
@@ -100,7 +103,7 @@ export function useExportXlsx(options: UseExportXlsxOptions) {
         }
       }
 
-      lastDelivery.value = await commExportDeliveryXlsx(
+      lastDelivery.value = await exportDeliveryXlsx(
         {
           outPath: outPath.value.trim(),
           includeResults: includeResults.value,

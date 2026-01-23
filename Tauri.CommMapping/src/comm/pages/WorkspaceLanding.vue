@@ -3,7 +3,7 @@ import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 
-import { commProjectCreate, commProjectsList } from "../api";
+import { createProject as createProjectService, listProjects } from "../services/projects";
 
 const router = useRouter();
 const loading = ref(true);
@@ -19,7 +19,7 @@ async function tryRedirect() {
     goProject(last);
     return;
   }
-  const resp = await commProjectsList({ includeDeleted: false });
+  const resp = await listProjects({ includeDeleted: false });
   const first = resp.projects.find((p) => !p.deletedAtUtc);
   if (first) {
     goProject(first.projectId);
@@ -36,7 +36,7 @@ async function createProject() {
   }
   const device = createForm.value.device.trim();
   const notes = createForm.value.notes.trim();
-  const project = await commProjectCreate({
+  const project = await createProjectService({
     name,
     device: device ? device : undefined,
     notes: notes ? notes : undefined,

@@ -4,7 +4,12 @@ import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 
 import type { CommProjectV1 } from "../api";
-import { commProjectCopy, commProjectCreate, commProjectDelete, commProjectsList } from "../api";
+import {
+  copyProject as copyProjectService,
+  createProject as createProjectService,
+  deleteProject as deleteProjectService,
+  listProjects,
+} from "../services/projects";
 
 const router = useRouter();
 
@@ -24,7 +29,7 @@ const creating = ref<{ name: string; device: string; notes: string }>({
 async function refresh() {
   loading.value = true;
   try {
-    const resp = await commProjectsList({ includeDeleted: showDeleted.value });
+    const resp = await listProjects({ includeDeleted: showDeleted.value });
     projects.value = resp.projects;
   } finally {
     loading.value = false;
@@ -48,7 +53,7 @@ async function createProject() {
   const device = creating.value.device.trim();
   const notes = creating.value.notes.trim();
 
-  const project = await commProjectCreate({
+  const project = await createProjectService({
     name,
     device: device ? device : undefined,
     notes: notes ? notes : undefined,
@@ -75,7 +80,7 @@ async function copyProject(project: CommProjectV1) {
     return;
   }
 
-  const created = await commProjectCopy({ projectId: project.projectId, name: name.trim() });
+  const created = await copyProjectService({ projectId: project.projectId, name: name.trim() });
   ElMessage.success("已复制工程");
   await refresh();
   openProject(created.projectId);
@@ -87,7 +92,7 @@ async function deleteProject(project: CommProjectV1) {
     cancelButtonText: "取消",
     type: "warning",
   });
-  await commProjectDelete(project.projectId);
+  await deleteProjectService(project.projectId);
   ElMessage.success("已删除（软删）");
   await refresh();
 }

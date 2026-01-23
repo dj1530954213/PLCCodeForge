@@ -38,12 +38,9 @@ import type {
   RegisterArea,
   SampleResult,
 } from "../api";
-import {
-  commPlanBuild,
-  commPointsLoad,
-  commPointsSave,
-  commProjectUiStatePatchV1,
-} from "../api";
+import { loadPoints as loadPointsData, savePoints as savePointsData } from "../services/points";
+import { patchProjectUiState } from "../services/projects";
+import { buildPlan } from "../services/run";
 import { useCommDeviceContext } from "../composables/useDeviceContext";
 import { useCommWorkspaceRuntime } from "../composables/useWorkspaceRuntime";
 
@@ -583,7 +580,7 @@ async function rebuildPlan() {
       schemaVersion: 1,
       points: points.value.points.filter((p) => p.channelName === profile.channelName),
     };
-    const built = await commPlanBuild(
+    const built = await buildPlan(
       { profiles: filteredProfiles, points: filteredPoints },
       projectId.value,
       activeDeviceId.value
@@ -619,7 +616,7 @@ async function loadAll() {
     profiles.value = device
       ? { schemaVersion: 1, profiles: [JSON.parse(JSON.stringify(device.profile)) as ConnectionProfile] }
       : { schemaVersion: 1, profiles: [] };
-    points.value = await commPointsLoad(pid, did);
+    points.value = await loadPointsData(pid, did);
     showAllValidation.value = false;
     touchedRowKeys.value = {};
     selectedRangeRows.value = null;
@@ -668,7 +665,7 @@ async function savePoints() {
     ElMessage.error("未选择设备");
     return;
   }
-  await commPointsSave(points.value, projectId.value, activeDeviceId.value);
+  await savePointsData(points.value, projectId.value, activeDeviceId.value);
   if (project.value) {
     const devices = project.value.devices ?? [];
     const idx = devices.findIndex((d) => d.deviceId === activeDeviceId.value);
@@ -1073,7 +1070,7 @@ async function confirmBatchAdd() {
 
   const pid = projectId.value.trim();
   if (pid) {
-    commProjectUiStatePatchV1(pid, {
+    patchProjectUiState(pid, {
       pointsBatchTemplate: {
         schemaVersion: 1,
         count: batchAddTemplate.value.count,
@@ -1448,7 +1445,7 @@ watch(activeChannelName, async (v) => {
   selectedRangeRows.value = null;
   const pid = projectId.value.trim();
   if (pid) {
-    commProjectUiStatePatchV1(pid, { activeChannelName: v }).catch((e: unknown) => {
+    patchProjectUiState(pid, { activeChannelName: v }).catch((e: unknown) => {
       pushLog("ui_state", "warning", `当前通道保存失败：${String((e as any)?.message ?? e ?? "")}`);
     });
   }

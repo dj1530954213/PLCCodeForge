@@ -1,12 +1,12 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 
-import ProjectsPage from "../comm/pages/Projects.vue";
-import WorkspaceLandingPage from "../comm/pages/WorkspaceLanding.vue";
-import ProjectWorkspacePage from "../comm/pages/ProjectWorkspace.vue";
-import PointsPage from "../comm/pages/Points.vue";
-import ExportPage from "../comm/pages/Export.vue";
-import AdvancedPage from "../comm/pages/Advanced.vue";
-import ImportUnionPage from "../comm/pages/ImportUnion.vue";
+const WorkspaceLandingPage = () => import("../comm/pages/WorkspaceLanding.vue");
+const ProjectsPage = () => import("../comm/pages/Projects.vue");
+const ProjectWorkspacePage = () => import("../comm/pages/ProjectWorkspace.vue");
+const PointsPage = () => import("../comm/pages/Points.vue");
+const ExportPage = () => import("../comm/pages/Export.vue");
+const AdvancedPage = () => import("../comm/pages/Advanced.vue");
+const ImportUnionPage = () => import("../comm/pages/ImportUnion.vue");
 
 export const router = createRouter({
   history: createWebHashHistory(),
