@@ -25,10 +25,10 @@ import { usePointsRun } from "../composables/usePointsRun";
 import { usePointsGrid } from "../composables/usePointsGrid";
 import { usePointsFill } from "../composables/usePointsFill";
 import { usePointsUndo } from "../composables/usePointsUndo";
+import { usePointsRows } from "../composables/usePointsRows";
 import {
   formatBackendReason,
   formatFieldLabel,
-  formatQualityLabel,
   usePointsValidation,
 } from "../composables/usePointsValidation";
 
@@ -41,11 +41,9 @@ import type {
   PointsV1,
   ProfilesV1,
   RegisterArea,
-  SampleResult,
 } from "../api";
 import { loadPoints as loadPointsData, savePoints as savePointsData } from "../services/points";
 import { patchProjectUiState } from "../services/projects";
-import { buildPlan } from "../services/run";
 import { useCommDeviceContext } from "../composables/useDeviceContext";
 import { useCommWorkspaceRuntime } from "../composables/useWorkspaceRuntime";
 
@@ -115,15 +113,11 @@ const {
   },
 });
 
-const start0ByPointKey = ref<Record<string, number>>({});
-
 const activeProfile = computed<ConnectionProfile | null>(() => {
   const name = activeChannelName.value;
   if (!name) return null;
   return profiles.value.profiles.find((p) => p.channelName === name) ?? null;
 });
-
-const runtimeByPointKey = ref<Record<string, SampleResult>>({});
 
 const dataTypeOptions = computed<DataType[]>(() => {
   const profile = activeProfile.value;
@@ -151,41 +145,6 @@ const {
 
 function getValidationError(): string | null {
   return gridRows.value.map(validateRowForRun).find((v) => Boolean(v)) ?? null;
-}
-
-const {
-  runUiState,
-  runId,
-  latest,
-  runError,
-  runErrorTitle,
-  pollMs,
-  autoRestartPending,
-  resumeAfterFix,
-  configChangedDuringRun,
-  isStarting,
-  isRunning,
-  isStopping,
-  pushLog,
-  startRun,
-  stopRun,
-  markPointsChanged,
-  dispose: disposeRun,
-} = usePointsRun({
-  projectId,
-  activeDeviceId,
-  activeProfile,
-  points,
-  pointsRevision,
-  showAllValidation,
-  getValidationError,
-  syncFromGridAndMapAddresses,
-  onLatestResults: applyLatestToGridRows,
-  workspaceRuntime,
-});
-
-function updatePollMs(value: number) {
-  pollMs.value = value;
 }
 
 function resolveDataTypeForArea(area: RegisterArea, preferred?: DataType | null): DataType {
@@ -307,6 +266,57 @@ const colIndexByProp = computed<Record<string, number>>(() => {
   return out;
 });
 
+const { syncFromGridAndMapAddresses, applyLatestToGridRows, rebuildPlan } = usePointsRows({
+  gridRows,
+  points,
+  activeChannelName,
+  activeProfile,
+  projectId,
+  activeDeviceId,
+  gridApi,
+  colIndexByProp,
+  onTouched: (keys) => {
+    const next = { ...touchedRowKeys.value };
+    for (const key of keys) next[String(key)] = true;
+    touchedRowKeys.value = next;
+  },
+});
+
+const {
+  runUiState,
+  runId,
+  latest,
+  runError,
+  runErrorTitle,
+  pollMs,
+  autoRestartPending,
+  resumeAfterFix,
+  configChangedDuringRun,
+  isStarting,
+  isRunning,
+  isStopping,
+  pushLog,
+  startRun,
+  stopRun,
+  markPointsChanged,
+  dispose: disposeRun,
+} = usePointsRun({
+  projectId,
+  activeDeviceId,
+  activeProfile,
+  points,
+  pointsRevision,
+  showAllValidation,
+  getValidationError,
+  syncFromGridAndMapAddresses,
+  onLatestResults: applyLatestToGridRows,
+  workspaceRuntime,
+});
+
+function updatePollMs(value: number) {
+  pollMs.value = value;
+}
+
 const {
   fillMode,
   fillModeLabel,
@@ -331,72 +341,6 @@ const { undoManager, handleUndo, handleRedo } = usePointsUndo({
     void rebuildPlan();
   },
 });
-
-function makeRowFromPoint(p: CommPoint): PointRow {
-  const profile = activeProfile.value;
-  let addr = "";
-  if (profile && profile.channelName === p.channelName) {
-    if (typeof p.addressOffset === "number") {
-      addr = formatHumanAddressFrom0Based(profile.readArea, profile.startAddress + p.addressOffset);
-    } else if (start0ByPointKey.value[p.pointKey] !== undefined) {
-      addr = formatHumanAddressFrom0Based(profile.readArea, start0ByPointKey.value[p.pointKey]);
-    }
-  }
-  const runtime = runtimeByPointKey.value[p.pointKey];
-  
-  // 保留现有的选中状态
-  const existingRow = gridRows.value.find(r => r.pointKey === p.pointKey);
-  const isSelected = existingRow?.__selected ?? false;
-  
-  return {
-    ...p,
-    __selected: isSelected,
-    modbusAddress: addr,
-    quality: formatQualityLabel(runtime?.quality),
-    valueDisplay: runtime?.valueDisplay ?? "",
-    errorMessage: runtime?.errorMessage ?? "",
-    timestamp: runtime?.timestamp ?? "",
-    durationMs: runtime?.durationMs ?? "",
-  };
-}
-
-function rebuildGridRows() {
-  const channel = activeChannelName.value;
-  gridRows.value = points.value.points.filter((p) => p.channelName === channel).map(makeRowFromPoint);
-}
-
-async function rebuildPlan() {
-  const profile = activeProfile.value;
-  if (!profile) {
-    start0ByPointKey.value = {};
-    rebuildGridRows();
-    return;
-  }
-
-  try {
-    const filteredProfiles: ProfilesV1 = { schemaVersion: 1, profiles: [profile] };
-    const filteredPoints: PointsV1 = {
-      schemaVersion: 1,
-      points: points.value.points.filter((p) => p.channelName === profile.channelName),
-    };
-    const built = await buildPlan(
-      { profiles: filteredProfiles, points: filteredPoints },
-      projectId.value,
-      activeDeviceId.value
-    );
-    const map: Record<string, number> = {};
-    for (const job of built.jobs) {
-      for (const point of job.points) {
-        map[point.pointKey] = job.startAddress + point.offset;
-      }
-    }
-    start0ByPointKey.value = map;
-  } catch {
-    start0ByPointKey.value = {};
-  } finally {
-    rebuildGridRows();
-  }
-}
 
 let suppressChannelWatch = false;
 
@@ -1034,88 +978,6 @@ async function confirmReplaceHmiNames() {
 
   ElMessage.success(`已替换 ${changes.length} 行 / ${totalCount} 处`);
 }
-
-async function syncFromGridAndMapAddresses(touchedKeys?: string[]) {
-  const grid = gridApi();
-  if (!grid) return;
-  const source = (await grid.getSource()) as PointRow[];
-  gridRows.value = source;
-
-  const profile = activeProfile.value;
-  if (!profile) return;
-
-  for (const row of gridRows.value) {
-    const point = points.value.points.find((p) => p.pointKey === row.pointKey);
-    if (!point) continue;
-
-    point.hmiName = row.hmiName;
-    point.dataType = row.dataType;
-    point.byteOrder = row.byteOrder;
-    point.scale = Number(row.scale);
-
-    const addrRaw = row.modbusAddress.trim();
-    if (!addrRaw) {
-      point.addressOffset = undefined;
-      continue;
-    }
-
-    const parsed = parseHumanAddress(addrRaw, profile.readArea);
-    if (!parsed.ok) continue;
-
-    const offset = parsed.start0Based - profile.startAddress;
-    if (offset < 0) continue;
-    point.addressOffset = offset;
-  }
-
-  if (touchedKeys && touchedKeys.length > 0) {
-    const next = { ...touchedRowKeys.value };
-    for (const key of touchedKeys) next[String(key)] = true;
-    touchedRowKeys.value = next;
-  }
-}
-
-function applyLatestToGridRows(results: SampleResult[]) {
-  const byKey: Record<string, SampleResult> = {};
-  for (const r of results) byKey[r.pointKey] = r;
-  runtimeByPointKey.value = byKey;
-
-  const grid = gridApi();
-  if (!grid) return;
-  const idx = colIndexByProp.value;
-
-  for (let rowIndex = 0; rowIndex < gridRows.value.length; rowIndex++) {
-    const row = gridRows.value[rowIndex];
-    const res = byKey[row.pointKey];
-    if (!res) continue;
-
-    const nextQuality = formatQualityLabel(res.quality);
-    const nextValue = res.valueDisplay;
-    const nextErr = res.errorMessage ?? "";
-    const nextTs = res.timestamp;
-    const nextMs = res.durationMs;
-
-    const changed =
-      row.quality !== nextQuality ||
-      row.valueDisplay !== nextValue ||
-      row.errorMessage !== nextErr ||
-      row.timestamp !== nextTs ||
-      row.durationMs !== nextMs;
-    if (!changed) continue;
-
-    row.quality = nextQuality;
-    row.valueDisplay = nextValue;
-    row.errorMessage = nextErr;
-    row.timestamp = nextTs;
-    row.durationMs = nextMs;
-
-    void grid.setDataAt({ row: rowIndex, col: idx["quality"], rowType: "rgRow", colType: "rgCol", val: nextQuality });
-    void grid.setDataAt({ row: rowIndex, col: idx["valueDisplay"], rowType: "rgRow", colType: "rgCol", val: nextValue });
-    void grid.setDataAt({ row: rowIndex, col: idx["errorMessage"], rowType: "rgRow", colType: "rgCol", val: nextErr });
-    void grid.setDataAt({ row: rowIndex, col: idx["timestamp"], rowType: "rgRow", colType: "rgCol", val: nextTs });
-    void grid.setDataAt({ row: rowIndex, col: idx["durationMs"], rowType: "rgRow", colType: "rgCol", val: nextMs });
-  }
-}
-
 
 function collectTouchedPointKeysFromAfterEdit(e: any): string[] {
   const keys = new Set<string>();
