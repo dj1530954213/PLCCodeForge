@@ -13,9 +13,7 @@ use super::protocol::PlcVariant as Variant;
 use crate::ast::{BoxPin, ElementType, LdElement, Network, PinDirection, SafetyTopologyToken, UniversalPou, Variable, VariableNode};
 use crate::symbols_config::SymbolConfig;
 
-/// MFC CString: 长度前缀 (u8 或 0xFF + u16) + 原始字节。
-/// 样本中都是 1 字节字符（GBK），且字符串后没有对齐填充。
-/// 如果未来遇到 Unicode/宽字符，需要在这里扩展解码逻辑。
+/// MFC CString: AfxReadStringLength + raw bytes (ANSI or UTF-16LE).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MfcString(pub String);
 
@@ -27,36 +25,92 @@ impl BinRead for MfcString {
         endian: Endian,
         _: Self::Args<'_>,
     ) -> BinResult<Self> {
-        // 先读长度前缀：u8；如果为 0xFF 则再读一个 u16 作为真实长度。
-        let len_u8 = u8::read_options(reader, endian, ())?;
-        let len = if len_u8 == 0xFF {
-            u16::read_options(reader, endian, ())? as usize
-        } else {
-            len_u8 as usize
-        };
-
-        // 直接读取原始字节并按 GBK 解码。
-        let mut buf = vec![0u8; len];
-        reader.read_exact(&mut buf)?;
-        let (cow, _, _) = GBK.decode(&buf);
-        Ok(MfcString(cow.into_owned()))
+        let (len, mode) = read_mfc_string_length(reader, endian)?;
+        if len == 0 {
+            return Ok(MfcString(String::new()));
+        }
+        match mode {
+            1 => {
+                let mut buf = vec![0u8; len];
+                reader.read_exact(&mut buf)?;
+                let (cow, _, _) = GBK.decode(&buf);
+                Ok(MfcString(cow.into_owned()))
+            }
+            2 => {
+                let byte_len = len.checked_mul(2).ok_or_else(|| binrw::Error::AssertFail {
+                    pos: 0,
+                    message: "wide string length overflow".into(),
+                })?;
+                let mut buf = vec![0u8; byte_len];
+                reader.read_exact(&mut buf)?;
+                let mut units = Vec::with_capacity(len);
+                for chunk in buf.chunks_exact(2) {
+                    units.push(u16::from_le_bytes([chunk[0], chunk[1]]));
+                }
+                Ok(MfcString(String::from_utf16_lossy(&units)))
+            }
+            _ => Err(binrw::Error::AssertFail {
+                pos: 0,
+                message: "unknown CString encoding mode".into(),
+            }),
+        }
     }
+}
+
+fn read_mfc_string_length<R: Read + Seek>(reader: &mut R, endian: Endian) -> BinResult<(usize, u8)> {
+    let mut mode = 1u8;
+    let first = u8::read_options(reader, endian, ())?;
+    if first != 0xFF {
+        return Ok((first as usize, mode));
+    }
+
+    let len16 = u16::read_options(reader, endian, ())?;
+    if len16 == 0xFFFE {
+        mode = 2;
+        let len8 = u8::read_options(reader, endian, ())?;
+        if len8 != 0xFF {
+            return Ok((len8 as usize, mode));
+        }
+        let len16b = u16::read_options(reader, endian, ())?;
+        if len16b != 0xFFFF {
+            return Ok((len16b as usize, mode));
+        }
+        let len32 = u32::read_options(reader, endian, ())?;
+        if len32 == 0xFFFF_FFFF {
+            let _ = u32::read_options(reader, endian, ())?;
+            return Ok((0, mode));
+        }
+        return Ok((len32 as usize, mode));
+    }
+
+    if len16 != 0xFFFF {
+        return Ok((len16 as usize, mode));
+    }
+
+    let len32 = u32::read_options(reader, endian, ())?;
+    if len32 == 0xFFFF_FFFF {
+        let _ = u32::read_options(reader, endian, ())?;
+        return Ok((0, mode));
+    }
+    Ok((len32 as usize, mode))
 }
 
 /// 引脚序列化的两种形态：
 /// - Compact：仅 Name/Var（Safety 常见）。
-/// - Standard：u8,u8 + Name + Var + u32（Normal 常见）。
+/// - StandardInput：u8,u8 + Name + Var + u32（Normal 输入）。
+/// - StandardOutput：u8,u8 + Name + Var（Normal 输出）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PinFormat {
     Compact,
-    Standard,
+    StandardInput,
+    StandardOutput,
 }
 
 impl PinFormat {
     /// 输入引脚：Normal 使用标准格式；Safety 使用紧凑格式。
     pub fn for_input(variant: Variant) -> Self {
         match variant {
-            Variant::Normal => PinFormat::Standard,
+            Variant::Normal => PinFormat::StandardInput,
             Variant::Safety => PinFormat::Compact,
         }
     }
@@ -64,7 +118,7 @@ impl PinFormat {
     /// 输出引脚：Normal 使用标准格式；Safety 使用紧凑格式。
     pub fn for_output(variant: Variant) -> Self {
         match variant {
-            Variant::Normal => PinFormat::Standard,
+            Variant::Normal => PinFormat::StandardOutput,
             Variant::Safety => PinFormat::Compact,
         }
     }
@@ -122,13 +176,13 @@ pub struct BoxVersionFields {
 #[binread]
 #[br(little, import(format: PinFormat))]
 pub struct CLDPin {
-    #[br(if(matches!(format, PinFormat::Standard)))]
+    #[br(if(matches!(format, PinFormat::StandardInput | PinFormat::StandardOutput)))]
     pub flag0: Option<u8>,
-    #[br(if(matches!(format, PinFormat::Standard)))]
+    #[br(if(matches!(format, PinFormat::StandardInput | PinFormat::StandardOutput)))]
     pub flag1: Option<u8>,
     pub name: MfcString,
     pub var: MfcString,
-    #[br(if(matches!(format, PinFormat::Standard)))]
+    #[br(if(matches!(format, PinFormat::StandardInput)))]
     pub binding_id: Option<u32>,
 }
 
@@ -150,8 +204,8 @@ pub struct CLDBox {
     pub output_pins: Vec<CLDPin>,
 }
 
-/// 默认序列化版本：Normal >= 6 的逻辑依赖该值。
-pub const DEFAULT_SERIALIZE_VERSION: u32 = 6;
+/// 默认序列化版本：与当前版本输出保持一致。
+pub const DEFAULT_SERIALIZE_VERSION: u32 = 13;
 const DEFAULT_SYMBOL_CONFIG_PATH: &str = "config/symbols_config.json";
 
 /// MFC 二进制读取器（用于解析 Hollysys 的剪贴板数据）
@@ -258,42 +312,94 @@ impl<'a> MfcReader<'a> {
         Ok(())
     }
 
-    fn read_mfc_string(&mut self) -> Result<String> {
-        let len_u8 = self.read_u8()? as usize;
-        let len = if len_u8 == 0xFF {
-            self.read_u16()? as usize
-        } else {
-            len_u8
-        };
-        let buf = self.read_bytes(len)?;
-        let (cow, _, _) = GBK.decode(&buf);
-        Ok(cow.into_owned())
-    }
-}
+    fn read_mfc_string_length(&mut self) -> Result<(usize, u8)> {
+        let mut mode = 1u8;
+        let first = self.read_u8()?;
+        if first != 0xFF {
+            return Ok((first as usize, mode));
+        }
 
-fn read_len32_string(reader: &mut MfcReader, max_len: usize) -> Result<Option<String>> {
-    if reader.remaining_len() < 4 {
-        return Ok(None);
+        let len16 = self.read_u16()?;
+        if len16 == 0xFFFE {
+            mode = 2;
+            let len8 = self.read_u8()?;
+            if len8 != 0xFF {
+                return Ok((len8 as usize, mode));
+            }
+            let len16b = self.read_u16()?;
+            if len16b != 0xFFFF {
+                return Ok((len16b as usize, mode));
+            }
+            let len32 = self.read_u32()?;
+            if len32 == 0xFFFF_FFFF {
+                let extra = self.read_u32()?;
+                if extra != 0xFFFF_FFFF {
+                    bail!("CString length sentinel mismatch");
+                }
+                return Ok((0, mode));
+            }
+            return Ok((len32 as usize, mode));
+        }
+
+        if len16 != 0xFFFF {
+            return Ok((len16 as usize, mode));
+        }
+
+        let len32 = self.read_u32()?;
+        if len32 == 0xFFFF_FFFF {
+            let extra = self.read_u32()?;
+            if extra != 0xFFFF_FFFF {
+                bail!("CString length sentinel mismatch");
+            }
+            return Ok((0, mode));
+        }
+        Ok((len32 as usize, mode))
     }
-    let len = reader.peek_u32()? as usize;
-    if len == 0 || len > max_len {
-        return Ok(None);
+
+    fn read_mfc_string(&mut self) -> Result<String> {
+        let (len, mode) = self.read_mfc_string_length()?;
+        if len == 0 {
+            return Ok(String::new());
+        }
+        match mode {
+            1 => {
+                if len > self.remaining_len() {
+                    bail!(
+                        "CString length exceeds remaining bytes: len={} remaining={} pos={}",
+                        len,
+                        self.remaining_len(),
+                        self.position()
+                    );
+                }
+                let buf = self.read_bytes(len)?;
+                let (cow, _, _) = GBK.decode(&buf);
+                Ok(cow.into_owned())
+            }
+            2 => {
+                let byte_len = len.checked_mul(2).ok_or_else(|| anyhow::anyhow!("wide CString length overflow"))?;
+                if byte_len > self.remaining_len() {
+                    bail!(
+                        "CString length exceeds remaining bytes: len={} remaining={} pos={}",
+                        byte_len,
+                        self.remaining_len(),
+                        self.position()
+                    );
+                }
+                let buf = self.read_bytes(byte_len)?;
+                let mut units = Vec::with_capacity(len);
+                for chunk in buf.chunks_exact(2) {
+                    units.push(u16::from_le_bytes([chunk[0], chunk[1]]));
+                }
+                Ok(String::from_utf16_lossy(&units))
+            }
+            _ => bail!("unknown CString encoding mode"),
+        }
     }
-    if reader.remaining_len() < 4 + len {
-        return Ok(None);
-    }
-    let _ = reader.read_u32()?;
-    let buf = reader.read_bytes(len)?;
-    let (cow, _, _) = GBK.decode(&buf);
-    Ok(Some(cow.into_owned()))
 }
 
 fn read_element_string(reader: &mut MfcReader, variant: Variant, max_len: usize) -> Result<String> {
-    if variant == Variant::Safety {
-        if let Some(value) = read_len32_string(reader, max_len)? {
-            return Ok(value);
-        }
-    }
+    let _ = max_len;
+    let _ = variant;
     reader.read_mfc_string()
 }
 
@@ -340,21 +446,74 @@ fn read_class_sig(reader: &mut MfcReader) -> Result<String> {
 }
 
 /// 读取 POU 头部，返回 POU 名称
-fn read_header(reader: &mut MfcReader, variant: Variant) -> Result<String> {
-    // [1] 第一次 POU 名称
+fn read_header(reader: &mut MfcReader, variant: Variant, serialize_version: u32) -> Result<String> {
+    let start = reader.position();
+    if variant == Variant::Safety {
+        if let Ok(name) = read_header_variant_b(reader, serialize_version) {
+            return Ok(name);
+        }
+    }
+    reader.seek_to(start)?;
+    read_header_legacy(reader, variant)
+}
+
+fn read_header_variant_b(reader: &mut MfcReader, serialize_version: u32) -> Result<String> {
+    let start = reader.position();
+    if serialize_version >= 0x0F {
+        return read_header_variant_b_inner(reader, serialize_version, true);
+    }
+    if let Ok(name) = read_header_variant_b_inner(reader, serialize_version, false) {
+        return Ok(name);
+    }
+    reader.seek_to(start)?;
+    read_header_variant_b_inner(reader, serialize_version, true)
+}
+
+fn read_header_variant_b_inner(
+    reader: &mut MfcReader,
+    serialize_version: u32,
+    with_seed: bool,
+) -> Result<String> {
+    if with_seed {
+        let _ = reader.read_u32()?;
+    }
+    let name = reader.read_mfc_string()?;
+    let _ = reader.read_mfc_string()?;
+    let _ = reader.read_u8()?;
+    let _ = reader.read_u8()?;
+    let _ = reader.read_u32()?;
+    let _ = reader.read_u32()?;
+    let _ = reader.read_u32()?;
+    let _ = reader.read_u32()?;
+    let _ = reader.read_mfc_string()?;
+    let _ = reader.read_u8()?;
+    let _ = reader.read_u32()?;
+    let _ = reader.read_u32()?;
+    if serialize_version >= 0x44 {
+        let _ = reader.read_mfc_string()?;
+    }
+
+    if reader.remaining_len() < 4 {
+        bail!("header truncated before string array");
+    }
+    let count = reader.peek_u32()? as usize;
+    if count > 5000 {
+        bail!("string array count too large: {}", count);
+    }
+    Ok(name)
+}
+
+fn read_header_legacy(reader: &mut MfcReader, variant: Variant) -> Result<String> {
     let name = reader.read_mfc_string()?;
     reader.align_to_4bytes()?;
 
-    // [2] 时间戳（Normal 才有）
     if variant == Variant::Normal {
         let _ = reader.read_u32()?;
     }
 
-    // [3] 第二次名称 + 对齐
     let _ = reader.read_mfc_string()?;
     reader.align_to_4bytes()?;
 
-    // [4] Metadata Flags
     match variant {
         Variant::Normal => {
             let _ = reader.read_u32()?;
@@ -370,19 +529,18 @@ fn read_header(reader: &mut MfcReader, variant: Variant) -> Result<String> {
         }
     }
 
-    // [5] Language + 返回类型区
-    let _ = reader.read_u32()?;             // Language ID
-    let _ = reader.read_mfc_string()?;      // 返回类型
-    let _ = reader.read_u32()?;             // Flag1
-    let _ = reader.read_u32()?;             // Flag2
+    let _ = reader.read_u32()?;
+    let _ = reader.read_mfc_string()?;
+    let _ = reader.read_u32()?;
+    let _ = reader.read_u32()?;
     match variant {
         Variant::Normal => {
-            let _ = reader.read_mfc_string()?; // Normal: 空字符串
-            let _ = reader.read_mfc_string()?; // Normal: 额外 BOOL
+            let _ = reader.read_mfc_string()?;
+            let _ = reader.read_mfc_string()?;
         }
         Variant::Safety => {
-            let _ = reader.read_u32()?;       // Safety: 额外 flag3
-            let _ = reader.read_u32()?;       // Safety: 额外 flag4
+            let _ = reader.read_u32()?;
+            let _ = reader.read_u32()?;
         }
     }
 
@@ -390,21 +548,7 @@ fn read_header(reader: &mut MfcReader, variant: Variant) -> Result<String> {
 }
 
 fn read_network(reader: &mut MfcReader, variant: Variant) -> Result<Network> {
-    let id_u32 = reader.read_u32()?;
-    let id = checked_i32(id_u32, "network.id")?;
-    match variant {
-        Variant::Normal => {
-            let _ = reader.read_u16()?; // type
-            let _ = reader.read_u16()?; // flag
-            let _ = reader.read_u16()?; // rung
-            let _ = reader.read_u16()?; // pad
-        }
-        Variant::Safety => {
-            let _ = reader.read_u16()?; // type
-            let _ = reader.read_u32()?; // flag
-            let _ = reader.read_u32()?; // rung
-        }
-    }
+    let (id, _type_id, _name, _comment, _desc, _connections) = read_element_base(reader, variant)?;
     let label = reader.read_mfc_string()?;
     let comment = reader.read_mfc_string()?;
 
@@ -430,9 +574,6 @@ fn read_element_base(
 
 fn read_contact(reader: &mut MfcReader, variant: Variant) -> Result<LdElement> {
     let (id, _type_id, name, comment, desc, connections) = read_element_base(reader, variant)?;
-    if variant == Variant::Safety {
-        let _ = skip_safety_reserved_u16(reader)?;
-    }
     let sub_type = reader.read_u8()?;
     if variant == Variant::Normal {
         let _ = reader.read_mfc_string()?;
@@ -452,15 +593,14 @@ fn read_contact(reader: &mut MfcReader, variant: Variant) -> Result<LdElement> {
 
 fn read_output(reader: &mut MfcReader, variant: Variant, serialize_version: u32) -> Result<LdElement> {
     let (id, _type_id, name, comment, desc, connections) = read_element_base(reader, variant)?;
-    if variant == Variant::Safety {
-        let _ = skip_safety_reserved_u16(reader)?;
-    }
     let sub_type = reader.read_u8()?;
     let _ = reader.read_u8()?; // flag2
     if variant == Variant::Normal && serialize_version > 0 {
         let _ = reader.read_u8()?; // flag3
     }
-    let _ = reader.read_mfc_string()?; // geo/附加字段
+    if variant == Variant::Normal {
+        let _ = reader.read_mfc_string()?; // geo/附加字段
+    }
     Ok(LdElement {
         id,
         type_code: ElementType::Coil,
@@ -477,7 +617,7 @@ fn read_output(reader: &mut MfcReader, variant: Variant, serialize_version: u32)
 fn read_pin(
     reader: &mut MfcReader,
     variant: Variant,
-    _serialize_version: u32,
+    serialize_version: u32,
     direction: PinDirection,
 ) -> Result<BoxPin> {
     match variant {
@@ -491,7 +631,7 @@ fn read_pin(
             let _ = reader.read_u8()?; // flag1
             let name = reader.read_mfc_string()?;
             let variable = reader.read_mfc_string()?;
-            if direction == PinDirection::Input {
+            if serialize_version >= 13 && direction == PinDirection::Input {
                 let _ = reader.read_u32()?; // binding_id
             }
             Ok(BoxPin { name, variable, direction })
@@ -505,13 +645,7 @@ fn read_box(reader: &mut MfcReader, variant: Variant, serialize_version: u32) ->
         let _ = reader.read_u32()?;
         let _ = reader.read_u32()?;
     }
-    if variant == Variant::Safety {
-        skip_safety_box_padding(reader)?;
-    }
     let _ = reader.read_u8()?; // flag
-    if variant == Variant::Safety && reader.remaining_len() >= 2 && reader.peek_u16()? == 0x0100 {
-        let _ = reader.read_u16()?;
-    }
     let instance = read_element_string(reader, variant, 200)?;
 
     let input_count = reader.read_u32()? as usize;
@@ -526,12 +660,11 @@ fn read_box(reader: &mut MfcReader, variant: Variant, serialize_version: u32) ->
     }
 
     if variant == Variant::Safety
-        && !looks_like_class_sig(reader)
         && !looks_like_safety_var_table(reader)
-        && !looks_like_element_object(reader, variant)
+        && !looks_like_object_tag(reader)
     {
         // Safety 的部分 CLDBox 在引脚后仍包含内部数据块（如嵌套拓扑）。
-        // 直接跳到下一个类签名，保持顶层 CObList 对齐。
+        // 直接跳到下一个对象，保持顶层 CObList 对齐。
         skip_network_tail(reader)?;
     }
 
@@ -561,13 +694,7 @@ fn read_element_dynamic(
                 let _ = reader.read_u32()?;
                 let _ = reader.read_u32()?;
             }
-            if variant == Variant::Safety {
-                skip_safety_box_padding(reader)?;
-            }
             let _ = reader.read_u8()?; // flag
-            if variant == Variant::Safety && reader.remaining_len() >= 2 && reader.peek_u16()? == 0x0100 {
-                let _ = reader.read_u16()?;
-            }
             let instance = read_element_string(reader, variant, 200)?;
 
             let input_count = reader.read_u32()? as usize;
@@ -582,9 +709,8 @@ fn read_element_dynamic(
             }
 
             if variant == Variant::Safety
-                && !looks_like_class_sig(reader)
                 && !looks_like_safety_var_table(reader)
-                && !looks_like_element_object(reader, variant)
+                && !looks_like_object_tag(reader)
             {
                 skip_network_tail(reader)?;
             }
@@ -602,9 +728,6 @@ fn read_element_dynamic(
             })
         }
         ElementType::Contact => {
-            if variant == Variant::Safety {
-                let _ = skip_safety_reserved_u16(reader)?;
-            }
             let sub_type = reader.read_u8()?;
             if variant == Variant::Normal {
                 let _ = reader.read_mfc_string()?;
@@ -622,15 +745,14 @@ fn read_element_dynamic(
             })
         }
         ElementType::Coil => {
-            if variant == Variant::Safety {
-                let _ = skip_safety_reserved_u16(reader)?;
-            }
             let sub_type = reader.read_u8()?;
             let _ = reader.read_u8()?; // flag2
             if variant == Variant::Normal && serialize_version > 0 {
                 let _ = reader.read_u8()?; // flag3
             }
-            let _ = reader.read_mfc_string()?;
+            if variant == Variant::Normal {
+                let _ = reader.read_mfc_string()?;
+            }
             Ok(LdElement {
                 id,
                 type_code,
@@ -659,43 +781,102 @@ impl ClassTable {
         self.classes.push(name);
     }
 
-    fn get(&self, id: u16) -> Result<String> {
+    fn get(&self, id: u32) -> Result<String> {
         if id == 0 || id as usize > self.classes.len() {
             bail!("未知的类引用 ID: {}", id);
         }
         Ok(self.classes[(id as usize) - 1].clone())
     }
+
+    fn contains(&self, name: &str) -> bool {
+        self.classes.iter().any(|item| item == name)
+    }
 }
 
 #[derive(Debug, Clone)]
-enum ClassTag {
-    None,
-    Known(String),
-    UnknownRef(u16),
+enum ObjectKind {
+    Null,
+    Reference(u32),
+    New(String),
+    UnknownClass(u32),
 }
 
-fn read_class_tag(reader: &mut MfcReader, table: &mut ClassTable) -> Result<ClassTag> {
+fn read_object_kind(reader: &mut MfcReader, table: &mut ClassTable) -> Result<ObjectKind> {
     let tag = reader.read_u16()?;
     if tag == 0x0000 {
-        return Ok(ClassTag::None);
+        return Ok(ObjectKind::Null);
     }
     if tag == 0xFFFF {
-        let _schema = reader.read_u16()?;
-        let name_len = reader.read_u16()? as usize;
-        let name_bytes = reader.read_bytes(name_len)?;
-        let (cow, _, _) = GBK.decode(&name_bytes);
-        let name = cow.into_owned();
-        table.insert(name.clone());
-        return Ok(ClassTag::Known(name));
+        let name = read_runtime_class(reader)?;
+        if !table.contains(&name) {
+            table.insert(name.clone());
+        }
+        return Ok(ObjectKind::New(name));
+    }
+    if tag == 0x7FFF {
+        let ext = reader.read_u32()?;
+        if ext & 0x8000_0000 != 0 {
+            let class_id = ext & 0x7FFF_FFFF;
+            return match table.get(class_id) {
+                Ok(name) => Ok(ObjectKind::New(name)),
+                Err(_) => Ok(ObjectKind::UnknownClass(class_id)),
+            };
+        }
+        return Ok(ObjectKind::Reference(ext));
     }
     if tag & 0x8000 != 0 {
-        let class_id = tag & 0x7FFF;
-        if class_id == 0 || class_id as usize > table.classes.len() {
-            return Ok(ClassTag::UnknownRef(class_id));
-        }
-        return table.get(class_id).map(ClassTag::Known);
+        let class_id = (tag & 0x7FFF) as u32;
+        return match table.get(class_id) {
+            Ok(name) => Ok(ObjectKind::New(name)),
+            Err(_) => Ok(ObjectKind::UnknownClass(class_id)),
+        };
     }
-    bail!("类签名 Tag 错误: 0x{:04X}", tag);
+    Ok(ObjectKind::Reference(tag as u32))
+}
+
+fn read_runtime_class(reader: &mut MfcReader) -> Result<String> {
+    let _schema = reader.read_u16()?;
+    let name_len = reader.read_u16()? as usize;
+    if name_len >= 0x40 {
+        bail!("runtime class name too long: {}", name_len);
+    }
+    let name_bytes = reader.read_bytes(name_len)?;
+    let (cow, _, _) = GBK.decode(&name_bytes);
+    Ok(cow.into_owned())
+}
+
+fn prefill_class_table(table: &mut ClassTable, buf: &[u8], end: usize) {
+    let mut idx = 0usize;
+    let end = end.min(buf.len());
+    while idx + 6 <= end {
+        if buf[idx] != 0xFF || buf[idx + 1] != 0xFF {
+            idx += 1;
+            continue;
+        }
+        let name_len = u16::from_le_bytes([buf[idx + 4], buf[idx + 5]]) as usize;
+        if name_len == 0 || name_len >= 0x40 {
+            idx += 1;
+            continue;
+        }
+        if idx + 6 + name_len > end {
+            break;
+        }
+        let name_bytes = &buf[idx + 6..idx + 6 + name_len];
+        if !name_bytes.iter().all(|b| b.is_ascii_graphic()) {
+            idx += 1;
+            continue;
+        }
+        if !name_bytes.starts_with(b"C") {
+            idx += 1;
+            continue;
+        }
+        let (cow, _, _) = GBK.decode(name_bytes);
+        let name = cow.into_owned();
+        if !table.contains(&name) {
+            table.insert(name);
+        }
+        idx += 6 + name_len;
+    }
 }
 
 fn read_networks(reader: &mut MfcReader, variant: Variant, serialize_version: u32) -> Result<Vec<Network>> {
@@ -709,6 +890,7 @@ fn read_networks(reader: &mut MfcReader, variant: Variant, serialize_version: u3
     let mut networks: Vec<Network> = Vec::new();
     let mut current: Option<Network> = None;
     let mut class_table = ClassTable::default();
+    prefill_class_table(&mut class_table, reader.inner.get_ref(), reader.inner.get_ref().len());
 
     loop {
         if reader.remaining_len() == 0 {
@@ -724,24 +906,20 @@ fn read_networks(reader: &mut MfcReader, variant: Variant, serialize_version: u3
         }
 
         let pos = reader.position();
-        let class_tag = read_class_tag(reader, &mut class_table)?;
+        let object_kind = read_object_kind(reader, &mut class_table)?;
         if let Some(rem) = remaining.as_mut() {
             *rem = rem.saturating_sub(1);
         }
 
-        match class_tag {
-            ClassTag::None => {}
-            ClassTag::Known(class_name) => match class_name.as_str() {
+        match object_kind {
+            ObjectKind::Null => {}
+            ObjectKind::Reference(_) => {}
+            ObjectKind::New(class_name) => match class_name.as_str() {
                 "CLDNetwork" => {
                     if let Some(net) = current.take() {
                         networks.push(net);
                     }
-                    if !looks_like_network(reader, variant, stop_at) {
-                        skip_network_tail(reader)?;
-                        continue;
-                    }
                     let net = read_network(reader, variant)?;
-                    skip_network_tail(reader)?;
                     current = Some(net);
                 }
                 "CLDContact" => {
@@ -769,32 +947,45 @@ fn read_networks(reader: &mut MfcReader, variant: Variant, serialize_version: u3
                     }
                 }
                 "CLDAssign" => {
-                    let _ = reader.read_u32()?;
-                    let _ = reader.read_u32()?;
-                    let _ = reader.read_u32()?;
-                    let _ = reader.read_u32()?;
-                }
-                "CLDElement" => {
                     let _ = read_element_base(reader, variant)?;
                 }
+                "CLDElement" | "CLDOr" | "CLDJump" | "CLDReturn" | "CLDBranches" => {
+                    let _ = read_element_base(reader, variant)?;
+                }
+                "CLDBracket" => {
+                    let _ = read_element_base(reader, variant)?;
+                    skip_network_tail(reader)?;
+                }
                 _ => {
-                    bail!("不支持的类签名: {}", class_name);
+                    skip_network_tail(reader)?;
                 }
             },
-            ClassTag::UnknownRef(_) => {
-                if let Some(type_id) = peek_element_type_id(reader) {
-                    if is_element_type_id(variant, type_id) {
+            ObjectKind::UnknownClass(_) => {
+                let mut parsed_any = false;
+                loop {
+                    if let Some(type_id) = peek_element_type_id(reader) {
+                        if !is_element_type_id(variant, type_id) {
+                            break;
+                        }
                         let elem = read_element_dynamic(reader, variant, serialize_version)?;
+                        parsed_any = true;
                         if let Some(net) = current.as_mut() {
                             net.elements.push(elem);
                         } else {
-                            bail!("元素出现在网络之前: UnknownRef");
+                            bail!("元素出现在网络之前: UnknownClass");
                         }
                     } else {
-                        skip_network_tail(reader)?;
+                        break;
                     }
-                } else {
-                    break;
+                    if looks_like_object_tag(reader) || looks_like_safety_var_table(reader) {
+                        break;
+                    }
+                    if !looks_like_element_object(reader, variant) {
+                        break;
+                    }
+                }
+                if !parsed_any {
+                    skip_network_tail(reader)?;
                 }
             }
         }
@@ -824,31 +1015,16 @@ struct SafetyNode {
 }
 
 fn read_safety_string(reader: &mut MfcReader, max_len: usize) -> Result<String> {
-    if reader.remaining_len() < 4 {
-        bail!("Safety 字符串长度不足");
-    }
-    let len = reader.peek_u32()? as usize;
-    if len <= max_len && reader.remaining_len() >= 4 + len {
-        let _ = reader.read_u32()?;
-        let buf = reader.read_bytes(len)?;
-        let (cow, _, _) = GBK.decode(&buf);
-        return Ok(cow.into_owned());
-    }
+    let _ = max_len;
     reader.read_mfc_string()
 }
 
 fn read_safety_string_optional(reader: &mut MfcReader, max_len: usize) -> Result<Option<String>> {
-    if reader.remaining_len() < 4 {
+    let _ = max_len;
+    if reader.remaining_len() == 0 {
         return Ok(None);
     }
-    let len = reader.peek_u32()? as usize;
-    if len > max_len || reader.remaining_len() < 4 + len {
-        return Ok(None);
-    }
-    let _ = reader.read_u32()?;
-    let buf = reader.read_bytes(len)?;
-    let (cow, _, _) = GBK.decode(&buf);
-    Ok(Some(cow.into_owned()))
+    Ok(Some(reader.read_mfc_string()?))
 }
 
 fn element_type_from_safety_id(type_id: u8) -> Option<ElementType> {
@@ -865,7 +1041,7 @@ fn element_type_from_safety_id(type_id: u8) -> Option<ElementType> {
 fn read_safety_base(
     reader: &mut MfcReader,
     expected_type: Option<u8>,
-) -> Result<(i32, u8, String, Vec<i32>, u32)> {
+) -> Result<(i32, u8, String, Vec<i32>)> {
     let id_u32 = reader.read_u32()?;
     let id = checked_i32(id_u32, "safety.element.id")?;
     let type_id = reader.read_u8()?;
@@ -888,11 +1064,7 @@ fn read_safety_base(
         let conn = checked_i32(conn_u32, "safety.element.conn_id")?;
         connections.push(conn);
     }
-    let child_count = reader.read_u32()?;
-    if child_count > 20000 {
-        bail!("Safety 子元素数量异常: {}", child_count);
-    }
-    Ok((id, type_id, name, connections, child_count))
+    Ok((id, type_id, name, connections))
 }
 
 fn read_safety_pin(reader: &mut MfcReader, direction: PinDirection) -> Result<BoxPin> {
@@ -904,14 +1076,10 @@ fn read_safety_pin(reader: &mut MfcReader, direction: PinDirection) -> Result<Bo
 fn read_safety_node(
     reader: &mut MfcReader,
     expected_type: Option<u8>,
-    serialize_version: u32,
+    _serialize_version: u32,
 ) -> Result<SafetyNode> {
-    let (id, type_id, name, connections, child_count) = read_safety_base(reader, expected_type)?;
-    let mut children = Vec::with_capacity(child_count as usize);
-    for _ in 0..child_count {
-        let child_type = reader.read_u8()?;
-        children.push(read_safety_node(reader, Some(child_type), serialize_version)?);
-    }
+    let (id, type_id, name, connections) = read_safety_base(reader, expected_type)?;
+    let children = Vec::new();
 
     let mut label = None;
     let mut comment = None;
@@ -927,9 +1095,7 @@ fn read_safety_node(
         }
         ElementType::Box => {
             let _flag = reader.read_u8()?;
-            let inst_comment = read_safety_string(reader, 200)?;
-            let inst_name = read_safety_string(reader, 200)?;
-            instance = inst_name;
+            instance = read_safety_string(reader, 200)?;
             let input_count = reader.read_u32()? as usize;
             if input_count > 2000 {
                 bail!("Safety Box 输入数量异常: {}", input_count);
@@ -944,23 +1110,13 @@ fn read_safety_node(
             for _ in 0..output_count {
                 pins.push(read_safety_pin(reader, PinDirection::Output)?);
             }
-            if !inst_comment.is_empty() {
-                comment = Some(inst_comment);
-            }
         }
         ElementType::Contact => {
-            if reader.remaining_len() >= 2 && reader.peek_u16()? == 0x0000 {
-                let _ = reader.read_u16()?;
-            }
             sub_type = reader.read_u8()?;
         }
         ElementType::Coil => {
-            if reader.remaining_len() >= 2 && reader.peek_u16()? == 0x0000 {
-                let _ = reader.read_u16()?;
-            }
             sub_type = reader.read_u8()?;
             let _ = reader.read_u8()?;
-            let _ = read_safety_string_optional(reader, 200)?;
         }
         ElementType::Assign => {}
     }
@@ -1054,13 +1210,6 @@ fn read_networks_safety_tree(reader: &mut MfcReader, serialize_version: u32) -> 
 }
 
 fn read_networks_safety(reader: &mut MfcReader, serialize_version: u32) -> Result<Vec<Network>> {
-    let start = reader.position();
-    if let Ok(nets) = read_networks_safety_tree(reader, serialize_version) {
-        if !nets.is_empty() {
-            return Ok(nets);
-        }
-    }
-    reader.seek_to(start)?;
     read_networks_safety_class(reader, serialize_version)
 }
 
@@ -1071,6 +1220,7 @@ fn read_networks_safety_class(reader: &mut MfcReader, serialize_version: u32) ->
     let mut networks: Vec<Network> = Vec::new();
     let mut current: Option<Network> = None;
     let mut class_table = ClassTable::default();
+    prefill_class_table(&mut class_table, reader.inner.get_ref(), reader.inner.get_ref().len());
 
     loop {
         if reader.remaining_len() == 0 {
@@ -1086,31 +1236,21 @@ fn read_networks_safety_class(reader: &mut MfcReader, serialize_version: u32) ->
         }
 
         let pos = reader.position();
-        let class_tag = read_class_tag(reader, &mut class_table)?;
+        let object_kind = read_object_kind(reader, &mut class_table)?;
         if let Some(rem) = remaining.as_mut() {
             *rem = rem.saturating_sub(1);
         }
 
-        match class_tag {
-            ClassTag::None => {}
-            ClassTag::Known(class_name) => match class_name.as_str() {
+        match object_kind {
+            ObjectKind::Null => {}
+            ObjectKind::Reference(_) => {}
+            ObjectKind::New(class_name) => match class_name.as_str() {
                 "CLDNetwork" => {
                     if let Some(net) = current.take() {
                         networks.push(net);
                     }
-                    let id = if reader.remaining_len() >= 4 {
-                        reader.read_u32().unwrap_or(0) as i32
-                    } else {
-                        0
-                    };
-                    current = Some(Network {
-                        id,
-                        label: String::new(),
-                        comment: String::new(),
-                        elements: Vec::new(),
-                        safety_topology: Vec::new(),
-                    });
-                    skip_network_tail(reader)?;
+                    let net = read_network(reader, Variant::Safety)?;
+                    current = Some(net);
                 }
                 "CLDContact" => {
                     let elem = read_contact(reader, Variant::Safety)?;
@@ -1137,34 +1277,58 @@ fn read_networks_safety_class(reader: &mut MfcReader, serialize_version: u32) ->
                     }
                 }
                 "CLDAssign" => {
-                    let elem = read_safety_assign(reader)?;
+                    let (id, _type_id, name, _comment, _desc, connections) =
+                        read_element_base(reader, Variant::Safety)?;
+                    let elem = LdElement {
+                        id,
+                        type_code: ElementType::Assign,
+                        name,
+                        comment: String::new(),
+                        desc: String::new(),
+                        instance: String::new(),
+                        pins: Vec::new(),
+                        connections,
+                        sub_type: 0,
+                    };
                     if let Some(net) = current.as_mut() {
                         net.elements.push(elem);
                     } else {
                         bail!("元素出现在网络之前: {}", class_name);
                     }
                 }
-                "CLDElement" => {
+                "CLDElement" | "CLDOr" | "CLDJump" | "CLDReturn" | "CLDBranches" => {
                     let _ = read_element_base(reader, Variant::Safety)?;
                 }
                 _ => {
                     skip_network_tail(reader)?;
                 }
             },
-            ClassTag::UnknownRef(_) => {
-                if let Some(type_id) = peek_element_type_id(reader) {
-                    if is_element_type_id(Variant::Safety, type_id) {
+            ObjectKind::UnknownClass(_) => {
+                let mut parsed_any = false;
+                loop {
+                    if let Some(type_id) = peek_element_type_id(reader) {
+                        if !is_element_type_id(Variant::Safety, type_id) {
+                            break;
+                        }
                         let elem = read_element_dynamic(reader, Variant::Safety, serialize_version)?;
+                        parsed_any = true;
                         if let Some(net) = current.as_mut() {
                             net.elements.push(elem);
                         } else {
-                            bail!("元素出现在网络之前: UnknownRef");
+                            bail!("元素出现在网络之前: UnknownClass");
                         }
                     } else {
-                        skip_network_tail(reader)?;
+                        break;
                     }
-                } else {
-                    break;
+                    if looks_like_object_tag(reader) || looks_like_safety_var_table(reader) {
+                        break;
+                    }
+                    if !looks_like_element_object(reader, Variant::Safety) {
+                        break;
+                    }
+                }
+                if !parsed_any {
+                    skip_network_tail(reader)?;
                 }
             }
         }
@@ -1203,6 +1367,15 @@ fn looks_like_class_sig(reader: &MfcReader) -> bool {
     buf[6..6 + name_len].iter().all(|b| b.is_ascii_graphic())
 }
 
+fn looks_like_object_tag(reader: &MfcReader) -> bool {
+    let buf = reader.remaining_slice();
+    if buf.len() < 2 {
+        return false;
+    }
+    let tag = u16::from_le_bytes([buf[0], buf[1]]);
+    tag == 0x0000 || tag == 0xFFFF || tag == 0x7FFF || (tag & 0x8000 != 0)
+}
+
 fn is_element_type_id(variant: Variant, type_id: u8) -> bool {
     match variant {
         Variant::Normal => matches!(type_id, 0x03 | 0x05 | 0x06),
@@ -1223,63 +1396,28 @@ fn looks_like_element_object(reader: &MfcReader, variant: Variant) -> bool {
     if buf.len() < 10 {
         return false;
     }
-    let tag = u16::from_le_bytes([buf[0], buf[1]]);
-    if tag & 0x8000 == 0 {
-        return false;
-    }
-    let type_id = buf[6];
+    let type_id = buf[4];
     if !is_element_type_id(variant, type_id) {
         return false;
     }
-    let mut idx = 7usize;
-    if !scan_mfc_string_any(buf, &mut idx, 80).unwrap_or(false) {
-        return false;
-    }
-    if !scan_mfc_string_any(buf, &mut idx, 80).unwrap_or(false) {
-        return false;
-    }
+    let mut idx = 5usize;
     if !scan_mfc_string_any(buf, &mut idx, 120).unwrap_or(false) {
         return false;
     }
-    true
-}
-
-fn looks_like_network(reader: &MfcReader, variant: Variant, limit: Option<usize>) -> bool {
-    let buf_all = reader.remaining_slice();
-    let header_len = match variant {
-        Variant::Normal => 4 + 2 + 2 + 2 + 2,
-        Variant::Safety => 4 + 2 + 4 + 4,
-    };
-    let buf = match limit {
-        Some(stop_at) => {
-            let remaining = stop_at.saturating_sub(reader.position());
-            if remaining == 0 {
-                return false;
-            }
-            if remaining < buf_all.len() {
-                &buf_all[..remaining]
-            } else {
-                buf_all
-            }
+    if variant == Variant::Normal {
+        if !scan_mfc_string_any(buf, &mut idx, 160).unwrap_or(false) {
+            return false;
         }
-        None => buf_all,
-    };
-    if buf.len() < header_len + 2 {
-        return false;
-    }
-    let mut idx = header_len;
-    if !scan_mfc_string_any(buf, &mut idx, 80).unwrap_or(false) {
-        return false;
-    }
-    if !scan_mfc_string_any(buf, &mut idx, 200).unwrap_or(false) {
-        return false;
+        if !scan_mfc_string_any(buf, &mut idx, 200).unwrap_or(false) {
+            return false;
+        }
     }
     true
 }
 
 fn skip_network_tail(reader: &mut MfcReader) -> Result<()> {
     while reader.remaining_len() > 0 {
-        if looks_like_class_sig(reader) || looks_like_safety_var_table(reader) {
+        if looks_like_object_tag(reader) || looks_like_safety_var_table(reader) {
             break;
         }
         let _ = reader.read_u8()?;
@@ -1415,7 +1553,7 @@ fn read_safety_topology_raw(
         if looks_like_safety_var_table(reader) || looks_like_safety_var_table_ahead(reader, 16) {
             break;
         }
-        if looks_like_class_sig(reader) {
+        if looks_like_object_tag(reader) {
             let pos = reader.position();
             reader.seek_to(pos)?;
             break;
@@ -1498,13 +1636,7 @@ fn read_safety_inline_element(
     let (name, comment, desc, connections) = read_element_fields(reader, variant)?;
     match type_code {
         ElementType::Box => {
-            if variant == Variant::Safety {
-                skip_safety_box_padding(reader)?;
-            }
             let _flag = reader.read_u8()?;
-            if variant == Variant::Safety && reader.remaining_len() >= 2 && reader.peek_u16()? == 0x0100 {
-                let _ = reader.read_u16()?;
-            }
             let instance = read_element_string(reader, variant, 200)?;
 
             let input_count = reader.read_u32()? as usize;
@@ -1531,9 +1663,6 @@ fn read_safety_inline_element(
             })
         }
         ElementType::Contact => {
-            if variant == Variant::Safety {
-                let _ = skip_safety_reserved_u16(reader)?;
-            }
             let sub_type = reader.read_u8()?;
             if variant == Variant::Normal {
                 let _ = reader.read_mfc_string()?;
@@ -1551,15 +1680,14 @@ fn read_safety_inline_element(
             })
         }
         ElementType::Coil => {
-            if variant == Variant::Safety {
-                let _ = skip_safety_reserved_u16(reader)?;
-            }
             let sub_type = reader.read_u8()?;
             let _ = reader.read_u8()?; // flag2
             if variant == Variant::Normal && serialize_version > 0 {
                 let _ = reader.read_u8()?; // flag3
             }
-            let _ = reader.read_mfc_string()?; // geo/附加字段
+            if variant == Variant::Normal {
+                let _ = reader.read_mfc_string()?; // geo/附加字段
+            }
             Ok(LdElement {
                 id,
                 type_code,
@@ -1616,7 +1744,7 @@ fn read_safety_rung_list_with_topology(
         rung_ids.clear();
     }
 
-    if reader.remaining_len() == 0 || looks_like_class_sig(reader) {
+    if reader.remaining_len() == 0 || looks_like_object_tag(reader) {
         return Ok((rung_ids, None));
     }
 
@@ -1625,24 +1753,17 @@ fn read_safety_rung_list_with_topology(
 }
 
 fn read_safety_assign(reader: &mut MfcReader) -> Result<LdElement> {
-    let id_u32 = reader.read_u32()?;
-    let id = checked_i32(id_u32, "assign.id")?;
-    let type_id = reader.read_u16()?;
-    let val1 = reader.read_u32()?;
-    let val2 = reader.read_u32()?;
-
-    // 余下结构尚不明确，先跳到下一个类签名以保持流对齐。
-    skip_network_tail(reader)?;
-
+    let (id, _type_id, name, _comment, _desc, connections) =
+        read_element_base(reader, Variant::Safety)?;
     Ok(LdElement {
         id,
         type_code: ElementType::Assign,
-        name: "CLDAssign".to_string(),
+        name,
         comment: String::new(),
-        desc: format!("type_id=0x{:04X}", type_id),
+        desc: String::new(),
         instance: String::new(),
         pins: Vec::new(),
-        connections: vec![val1 as i32, val2 as i32],
+        connections,
         sub_type: 0,
     })
 }
@@ -1686,7 +1807,7 @@ fn read_compact_element_header(reader: &mut MfcReader) -> Result<(u32, u16)> {
 }
 
 fn is_topology_boundary(reader: &MfcReader) -> bool {
-    if looks_like_class_sig(reader) {
+    if looks_like_object_tag(reader) {
         return true;
     }
     if reader.remaining_len() < 2 {
@@ -2262,22 +2383,22 @@ fn scan_mfc_string_any(buf: &[u8], idx: &mut usize, max_len: usize) -> Result<bo
     if *idx >= buf.len() {
         return Ok(false);
     }
-    let len_u8 = buf[*idx] as usize;
-    *idx += 1;
-    let len = if len_u8 == 0xFF {
-        if *idx + 2 > buf.len() {
-            return Ok(false);
-        }
-        let len = u16::from_le_bytes([buf[*idx], buf[*idx + 1]]) as usize;
-        *idx += 2;
-        len
-    } else {
-        len_u8
+    let (len, mode) = match scan_mfc_string_len(buf, idx) {
+        Some(value) => value,
+        None => return Ok(false),
     };
-    if len > max_len || *idx + len > buf.len() {
+    if len > max_len {
         return Ok(false);
     }
-    *idx += len;
+    let byte_len = if mode == 2 {
+        len.checked_mul(2).unwrap_or(usize::MAX)
+    } else {
+        len
+    };
+    if *idx + byte_len > buf.len() {
+        return Ok(false);
+    }
+    *idx += byte_len;
     Ok(true)
 }
 
@@ -2285,24 +2406,84 @@ fn scan_mfc_string_ascii(buf: &[u8], idx: &mut usize, max_len: usize) -> Result<
     if *idx >= buf.len() {
         return Ok(false);
     }
-    let len_u8 = buf[*idx] as usize;
-    *idx += 1;
-    let len = if len_u8 == 0xFF {
-        if *idx + 2 > buf.len() {
-            return Ok(false);
-        }
-        let len = u16::from_le_bytes([buf[*idx], buf[*idx + 1]]) as usize;
-        *idx += 2;
-        len
-    } else {
-        len_u8
+    let (len, mode) = match scan_mfc_string_len(buf, idx) {
+        Some(value) => value,
+        None => return Ok(false),
     };
-    if len > max_len || *idx + len > buf.len() {
+    if mode != 1 || len > max_len {
+        return Ok(false);
+    }
+    if *idx + len > buf.len() {
         return Ok(false);
     }
     let s = &buf[*idx..*idx + len];
     *idx += len;
     Ok(s.iter().all(|b| b.is_ascii_graphic()))
+}
+
+fn scan_mfc_string_len(buf: &[u8], idx: &mut usize) -> Option<(usize, u8)> {
+    let mut mode = 1u8;
+    if *idx >= buf.len() {
+        return None;
+    }
+    let first = buf[*idx];
+    *idx += 1;
+    if first != 0xFF {
+        return Some((first as usize, mode));
+    }
+    if *idx + 2 > buf.len() {
+        return None;
+    }
+    let len16 = u16::from_le_bytes([buf[*idx], buf[*idx + 1]]);
+    *idx += 2;
+    if len16 == 0xFFFE {
+        mode = 2;
+        if *idx >= buf.len() {
+            return None;
+        }
+        let len8 = buf[*idx];
+        *idx += 1;
+        if len8 != 0xFF {
+            return Some((len8 as usize, mode));
+        }
+        if *idx + 2 > buf.len() {
+            return None;
+        }
+        let len16b = u16::from_le_bytes([buf[*idx], buf[*idx + 1]]);
+        *idx += 2;
+        if len16b != 0xFFFF {
+            return Some((len16b as usize, mode));
+        }
+        if *idx + 4 > buf.len() {
+            return None;
+        }
+        let len32 = u32::from_le_bytes([buf[*idx], buf[*idx + 1], buf[*idx + 2], buf[*idx + 3]]);
+        *idx += 4;
+        if len32 == 0xFFFF_FFFF {
+            if *idx + 4 > buf.len() {
+                return None;
+            }
+            *idx += 4;
+            return Some((0, mode));
+        }
+        return Some((len32 as usize, mode));
+    }
+    if len16 != 0xFFFF {
+        return Some((len16 as usize, mode));
+    }
+    if *idx + 4 > buf.len() {
+        return None;
+    }
+    let len32 = u32::from_le_bytes([buf[*idx], buf[*idx + 1], buf[*idx + 2], buf[*idx + 3]]);
+    *idx += 4;
+    if len32 == 0xFFFF_FFFF {
+        if *idx + 4 > buf.len() {
+            return None;
+        }
+        *idx += 4;
+        return Some((0, mode));
+    }
+    Some((len32 as usize, mode))
 }
 
 fn read_variable_normal(reader: &mut MfcReader) -> Result<Variable> {
@@ -2420,7 +2601,7 @@ pub fn read_pou(data: &[u8], variant: Variant) -> Result<UniversalPou> {
 /// 解析入口（带序列化版本配置）
 pub fn read_pou_with_config(data: &[u8], variant: Variant, serialize_version: u32) -> Result<UniversalPou> {
     let mut reader = MfcReader::new(data);
-    let name = read_header(&mut reader, variant)?;
+    let name = read_header(&mut reader, variant, serialize_version)?;
     let header_strings = if variant == Variant::Safety {
         read_string_array(&mut reader)?
     } else {
@@ -2555,10 +2736,9 @@ fn read_string_array(reader: &mut MfcReader) -> Result<Vec<String>> {
     if reader.position() % 2 != 0 {
         let _ = reader.read_u8()?;
     }
-    let count = reader.read_u16()? as usize;
-    if count > 1000 {
+    let count = reader.read_u32()? as usize;
+    if count > 5000 {
         reader.seek_to(start)?;
-        let _ = reader.read_u32()?;
         if reader.position() % 2 != 0 {
             let _ = reader.read_u8()?;
         }

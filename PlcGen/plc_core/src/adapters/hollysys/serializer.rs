@@ -256,14 +256,7 @@ impl PouSerializer{
     fn write_networks(&self, w: &mut MfcWriter<Vec<u8>>, pou: &UniversalPou) -> Result<()> {
         // [1] CObList 头：写入对象总数 (u16)
         // 依据：样本中列表头部就是对象数量 (例如 03 00)
-        let element_count: usize = pou.networks.iter().map(|n| {
-            if self.config.variant == PlcVariant::Safety {
-                let inline_ids = inline_element_ids(&n.safety_topology);
-                n.elements.iter().filter(|e| !inline_ids.contains(&e.id)).count()
-            } else {
-                n.elements.len()
-            }
-        }).sum();
+        let element_count: usize = pou.networks.iter().map(|n| n.elements.len()).sum();
         let total = pou.networks.len() + element_count;
         if total > u16::MAX as usize {
             bail!("CObList对象数量超出u16上限: {}", total);
@@ -276,19 +269,7 @@ impl PouSerializer{
             self.validate_network_topology(network)?;
             w.write_class_sig("CLDNetwork")?;
             self.write_network(w, network)?;
-            if self.config.variant == PlcVariant::Safety && !network.safety_topology.is_empty() {
-                self.write_safety_topology(w, network)?;
-            }
-
-            let inline_ids = if self.config.variant == PlcVariant::Safety {
-                inline_element_ids(&network.safety_topology)
-            } else {
-                HashSet::new()
-            };
             for elem in &network.elements {
-                if inline_ids.contains(&elem.id) {
-                    continue;
-                }
                 self.write_element(w, elem)?;
             }
         }
@@ -296,30 +277,28 @@ impl PouSerializer{
     }
 
     fn write_network(&self, w: &mut MfcWriter<Vec<u8>>, net: &Network) -> Result<()> {
-        // [IDA] CLDNetwork::Serialize
-        // 注意：Normal 与 Safety 的字段宽度不同，需要分支处理。
         let id = checked_u32(net.id, "network.id")?;
-        let rung_id_raw = net.id.checked_add(1)
-            .ok_or_else(|| anyhow::anyhow!("network.rung_id 发生溢出: {}", net.id))?;
-        let rung_id = checked_u32(rung_id_raw, "network.rung_id")?;
-
         w.write_u32(id)?;
         match self.config.variant {
             PlcVariant::Normal => {
+                let rung_id_raw = net.id.checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("network.rung_id 发生溢出: {}", net.id))?;
+                let rung_id = checked_u32(rung_id_raw, "network.rung_id")?;
                 w.write_u16(0x000A)?; // type = 0x000A
                 w.write_u16(0x0001)?; // flag = 1
                 w.write_u16(checked_u16(rung_id, "network.rung_id")?)?;
                 w.write_u16(0)?; // pad
+                w.write_mfc_string(&net.label)?;   // 标号
+                w.write_mfc_string(&net.comment)?; // 注释
             }
             PlcVariant::Safety => {
-                w.write_u16(0x0009)?; // type = 0x0009
-                w.write_u32(1)?;      // flag = 1
-                w.write_u32(rung_id)?; // rung_id
+                w.write_u8(0x09)?; // type_id
+                w.write_mfc_string("")?; // name
+                w.write_u32(0)?; // conn_count
+                w.write_mfc_string(&net.label)?;
+                w.write_mfc_string(&net.comment)?;
             }
         }
-
-        w.write_mfc_string(&net.label)?;   // 标号
-        w.write_mfc_string(&net.comment)?; // 注释
         Ok(())
     }
 
@@ -327,12 +306,7 @@ impl PouSerializer{
     fn validate_network_topology(&self, net: &Network) -> Result<()> {
         match self.config.variant {
             PlcVariant::Safety => {
-                if net.safety_topology.is_empty() {
-                    if net.elements.len() > 1 {
-                        bail!("Safety 多元素网络缺少拓扑流: network.id={}", net.id);
-                    }
-                    return Ok(());
-                }
+                let _ = net;
             }
             PlcVariant::Normal => {
                 if net.elements.len() <= 1 {
@@ -459,7 +433,7 @@ impl PouSerializer{
     }
 
     /// 写入 CLDElement 基类字段。
-    /// 顺序：id(u32) -> type_id(u8) -> name/comment/desc CString -> conn_count(u32) -> conns...
+    /// 顺序：id(u32) -> type_id(u8) -> name CString -> (Normal: comment/desc) -> conn_count(u32) -> conns...
     fn write_element_base(&self, w: &mut MfcWriter<Vec<u8>>, elem: &LdElement) -> Result<()> {
         let id = checked_u32(elem.id, "element.id")?;
         let type_id = self.element_type_id(elem.type_code)?;
@@ -467,26 +441,21 @@ impl PouSerializer{
         w.write_u32(id)?;
         w.write_u8(type_id)?;
         w.write_mfc_string(&elem.name)?;
-        w.write_mfc_string(&elem.comment)?;
-        w.write_mfc_string(&elem.desc)?;
+        if self.config.variant == PlcVariant::Normal {
+            w.write_mfc_string(&elem.comment)?;
+            w.write_mfc_string(&elem.desc)?;
+        }
 
-        // 连接列表：Normal 使用图连接表；Safety 使用 0x80xx Token 流，不依赖此处。
-        // 为避免误写，Safety 始终写 0；Normal 则按 elem.connections 写入。
+        // 连接列表：Normal 使用图连接表；Safety 以元素连接为准。
         if elem.connections.len() > u32::MAX as usize {
             bail!("element.connections 数量超出 u32 上限: {}", elem.connections.len());
         }
-        let conn_count = if self.config.variant == PlcVariant::Normal {
-            elem.connections.len() as u32
-        } else {
-            0
-        };
+        let conn_count = elem.connections.len() as u32;
         w.write_u32(conn_count)?;
-        if self.config.variant == PlcVariant::Normal {
-            for conn_id in &elem.connections {
-                // 连接 ID 必须是非负整数
-                let conn = checked_u32(*conn_id, "element.conn_id")?;
-                w.write_u32(conn)?;
-            }
+        for conn_id in &elem.connections {
+            // 连接 ID 必须是非负整数
+            let conn = checked_u32(*conn_id, "element.conn_id")?;
+            w.write_u32(conn)?;
         }
         Ok(())
     }
@@ -501,7 +470,7 @@ impl PouSerializer{
         Ok(())
     }
 
-    /// 线圈（CLDOutput）：Base + flag/flag2 (+可选flag3) + CString。
+    /// 线圈（CLDOutput）：Base + flag/flag2 (+可选flag3) + (Normal: CString)。
     fn write_output(&self, w: &mut MfcWriter<Vec<u8>>, elem: &LdElement) -> Result<()> {
         w.write_u8(elem.sub_type)?;
         w.write_u8(0)?; // flag2，缺少样本细节时先写 0
@@ -509,8 +478,10 @@ impl PouSerializer{
             // Normal 版在序列化版本非 0 时追加 1 字节
             w.write_u8(0)?;
         }
-        // 该 CString 在 IDA 中存在，但具体含义未确认，暂写空字符串。
-        w.write_mfc_string("")?;
+        if self.config.variant == PlcVariant::Normal {
+            // 该 CString 在 IDA 中存在，但具体含义未确认，暂写空字符串。
+            w.write_mfc_string("")?;
+        }
         Ok(())
     }
 

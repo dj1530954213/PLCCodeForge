@@ -3,6 +3,245 @@
   "header_strings": [],
   "variables": [
     {
+      "name": "AI_TEST",
+      "children": [
+        {
+          "name": "IN",
+          "data_type": "WORD",
+          "init_value": "0",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "模拟量原始值输入",
+          "var_id": 18872,
+          "addr_id": 2,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "ENG_MAX",
+          "data_type": "REAL",
+          "init_value": "0",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "工程值上限",
+          "var_id": 14758,
+          "addr_id": 17179869188,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "ENG_MIN",
+          "data_type": "REAL",
+          "init_value": "0",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "工程值下限",
+          "var_id": 14764,
+          "addr_id": 34359738372,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "MAIN_EN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "维护值使能",
+          "var_id": 14820,
+          "addr_id": 51539607553,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "MAIN_V",
+          "data_type": "REAL",
+          "init_value": "0",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "维护值",
+          "var_id": 40180,
+          "addr_id": 68719476740,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "HH_A_EN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "高高报警使能",
+          "var_id": 14972,
+          "addr_id": 85899345921,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "HH_LIMIT",
+          "data_type": "REAL",
+          "init_value": "0",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "高高报警限值",
+          "var_id": 30002,
+          "addr_id": 103079215108,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "H_A_EN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "高报警使能",
+          "var_id": 40444,
+          "addr_id": 120259084289,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "H_LIMIT",
+          "data_type": "REAL",
+          "init_value": "0",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "高报警限值",
+          "var_id": 15410,
+          "addr_id": 137438953476,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "L_A_EN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "低报警使能",
+          "var_id": 40572,
+          "addr_id": 154618822657,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "L_LIMIT",
+          "data_type": "REAL",
+          "init_value": "0",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "低报警限值",
+          "var_id": 15666,
+          "addr_id": 171798691844,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "LL_A_EN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "低低报警使能",
+          "var_id": 15356,
+          "addr_id": 188978561025,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "LL_LIMIT",
+          "data_type": "REAL",
+          "init_value": "0",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "低低报警限值",
+          "var_id": 30770,
+          "addr_id": 206158430212,
+          "mode": 66,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "OUT",
+          "data_type": "REAL",
+          "init_value": "0",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "工程量输出",
+          "var_id": 37818,
+          "addr_id": 223338299396,
+          "mode": 67,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "HH_ALARM",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "高高报警输出",
+          "var_id": 29813,
+          "addr_id": 240518168577,
+          "mode": 67,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "H_ALARM",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "高报警输出",
+          "var_id": 15221,
+          "addr_id": 244813135873,
+          "mode": 67,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "L_ALARM",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "低报警输出",
+          "var_id": 15477,
+          "addr_id": 249108103169,
+          "mode": 67,
+          "id2": 1768570634,
+          "area_code": null
+        },
+        {
+          "name": "LL_ALARM",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": false,
+          "power_down_keep": false,
+          "comment": "低低报警输出",
+          "var_id": 30581,
+          "addr_id": 253403070465,
+          "mode": 67,
+          "id2": 1768570634,
+          "area_code": null
+        }
+      ]
+    },
+    {
       "name": "AI_TEST_B",
       "children": [
         {
@@ -479,82 +718,12 @@
           "area_code": null
         }
       ]
-    },
-    {
-      "name": "Local Variables",
-      "children": [
-        {
-          "name": "OUT",
-          "data_type": "REAL",
-          "init_value": "0",
-          "soe_enable": false,
-          "power_down_keep": false,
-          "comment": "工程量输出",
-          "var_id": 37818,
-          "addr_id": 223338299396,
-          "mode": 67,
-          "id2": 1768570634,
-          "area_code": null
-        },
-        {
-          "name": "HH_ALARM",
-          "data_type": "BOOL",
-          "init_value": "FALSE",
-          "soe_enable": false,
-          "power_down_keep": false,
-          "comment": "高高报警输出",
-          "var_id": 29813,
-          "addr_id": 240518168577,
-          "mode": 67,
-          "id2": 1768570634,
-          "area_code": null
-        },
-        {
-          "name": "H_ALARM",
-          "data_type": "BOOL",
-          "init_value": "FALSE",
-          "soe_enable": false,
-          "power_down_keep": false,
-          "comment": "高报警输出",
-          "var_id": 15221,
-          "addr_id": 244813135873,
-          "mode": 67,
-          "id2": 1768570634,
-          "area_code": null
-        },
-        {
-          "name": "L_ALARM",
-          "data_type": "BOOL",
-          "init_value": "FALSE",
-          "soe_enable": false,
-          "power_down_keep": false,
-          "comment": "低报警输出",
-          "var_id": 15477,
-          "addr_id": 249108103169,
-          "mode": 67,
-          "id2": 1768570634,
-          "area_code": null
-        },
-        {
-          "name": "LL_ALARM",
-          "data_type": "BOOL",
-          "init_value": "FALSE",
-          "soe_enable": false,
-          "power_down_keep": false,
-          "comment": "低低报警输出",
-          "var_id": 30581,
-          "addr_id": 253403070465,
-          "mode": 67,
-          "id2": 1768570634,
-          "area_code": null
-        }
-      ]
     }
   ],
   "networks": [
     {
       "id": 2,
-      "label": "\u0000\u0000\u0000",
+      "label": "",
       "comment": "",
       "elements": [
         {

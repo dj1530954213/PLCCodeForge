@@ -20,7 +20,7 @@ impl HollysysConfig {
         Self {
             variant: PlcVariant::Normal,
             pou_total_len: 0x2000,
-            serialize_version: 6,
+            serialize_version: 13,
         }
     }
 
@@ -29,7 +29,7 @@ impl HollysysConfig {
         Self {
             variant: PlcVariant::Safety,
             pou_total_len: 0x2000,
-            serialize_version: 6,
+            serialize_version: 13,
         }
     }
 

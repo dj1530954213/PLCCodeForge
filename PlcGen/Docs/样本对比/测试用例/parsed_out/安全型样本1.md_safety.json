@@ -148,6 +148,24 @@
       "id": 31,
       "label": "",
       "comment": "",
+      "elements": []
+    },
+    {
+      "id": 28,
+      "label": "",
+      "comment": "",
+      "elements": []
+    },
+    {
+      "id": 25,
+      "label": "",
+      "comment": "",
+      "elements": []
+    },
+    {
+      "id": 22,
+      "label": "",
+      "comment": "",
       "elements": [
         {
           "id": 33,
@@ -608,13 +626,12 @@
         {
           "id": 32,
           "type_code": "Assign",
-          "name": "CLDAssign",
+          "name": "",
           "comment": "",
-          "desc": "type_id=0x0008",
+          "desc": "",
           "instance": "",
           "pins": [],
           "connections": [
-            1,
             33
           ],
           "sub_type": 0
