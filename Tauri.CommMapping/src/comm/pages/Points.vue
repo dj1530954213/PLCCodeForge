@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import Grid, { VGridVueEditor, type ColumnRegular, type Editors } from "@revolist/vue3-datagrid";
+import Grid, { VGridVueEditor, type Editors } from "@revolist/vue3-datagrid";
 import type { ColumnAutoSizeMode } from "@revolist/revogrid";
 
 import TextEditor from "../components/revogrid/TextEditor.vue";
@@ -25,6 +25,7 @@ import { usePointsBatchOps } from "../composables/usePointsBatchOps";
 import { usePointsRows } from "../composables/usePointsRows";
 import { usePointsRowOps } from "../composables/usePointsRowOps";
 import { usePointsPersistence } from "../composables/usePointsPersistence";
+import { usePointsColumns } from "../composables/usePointsColumns";
 import {
   formatBackendReason,
   formatFieldLabel,
@@ -188,34 +189,6 @@ const validationSummary = computed(() => {
   return `运行已阻止 · ${parts.join(" / ")}`;
 });
 
-function rowCellProps(field: keyof PointRow) {
-  return ({ model }: any) => {
-    const row = model as PointRow;
-    const focus = focusedIssueCell.value;
-    const isFocused = Boolean(focus && focus.pointKey === row.pointKey && focus.field === field);
-    const shouldValidate =
-      isFocused ||
-      showAllValidation.value ||
-      Boolean(touchedRowKeys.value[String(row.pointKey)]) ||
-      (field === "hmiName" && Boolean(hmiDuplicateByPointKey.value[row.pointKey])) ||
-      (field === "modbusAddress" && Boolean(addressConflictByPointKey.value[row.pointKey])) ||
-      Boolean(validationIssueByPointKey.value[row.pointKey]);
-    if (!shouldValidate) return {};
-
-    let err: string | null = null;
-    if (field === "hmiName") err = validateHmiName(row) ?? hmiDuplicateByPointKey.value[row.pointKey];
-    if (field === "scale") err = validateScale(row);
-    if (field === "modbusAddress") {
-      err = validateModbusAddress(row) ?? addressConflictByPointKey.value[row.pointKey];
-    }
-
-    const classes: Record<string, boolean> = {};
-    if (err) classes["comm-cell-error"] = true;
-    if (isFocused) classes["comm-cell-focus"] = true;
-    return Object.keys(classes).length > 0 ? { class: classes, title: err ?? validationIssueByPointKey.value[row.pointKey] } : {};
-  };
-}
-
 const EDITOR_TEXT = "comm-text";
 const EDITOR_SELECT = "comm-select";
 const EDITOR_NUMBER = "comm-number";
@@ -227,54 +200,18 @@ const gridEditors: Editors = {
   [EDITOR_NUMBER]: VGridVueEditor(NumberEditor),
 };
 
-const columns = computed<ColumnRegular[]>(() => [
-  {
-    prop: "hmiName",
-    name: "变量名称（HMI）*",
-    size: 220,
-    minSize: 160,
-    autoSize: true,
-    editor: EDITOR_TEXT,
-    cellProperties: rowCellProps("hmiName"),
-  },
-  {
-    prop: "modbusAddress",
-    name: "点位地址（从 1 开始）",
-    size: 120,
-    minSize: 110,
-    editor: EDITOR_TEXT,
-    cellProperties: rowCellProps("modbusAddress"),
-  },
-  {
-    prop: "dataType",
-    name: "数据类型",
-    size: 110,
-    minSize: 100,
-    editor: EDITOR_SELECT,
-    editorOptions: dataTypeOptions.value.map((v) => ({ label: v, value: v })),
-  },
-  {
-    prop: "byteOrder",
-    name: "字节序",
-    size: 90,
-    minSize: 90,
-    editor: EDITOR_SELECT,
-    editorOptions: BYTE_ORDERS.map((v) => ({ label: v, value: v })),
-  },
-  { prop: "scale", name: "缩放倍数", size: 90, minSize: 90, editor: EDITOR_NUMBER, cellProperties: rowCellProps("scale") },
-  { prop: "quality", name: "质量", size: 90, minSize: 90, readonly: true },
-  { prop: "valueDisplay", name: "实时值", size: 160, minSize: 140, autoSize: true, readonly: true },
-  { prop: "timestamp", name: "时间戳", size: 180, minSize: 160, readonly: true },
-  { prop: "durationMs", name: "耗时(ms)", size: 90, minSize: 90, readonly: true },
-  { prop: "errorMessage", name: "错误信息", size: 220, minSize: 180, readonly: true },
-]);
-
-const colIndexByProp = computed<Record<string, number>>(() => {
-  const out: Record<string, number> = {};
-  for (let i = 0; i < columns.value.length; i++) {
-    out[String(columns.value[i].prop)] = i;
-  }
-  return out;
+const { columns, colIndexByProp } = usePointsColumns<PointRow>({
+  dataTypeOptions,
+  byteOrders: BYTE_ORDERS,
+  showAllValidation,
+  touchedRowKeys,
+  focusedIssueCell,
+  hmiDuplicateByPointKey,
+  addressConflictByPointKey,
+  validationIssueByPointKey,
+  validateHmiName,
+  validateScale,
+  validateModbusAddress,
 });
 
 const { syncFromGridAndMapAddresses, applyLatestToGridRows, rebuildPlan } = usePointsRows({
