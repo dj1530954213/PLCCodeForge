@@ -26,9 +26,8 @@ import { usePointsPersistence } from "../composables/usePointsPersistence";
 import { usePointsColumns } from "../composables/usePointsColumns";
 import { usePointsGridEvents } from "../composables/usePointsGridEvents";
 import { usePointsLifecycle } from "../composables/usePointsLifecycle";
+import { usePointsRunIssues } from "../composables/usePointsRunIssues";
 import {
-  formatBackendReason,
-  formatFieldLabel,
   usePointsValidation,
 } from "../composables/usePointsValidation";
 
@@ -48,13 +47,6 @@ const { projectId, project, activeDeviceId, activeDevice } = useCommDeviceContex
 const workspaceRuntime = useCommWorkspaceRuntime();
 
 const BYTE_ORDERS: ByteOrder32[] = COMM_BYTE_ORDERS_32;
-
-interface BackendFieldIssue {
-  pointKey?: string;
-  hmiName?: string;
-  field: string;
-  reason?: string;
-}
 
 type PointRow = CommPoint & {
   __selected: boolean;
@@ -159,29 +151,6 @@ function resolveDataTypeForArea(area: RegisterArea, preferred?: DataType | null)
   return supported[0] ?? preferred ?? "UInt16";
 }
 
-const backendFieldIssues = computed<BackendFieldIssue[]>(() => runError.value?.details?.missingFields ?? []);
-const backendFieldIssuesView = computed(() =>
-  backendFieldIssues.value.map((issue) => ({
-    ...issue,
-    fieldLabel: formatFieldLabel(issue.field),
-    reasonLabel: formatBackendReason(issue.reason),
-  }))
-);
-const hasBackendFieldIssues = computed(() => backendFieldIssues.value.length > 0);
-
-const validationSummary = computed(() => {
-  if (!hasValidationIssues.value && !hasBackendFieldIssues.value) {
-    return "当前无阻断错误";
-  }
-  const parts: string[] = [];
-  if (hasValidationIssues.value) {
-    parts.push(`前端校验 ${validationIssues.value.length} 条`);
-  }
-  if (hasBackendFieldIssues.value) {
-    parts.push(`后端校验 ${backendFieldIssues.value.length} 条`);
-  }
-  return `运行已阻止 · ${parts.join(" / ")}`;
-});
 
 const EDITOR_TEXT = "comm-text";
 const EDITOR_SELECT = "comm-select";
@@ -249,6 +218,12 @@ const {
   syncFromGridAndMapAddresses,
   onLatestResults: applyLatestToGridRows,
   workspaceRuntime,
+});
+
+const { backendFieldIssuesView, hasBackendFieldIssues, validationSummary } = usePointsRunIssues({
+  runError,
+  validationIssues,
+  hasValidationIssues,
 });
 
 function updatePollMs(value: number) {
