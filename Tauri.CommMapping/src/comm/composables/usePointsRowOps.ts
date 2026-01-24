@@ -3,6 +3,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 
 import type { CommPoint, ConnectionProfile, DataType, PointsV1, RegisterArea } from "../api";
 import { formatHumanAddressFrom0Based, inferNextAddress, parseHumanAddress } from "../services/address";
+import { newPointKey } from "../services/ids";
 import { createBatchAddUndoAction, createDeleteRowsUndoAction } from "../services/undoRedo";
 import type { SelectionRange } from "../services/fill";
 import type { UndoManager } from "../services/undoRedo";
@@ -44,13 +45,6 @@ export function usePointsRowOps<T extends PointRowLike>(options: UsePointsRowOps
     rebuildPlan,
     resolveDataTypeForArea,
   } = options;
-
-  function newPointKey(): string {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID();
-    }
-    return `pt-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
 
   function findInsertAnchor(): { row: T; rowIndex: number } | null {
     if (selectedCount.value === 0) return null;

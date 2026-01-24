@@ -2,6 +2,7 @@ import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 
 import type { ConnectionProfile, RegisterArea, SerialParity } from "../api";
+import { cloneProfile } from "../services/profiles";
 import { useCommDeviceContext } from "./useDeviceContext";
 
 export function useConnectionPanel() {
@@ -16,10 +17,6 @@ export function useConnectionPanel() {
     if (!profileDraft.value) return false;
     return JSON.stringify(profileDraft.value) !== profileBaseline.value;
   });
-
-  function cloneProfile(profile: ConnectionProfile): ConnectionProfile {
-    return JSON.parse(JSON.stringify(profile)) as ConnectionProfile;
-  }
 
   function resetProfileDraft() {
     if (!activeDevice.value) {

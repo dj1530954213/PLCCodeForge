@@ -1,4 +1,4 @@
-import type { ProfilesV1 } from "../api";
+import type { ConnectionProfile, ProfilesV1 } from "../api";
 import { commProfilesLoad, commProfilesSave } from "../api";
 
 export async function loadProfiles(projectId?: string, deviceId?: string): Promise<ProfilesV1> {
@@ -7,4 +7,8 @@ export async function loadProfiles(projectId?: string, deviceId?: string): Promi
 
 export async function saveProfiles(payload: ProfilesV1, projectId?: string, deviceId?: string): Promise<void> {
   return commProfilesSave(payload, projectId, deviceId);
+}
+
+export function cloneProfile(profile: ConnectionProfile): ConnectionProfile {
+  return JSON.parse(JSON.stringify(profile)) as ConnectionProfile;
 }

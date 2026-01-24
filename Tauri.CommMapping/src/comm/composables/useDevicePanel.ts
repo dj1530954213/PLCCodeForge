@@ -9,6 +9,8 @@ import type {
   ConnectionProfile,
 } from "../api";
 import { useCommDeviceContext } from "./useDeviceContext";
+import { newPointKey } from "../services/ids";
+import { cloneProfile } from "../services/profiles";
 
 export function useDevicePanel() {
   const { project, devices, activeDeviceId, activeDevice, saveProject } = useCommDeviceContext();
@@ -57,17 +59,6 @@ export function useDevicePanel() {
       retryCount: 0,
       pollIntervalMs: 500,
     };
-  }
-
-  function cloneProfile(profile: ConnectionProfile): ConnectionProfile {
-    return JSON.parse(JSON.stringify(profile)) as ConnectionProfile;
-  }
-
-  function newPointKey(): string {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID();
-    }
-    return `pt-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
   function normalizedCopyRules(): CommDeviceCopyRuleV1[] {

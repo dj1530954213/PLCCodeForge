@@ -1,6 +1,7 @@
 import type { ByteOrder32, CommPoint, DataType, RegisterArea } from "../api";
 import { formatHumanAddressFrom0Based, parseHumanAddress, spanForArea } from "./address";
 import { isValidForArea } from "./dataTypes";
+import { newPointKey } from "./ids";
 
 export type BatchAddMode = "increment" | "fixed";
 
@@ -48,7 +49,7 @@ export function buildBatchPoints(
 
   const start0 = parsed.start0Based;
 
-  const pointKeyFactory = params.pointKeyFactory ?? (() => crypto.randomUUID());
+  const pointKeyFactory = params.pointKeyFactory ?? newPointKey;
   const points: CommPoint[] = [];
   for (let i = 0; i < count; i++) {
     const rowStart0 = start0 + (params.mode === "increment" ? i * span : 0);

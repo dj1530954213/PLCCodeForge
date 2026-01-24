@@ -1,4 +1,5 @@
 import type { CommPoint, CommWarning, PointsV1, ProfilesV1 } from "../api";
+import { newPointKey } from "../services/ids";
 
 export interface UnionToCommPointsOutcome {
   points: PointsV1;
@@ -351,7 +352,7 @@ export async function unionToCommPoints(params: {
           deviceId,
         });
       }
-      pointKey = crypto.randomUUID();
+        pointKey = newPointKey();
       reuseDecision = "created:new";
       createdPointKeys += 1;
     }
