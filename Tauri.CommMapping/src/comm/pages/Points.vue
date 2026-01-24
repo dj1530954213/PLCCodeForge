@@ -14,7 +14,6 @@ import ValidationDrawer from "../components/points/ValidationDrawer.vue";
 
 import { COMM_BYTE_ORDERS_32, COMM_DATA_TYPES } from "../constants";
 import { spanForArea } from "../services/address";
-import type { SelectionRange } from "../services/fill";
 import { useKeyboardShortcuts, createStandardShortcuts } from "../composables/useKeyboardShortcuts";
 import { getSupportedDataTypes } from "../services/dataTypes";
 import { usePointsRun } from "../composables/usePointsRun";
@@ -26,6 +25,7 @@ import { usePointsRows } from "../composables/usePointsRows";
 import { usePointsRowOps } from "../composables/usePointsRowOps";
 import { usePointsPersistence } from "../composables/usePointsPersistence";
 import { usePointsColumns } from "../composables/usePointsColumns";
+import { usePointsGridEvents } from "../composables/usePointsGridEvents";
 import {
   formatBackendReason,
   formatFieldLabel,
@@ -49,11 +49,6 @@ const { projectId, project, activeDeviceId, activeDevice } = useCommDeviceContex
 const workspaceRuntime = useCommWorkspaceRuntime();
 
 const BYTE_ORDERS: ByteOrder32[] = COMM_BYTE_ORDERS_32;
-
-type ValidationIssueJump = {
-  pointKey: string;
-  field?: string;
-};
 
 interface BackendFieldIssue {
   pointKey?: string;
@@ -358,121 +353,22 @@ const { loadAll, savePoints } = usePointsPersistence({
   syncFromGridAndMapAddresses,
 });
 
-function collectTouchedPointKeysFromAfterEdit(e: any): string[] {
-  const keys = new Set<string>();
-  const detail = e?.detail ?? e;
-
-  if (detail?.model?.pointKey) keys.add(String(detail.model.pointKey));
-  if (detail?.models && typeof detail.models === "object") {
-    for (const v of Object.values(detail.models)) {
-      if (v && typeof v === "object" && "pointKey" in v) keys.add(String((v as any).pointKey));
-    }
-  }
-  return [...keys];
-}
-
-function onAfterEdit(e: any) {
-  const touched = collectTouchedPointKeysFromAfterEdit(e);
-  focusedIssueCell.value = null;
-  void syncFromGridAndMapAddresses(touched);
-  markPointsChanged();
-}
-
-function onBeforeGridKeyDown(e: any) {
-  const original = e?.detail?.original as KeyboardEvent | undefined;
-  if (!original) return;
-  const gridHasFocus = Boolean(e?.detail?.focus || e?.detail?.range || e?.detail?.edit);
-  if (!gridHasFocus) return;
-
-  const key = original.key?.toLowerCase();
-  const isCtrl = original.ctrlKey || original.metaKey;
-  if (!isCtrl || !key) return;
-
-  if (key === "z" && !original.shiftKey) {
-    handleUndo();
-    e.preventDefault?.();
-    original.preventDefault();
-    original.stopPropagation();
-    return;
-  }
-
-  if (key === "y" || (key === "z" && original.shiftKey)) {
-    handleRedo();
-    e.preventDefault?.();
-    original.preventDefault();
-    original.stopPropagation();
-  }
-}
-
-async function onBeforeAutofill(e: any) {
-  const detail = e?.detail;
-  const range = detail?.newRange ?? detail?.range ?? detail?.oldRange;
-  if (!range) return;
-
-  if (typeof e?.preventDefault === "function") {
-    e.preventDefault();
-  }
-
-  const rowStart = Math.min(range.y, range.y1);
-  const rowEnd = Math.max(range.y, range.y1);
-  const colStart = Math.min(range.x, range.x1);
-  const colEnd = Math.max(range.x, range.x1);
-
-  const missing = rowEnd - (gridRows.value.length - 1);
-  if (missing > 0) {
-    const baseRow = gridRows.value[rowStart] ?? gridRows.value[gridRows.value.length - 1] ?? null;
-    await appendRows(missing, baseRow);
-    await nextTick();
-  }
-
-  const selRange: SelectionRange = { rowStart, rowEnd, colStart, colEnd };
-  if (fillMode.value === "copy") {
-    await applyFillDown(selRange);
-  } else {
-    await applyFillSeries(selRange);
-  }
-}
-
-async function jumpToIssue(issue: ValidationIssueJump) {
-  const rowIndex = gridRows.value.findIndex((r) => r.pointKey === issue.pointKey);
-  if (rowIndex < 0) return;
-
-  selectedRangeRows.value = null;
-  gridRows.value.forEach((r) => {
-    r.__selected = r.pointKey === issue.pointKey;
-  });
-  gridRows.value = [...gridRows.value];
-
-  await nextTick();
-  const grid = gridApi();
-  if (!grid) return;
-  if (typeof grid.scrollToRow === "function") {
-    await grid.scrollToRow(rowIndex);
-  }
-
-  if (issue.field) {
-    const colKey = String(issue.field);
-    const colIndex = colIndexByProp.value[colKey];
-    if (typeof grid.scrollToColumnIndex === "function" && typeof colIndex === "number") {
-      await grid.scrollToColumnIndex(colIndex);
-    } else if (typeof grid.scrollToColumnProp === "function") {
-      await grid.scrollToColumnProp(colKey);
-    } else if (typeof grid.scrollToCoordinate === "function" && typeof colIndex === "number") {
-      await grid.scrollToCoordinate({ x: colIndex, y: rowIndex });
-    }
-  }
-}
-
-async function handleJumpToIssue(issue: ValidationIssueJump) {
-  validationPanelOpen.value = false;
-  if (issue.field && Object.prototype.hasOwnProperty.call(colIndexByProp.value, issue.field)) {
-    focusedIssueCell.value = { pointKey: issue.pointKey, field: issue.field as keyof PointRow };
-  } else {
-    focusedIssueCell.value = null;
-  }
-  await nextTick();
-  await jumpToIssue(issue);
-}
+const { onAfterEdit, onBeforeGridKeyDown, onBeforeAutofill, handleJumpToIssue } = usePointsGridEvents<PointRow>({
+  gridRows,
+  selectedRangeRows,
+  focusedIssueCell,
+  validationPanelOpen,
+  colIndexByProp,
+  gridApi,
+  fillMode,
+  applyFillDown,
+  applyFillSeries,
+  appendRows,
+  syncFromGridAndMapAddresses,
+  markPointsChanged,
+  handleUndo,
+  handleRedo,
+});
 
 onMounted(() => {
   nextTick(() => {
