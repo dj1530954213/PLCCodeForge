@@ -14,7 +14,7 @@ import ValidationDrawer from "../components/points/ValidationDrawer.vue";
 
 import { COMM_BYTE_ORDERS_32, COMM_DATA_TYPES } from "../constants";
 import { spanForArea } from "../services/address";
-import { getSupportedDataTypes } from "../services/dataTypes";
+import { getSupportedDataTypes, resolveDataTypeForArea } from "../services/dataTypes";
 import { usePointsRun } from "../composables/usePointsRun";
 import { usePointsGrid } from "../composables/usePointsGrid";
 import { usePointsFill } from "../composables/usePointsFill";
@@ -38,7 +38,6 @@ import type {
   DataType,
   PointsV1,
   ProfilesV1,
-  RegisterArea,
 } from "../api";
 import { useCommDeviceContext } from "../composables/useDeviceContext";
 import { useCommWorkspaceRuntime } from "../composables/useWorkspaceRuntime";
@@ -143,12 +142,6 @@ const {
 
 function getValidationError(): string | null {
   return gridRows.value.map(validateRowForRun).find((v) => Boolean(v)) ?? null;
-}
-
-function resolveDataTypeForArea(area: RegisterArea, preferred?: DataType | null): DataType {
-  const supported = getSupportedDataTypes(area);
-  if (preferred && supported.includes(preferred)) return preferred;
-  return supported[0] ?? preferred ?? "UInt16";
 }
 
 

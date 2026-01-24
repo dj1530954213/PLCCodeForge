@@ -138,6 +138,18 @@ export function getSupportedDataTypes(area: RegisterArea): DataType[] {
 }
 
 /**
+ * 根据读取区域选择可用的数据类型
+ * @param area 寄存器区域
+ * @param preferred 首选类型
+ * @returns 匹配的类型
+ */
+export function resolveDataTypeForArea(area: RegisterArea, preferred?: DataType | null): DataType {
+  const supported = getSupportedDataTypes(area);
+  if (preferred && supported.includes(preferred)) return preferred;
+  return supported[0] ?? preferred ?? "UInt16";
+}
+
+/**
  * 获取数据类型的显示名称
  * @param dataType 数据类型
  * @returns 中文显示名称
