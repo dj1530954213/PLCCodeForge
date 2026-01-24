@@ -420,9 +420,7 @@ impl PouSerializer{
             ElementType::Box => self.write_box(w, elem)?,
             ElementType::Contact => self.write_contact(w, elem)?,
             ElementType::Coil => self.write_output(w, elem)?,
-            ElementType::Assign => {
-                bail!("CLDAssign 序列化尚未实现");
-            }
+            ElementType::Assign => {}
             ElementType::Network => {
                 // 理论上网络不应该走到这里
                 bail!("ElementType::Network 不能走 write_element");
@@ -515,7 +513,7 @@ impl PouSerializer{
     }
 
     /// 写入单个引脚：Normal/Safety 的格式不同。
-    fn write_pin(&self, w: &mut MfcWriter<Vec<u8>>, pin: &crate::ast::BoxPin, _direction: PinDirection) -> Result<()> {
+    fn write_pin(&self, w: &mut MfcWriter<Vec<u8>>, pin: &crate::ast::BoxPin, direction: PinDirection) -> Result<()> {
         match self.config.variant {
             PlcVariant::Safety => {
                 // Safety 版：紧凑格式，只写 name + var
@@ -528,7 +526,9 @@ impl PouSerializer{
                 w.write_u8(0)?; // flag1 常见为 0x00
                 w.write_mfc_string(&pin.name)?;
                 w.write_mfc_string(&pin.variable)?;
-                w.write_u32(0xFFFF_FFFF)?; // binding_id，未绑定默认 -1
+                if direction == PinDirection::Input && self.config.serialize_version >= 13 {
+                    w.write_u32(0xFFFF_FFFF)?; // binding_id，未绑定默认 -1
+                }
             }
         }
         Ok(())
@@ -571,123 +571,10 @@ impl PouSerializer{
     }
 
     fn write_variables(&self, w: &mut MfcWriter<Vec<u8>>, pou: &UniversalPou) -> Result<()> {
-        let flat_vars = Self::collect_variables(&pou.variables);
-        if self.config.variant == PlcVariant::Safety {
-            if flat_vars.len() > u32::MAX as usize {
-                bail!("变量数量超出 u32 上限: {}", flat_vars.len());
-            }
-            w.write_u32(flat_vars.len() as u32)?;
-            if flat_vars.is_empty() {
-                return Ok(());
-            }
-        } else if flat_vars.is_empty() {
-            return Ok(());
+        match self.config.variant {
+            PlcVariant::Safety => self.write_variables_safety(w, pou),
+            PlcVariant::Normal => self.write_variables_normal(w, pou),
         }
-
-        // 依据：C++ switch-case 0x15 分支
-        // 已落地的结构来源：S09/S10/S11/S12/S13/S14 (Normal/Safety)。
-        // 未确认的字段以固定模板填充，并保留 TODO 说明。
-        // 变量 ID 分配策略：
-        // 1) 如果上层显式提供 var_id，则直接使用；
-        // 2) 否则按变量表顺序分配递增 u16（样本显示可能是顺序句柄）。
-        // 注意：真实算法仍待确认，因此保留手动覆盖入口。
-        let mut next_var_id: u16 = 1;
-        let mut var_id_map: HashMap<String, u16> = HashMap::new();
-
-        for var in &flat_vars {
-            w.write_u8(0x15)?; // TypeID: Local Variable
-            let var_id = assign_var_id(var, &mut var_id_map, &mut next_var_id)?;
-
-            match self.config.variant {
-                PlcVariant::Normal => {
-                    // Normal: CBaseDB::Serialize 顺序
-                    // name1 -> name2 -> comment_or_res -> type -> init_flag -> init -> tail
-                    // [1] name1：变量名（样本中与变量表名称一致）
-                    w.write_mfc_string(&var.name)?;
-                    // [2] name2：保留字段，样本中为空
-                    w.write_mfc_string("")?;
-                    // [3] comment_or_res：变量注释或资源标识（S10-N 为中文注释）
-                    w.write_mfc_string(&var.comment)?;
-                    // [4] type：变量类型字符串
-                    w.write_mfc_string(&var.data_type)?;
-
-                    // [5] init_flag：TIME=0x07，BOOL=0x00
-                    let init_flag = calc_init_flag(&var.data_type, &var.init_value);
-                    w.write_u8(init_flag)?;
-                    // [6] init_value：初始化字符串（FALSE/T#3S 等）
-                    w.write_mfc_string(&var.init_value)?;
-
-                    // tail: retain + addr_id + extra_str + mode + var_id + retain_mirror + id2 + SOE
-                    // [7] retain：0x03=保持，0x04=不保持
-                    let retain_flag = if var.power_down_keep { 0x03 } else { 0x04 };
-                    w.write_u8(retain_flag)?;
-                    // [8] addr_id(u64)：在流中为两个连续 u32，未绑定默认 FF...FF
-                    let addr_id = resolve_addr_id(var);
-                    w.write_u64(addr_id)?;
-                    // [9] extra_str：保留 CString，样本中为空
-                    w.write_mfc_string("")?;
-                    // [10] mode(u8)：S12/S13 为 0x06，S09/S10/S11 为 0x16
-                    let mode = resolve_mode(var, addr_id);
-                    w.write_u8(mode)?;
-                    // [11] var_id(u16)：顺序句柄（Sequential）
-                    w.write_u16(var_id)?;
-                    // [12] retain_mirror(u8)：与掉电保持同步
-                    w.write_u8(if var.power_down_keep { 1 } else { 0 })?;
-                    // [13] id2(u32)：用途未知，可由上层覆盖
-                    let id2 = resolve_id2(var);
-                    w.write_u32(id2)?;
-                    // [14] soe(u16)：SOE 使能
-                    w.write_u16(if var.soe_enable { 1 } else { 0 })?;
-                }
-                PlcVariant::Safety => {
-                    // Safety: CBaseDB::Serialize 顺序
-                    // name1 -> name2 -> lang_count(u32) -> (lang, comment)* -> type -> init_flag -> init_value -> tail
-                    // [1] name1：变量名
-                    w.write_mfc_string(&var.name)?;
-                    // [2] name2：保留字符串，Safety 样本中为空
-                    w.write_mfc_string("")?;
-
-                    // [3] 语言映射数量：0=无注释，1=包含 "CH"+comment
-                    let lang_count = if var.comment.is_empty() { 0 } else { 1 };
-                    w.write_u32(lang_count)?;
-                    if lang_count > 0 {
-                        // Safety 版：固定语言标识 "CH"，后跟中文注释
-                        w.write_mfc_string("CH")?;
-                        w.write_mfc_string(&var.comment)?;
-                    }
-
-                    // [4] type：变量类型字符串
-                    w.write_mfc_string(&var.data_type)?;
-                    // [5] init_flag：TIME=0x07，其它默认 0x00
-                    let init_flag = calc_init_flag(&var.data_type, &var.init_value);
-                    w.write_u8(init_flag)?;
-                    // [6] init_value：初始化字符串
-                    w.write_mfc_string(&var.init_value)?;
-
-                    // tail: area_code + u16(默认FFFF) + addr_id(u32) + extra_str + mode + var_id + soe_bytes
-                    // [7] area_code：区域码，默认 0x04
-                    let area_code = resolve_area_code(var);
-                    w.write_u8(area_code)?;
-                    // [8] u16 保留/标志位：样本固定为 0xFFFF
-                    w.write_u16(0xFFFF)?;
-                    // [9] addr_id：Safety 仅写入 u32（未绑定默认 0xFFFFFFFF）
-                    let addr_id = resolve_addr_id_u32(var);
-                    w.write_u32(addr_id)?;
-                    // [10] extra_str：保留 CString，样本中为空
-                    w.write_mfc_string("")?;
-                    // [11] mode：样本固定 0x42，可由上层覆盖
-                    let mode = resolve_mode_safety(var);
-                    w.write_u8(mode)?;
-                    // [12] var_id：顺序句柄（Sequential）
-                    w.write_u16(var_id)?;
-                    // [13] soe_val：Safety 以两个字节写入（低字节/高字节）
-                    let soe_val = resolve_soe_value_safety(var);
-                    w.write_u8((soe_val & 0xFF) as u8)?;        // 低字节
-                    w.write_u8((soe_val >> 8) as u8)?;          // 高字节
-                }
-            }
-        }
-        Ok(())
     }
 
     fn write_header_string_array(&self, w: &mut MfcWriter<Vec<u8>>, pou: &UniversalPou) -> Result<()> {
@@ -695,16 +582,313 @@ impl PouSerializer{
         if count > u16::MAX as usize {
             bail!("Header 字符串数量超出 u16 上限: {}", count);
         }
-        // Safety 样本中存在 4 字节保留字段 + 2 字节数量
-        w.write_u32(0)?;
-        if w.offset % 2 != 0 {
-            w.write_u8(0)?;
-        }
-        w.write_u16(count as u16)?;
+        w.write_u32(count as u32)?;
         for item in &pou.header_strings {
             w.write_mfc_string(item)?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SafetyDbKind {
+    Base,
+    Struct,
+    FunctionBlock,
+}
+
+#[derive(Debug, Clone)]
+struct SafetyDbEntry {
+    kind: SafetyDbKind,
+    base: Variable,
+    members: Vec<SafetyDbEntry>,
+}
+
+impl PouSerializer {
+    fn write_variables_normal(&self, w: &mut MfcWriter<Vec<u8>>, pou: &UniversalPou) -> Result<()> {
+        let flat_vars = Self::collect_variables(&pou.variables);
+        if flat_vars.is_empty() {
+            return Ok(());
+        }
+
+        // 变量 ID 分配策略：
+        // 1) 如果上层显式提供 var_id，则直接使用；
+        // 2) 否则按变量表顺序分配递增 u16。
+        let mut next_var_id: u16 = 1;
+        let mut var_id_map: HashMap<String, u16> = HashMap::new();
+
+        for var in &flat_vars {
+            w.write_u8(0x15)?; // TypeID: Local Variable
+            let var_id = assign_var_id(var, &mut var_id_map, &mut next_var_id)?;
+
+            // Normal: CBaseDB::Serialize 顺序
+            w.write_mfc_string(&var.name)?;
+            w.write_mfc_string("")?;
+            w.write_mfc_string(&var.comment)?;
+            w.write_mfc_string(&var.data_type)?;
+
+            let init_flag = calc_init_flag(&var.data_type, &var.init_value);
+            w.write_u8(init_flag)?;
+            w.write_mfc_string(&var.init_value)?;
+
+            let retain_flag = if var.power_down_keep { 0x03 } else { 0x04 };
+            w.write_u8(retain_flag)?;
+            let addr_id = resolve_addr_id(var);
+            w.write_u64(addr_id)?;
+            w.write_mfc_string("")?;
+            let mode = resolve_mode(var, addr_id);
+            w.write_u8(mode)?;
+            w.write_u16(var_id)?;
+            w.write_u8(if var.power_down_keep { 1 } else { 0 })?;
+            let id2 = resolve_id2(var);
+            w.write_u32(id2)?;
+            w.write_u16(if var.soe_enable { 1 } else { 0 })?;
+        }
+        Ok(())
+    }
+
+    fn write_variables_safety(&self, w: &mut MfcWriter<Vec<u8>>, pou: &UniversalPou) -> Result<()> {
+        let mut entries = Vec::new();
+        collect_safety_db_entries(&pou.variables, &pou.header_strings, &mut entries);
+        if entries.len() > u32::MAX as usize {
+            bail!("变量数量超出 u32 上限: {}", entries.len());
+        }
+        w.write_u32(entries.len() as u32)?;
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        let mut next_var_id: u16 = 1;
+        let mut var_id_map: HashMap<String, u16> = HashMap::new();
+
+        for entry in entries {
+            let type_id = safety_db_type_id(entry.kind);
+            w.write_u8(type_id)?;
+            self.write_safety_db_entry(w, &entry, &mut var_id_map, &mut next_var_id)?;
+        }
+        Ok(())
+    }
+
+    fn write_safety_db_entry(
+        &self,
+        w: &mut MfcWriter<Vec<u8>>,
+        entry: &SafetyDbEntry,
+        var_id_map: &mut HashMap<String, u16>,
+        next_var_id: &mut u16,
+    ) -> Result<()> {
+        match entry.kind {
+            SafetyDbKind::Base => {
+                self.write_safety_base_db(w, &entry.base, var_id_map, next_var_id)?;
+            }
+            SafetyDbKind::Struct => {
+                self.write_safety_base_db(w, &entry.base, var_id_map, next_var_id)?;
+                let count = entry.members.len();
+                if count > u32::MAX as usize {
+                    bail!("Struct 成员数量超出 u32 上限: {}", count);
+                }
+                w.write_u32(count as u32)?;
+                for member in &entry.members {
+                    let type_id = safety_db_type_id(member.kind);
+                    w.write_u8(type_id)?;
+                    self.write_safety_db_entry(w, member, var_id_map, next_var_id)?;
+                }
+            }
+            SafetyDbKind::FunctionBlock => {
+                self.write_safety_base_db(w, &entry.base, var_id_map, next_var_id)?;
+                // 依据规则：FunctionBlock 包含 5 段 typed-list + KV 尾部
+                for list_index in 0..5 {
+                    if list_index == 0 {
+                        let count = entry.members.len();
+                        w.write_u32(count as u32)?;
+                        for member in &entry.members {
+                            let type_id = safety_db_type_id(member.kind);
+                            w.write_u8(type_id)?;
+                            self.write_safety_db_entry(w, member, var_id_map, next_var_id)?;
+                        }
+                    } else {
+                        w.write_u32(0)?;
+                    }
+                }
+                w.write_u32(0)?; // kvCount
+            }
+        }
+        Ok(())
+    }
+
+    fn write_safety_base_db(
+        &self,
+        w: &mut MfcWriter<Vec<u8>>,
+        var: &Variable,
+        var_id_map: &mut HashMap<String, u16>,
+        next_var_id: &mut u16,
+    ) -> Result<()> {
+        let var_id = assign_var_id(var, var_id_map, next_var_id)?;
+        if self.config.serialize_version >= 0x34 {
+            self.write_safety_base_db_v34(w, var, var_id)
+        } else {
+            self.write_safety_base_db_legacy(w, var, var_id)
+        }
+    }
+
+    fn write_safety_base_db_legacy(
+        &self,
+        w: &mut MfcWriter<Vec<u8>>,
+        var: &Variable,
+        var_id: u16,
+    ) -> Result<()> {
+        w.write_mfc_string(&var.name)?;
+        w.write_mfc_string("")?;
+
+        let lang_count = if var.comment.is_empty() { 0 } else { 1 };
+        w.write_u32(lang_count)?;
+        if lang_count > 0 {
+            w.write_mfc_string("CH")?;
+            w.write_mfc_string(&var.comment)?;
+        }
+
+        w.write_mfc_string(&var.data_type)?;
+        let init_flag = calc_init_flag(&var.data_type, &var.init_value);
+        w.write_u8(init_flag)?;
+        w.write_mfc_string(&var.init_value)?;
+
+        let area_code = resolve_area_code(var);
+        w.write_u8(area_code)?;
+        w.write_u16(0xFFFF)?;
+        let addr_id = resolve_addr_id_u32(var);
+        w.write_u32(addr_id)?;
+        w.write_mfc_string("")?;
+        let mode = resolve_mode_safety(var);
+        w.write_u8(mode)?;
+        w.write_u16(var_id)?;
+        let soe_val = resolve_soe_value_safety(var);
+        w.write_u8((soe_val & 0xFF) as u8)?;
+        w.write_u8((soe_val >> 8) as u8)?;
+        Ok(())
+    }
+
+    fn write_safety_base_db_v34(
+        &self,
+        w: &mut MfcWriter<Vec<u8>>,
+        var: &Variable,
+        var_id: u16,
+    ) -> Result<()> {
+        w.write_mfc_string(&var.name)?;
+        w.write_mfc_string("")?;
+
+        let lang_count = if var.comment.is_empty() { 0 } else { 1 };
+        w.write_u32(lang_count)?;
+        if lang_count > 0 {
+            w.write_mfc_string("CH")?;
+            w.write_mfc_string(&var.comment)?;
+        }
+
+        w.write_mfc_string(&var.data_type)?;
+        let init_flag = calc_init_flag(&var.data_type, &var.init_value);
+        w.write_u8(init_flag)?;
+        w.write_mfc_string(&var.init_value)?;
+
+        w.write_u8(0)?;
+        let addr_id = resolve_addr_id_u32(var);
+        w.write_u32(addr_id)?;
+        let id2 = resolve_id2(var);
+        w.write_u32(id2)?;
+        w.write_mfc_string("")?;
+        let mode = resolve_mode_safety(var);
+        w.write_u8(mode)?;
+        w.write_u16(var_id)?;
+        w.write_u8(if var.soe_enable { 1 } else { 0 })?;
+        w.write_u32(0)?;
+        if self.config.serialize_version >= 0x38 {
+            let area_code = resolve_area_code(var);
+            w.write_u8(area_code)?;
+        }
+        if self.config.serialize_version >= 0x44 {
+            w.write_u8(0)?;
+        }
+        Ok(())
+    }
+}
+
+fn safety_db_type_id(kind: SafetyDbKind) -> u8 {
+    match kind {
+        SafetyDbKind::Base => 0x15,
+        SafetyDbKind::Struct => 0x0B,
+        SafetyDbKind::FunctionBlock => 0x18,
+    }
+}
+
+fn collect_safety_db_entries(
+    nodes: &[VariableNode],
+    header_strings: &[String],
+    out: &mut Vec<SafetyDbEntry>,
+) {
+    for node in nodes {
+        match node {
+            VariableNode::Leaf(var) => {
+                out.push(SafetyDbEntry {
+                    kind: SafetyDbKind::Base,
+                    base: var.clone(),
+                    members: Vec::new(),
+                });
+            }
+            VariableNode::Group { name, type_name, children } => {
+                if is_virtual_group(name, type_name) {
+                    collect_safety_db_entries(children, header_strings, out);
+                    continue;
+                }
+                let (kind, data_type) = infer_container_kind(name, type_name, header_strings);
+                let base_var = make_container_variable(name, &data_type);
+                let mut members = Vec::new();
+                collect_safety_db_entries(children, header_strings, &mut members);
+                out.push(SafetyDbEntry {
+                    kind,
+                    base: base_var,
+                    members,
+                });
+            }
+        }
+    }
+}
+
+fn is_virtual_group(name: &str, type_name: &Option<String>) -> bool {
+    if name == "Local Variables" {
+        return true;
+    }
+    if let Some(t) = type_name {
+        return t == name;
+    }
+    false
+}
+
+fn infer_container_kind(
+    name: &str,
+    type_name: &Option<String>,
+    header_strings: &[String],
+) -> (SafetyDbKind, String) {
+    if let Some(t) = type_name {
+        return (SafetyDbKind::FunctionBlock, t.clone());
+    }
+    for header in header_strings {
+        if name == header || name.starts_with(&format!("{}_", header)) {
+            return (SafetyDbKind::FunctionBlock, header.clone());
+        }
+    }
+    (SafetyDbKind::Struct, name.to_string())
+}
+
+fn make_container_variable(name: &str, data_type: &str) -> Variable {
+    Variable {
+        name: name.to_string(),
+        data_type: data_type.to_string(),
+        init_value: String::new(),
+        soe_enable: false,
+        power_down_keep: false,
+        comment: String::new(),
+        var_id: None,
+        addr_id: None,
+        mode: None,
+        id2: None,
+        area_code: None,
     }
 }
 

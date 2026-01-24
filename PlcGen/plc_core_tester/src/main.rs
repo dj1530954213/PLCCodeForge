@@ -59,7 +59,7 @@ fn main() -> Result<()> {
                     print_summary(&file_name, label, &pou, &out_path);
                 }
                 Err(err) => {
-                    println!("[fail] {} {}: {}", file_name, label, err);
+                    println!("[fail] {} {}: {:#}", file_name, label, err);
                 }
             }
         }
