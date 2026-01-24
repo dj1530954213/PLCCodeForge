@@ -1,40 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
 
 import type { CommProjectV1 } from "../api";
-import {
-  copyProject as copyProjectService,
-  createProject as createProjectService,
-  deleteProject as deleteProjectService,
-  listProjects,
-} from "../services/projects";
+import { useProjectCatalog } from "../composables/useProjectCatalog";
 
 const router = useRouter();
 
-const loading = ref(false);
-const showDeleted = ref(false);
-const projects = ref<CommProjectV1[]>([]);
-const activeCount = computed(() => projects.value.filter((p) => !p.deletedAtUtc).length);
-const deletedCount = computed(() => projects.value.filter((p) => p.deletedAtUtc).length);
-
 const createDialogOpen = ref(false);
-const creating = ref<{ name: string; device: string; notes: string }>({
-  name: "",
-  device: "",
-  notes: "",
-});
 
-async function refresh() {
-  loading.value = true;
-  try {
-    const resp = await listProjects({ includeDeleted: showDeleted.value });
-    projects.value = resp.projects;
-  } finally {
-    loading.value = false;
-  }
-}
+const {
+  loading,
+  showDeleted,
+  projects,
+  createForm,
+  activeCount,
+  deletedCount,
+  refresh,
+  resetCreateForm,
+  createProject,
+  copyProject,
+  deleteProject,
+} = useProjectCatalog();
 
 function openProject(projectId: string) {
   router.push(`/projects/${projectId}/comm/points`);
@@ -44,55 +32,26 @@ function onRowDblClick(row: CommProjectV1) {
   openProject(row.projectId);
 }
 
-async function createProject() {
-  const name = creating.value.name.trim();
-  if (!name) {
-    ElMessage.error("工程名称不能为空");
-    return;
-  }
-  const device = creating.value.device.trim();
-  const notes = creating.value.notes.trim();
-
-  const project = await createProjectService({
-    name,
-    device: device ? device : undefined,
-    notes: notes ? notes : undefined,
-  });
-
+async function handleCreateProject() {
+  const project = await createProject();
+  if (!project) return;
   createDialogOpen.value = false;
-  creating.value = { name: "", device: "", notes: "" };
-
+  resetCreateForm();
   ElMessage.success("已创建工程");
   openProject(project.projectId);
 }
 
-async function copyProject(project: CommProjectV1) {
-  const suggested = `${project.name} (copy)`;
-  const name = await ElMessageBox.prompt("输入复制后的工程名称", "复制工程", {
-    inputValue: suggested,
-    confirmButtonText: "复制",
-    cancelButtonText: "取消",
-  })
-    .then((r) => r.value)
-    .catch(() => "");
-
-  if (!name.trim()) {
-    return;
-  }
-
-  const created = await copyProjectService({ projectId: project.projectId, name: name.trim() });
+async function handleCopyProject(project: CommProjectV1) {
+  const created = await copyProject(project);
+  if (!created) return;
   ElMessage.success("已复制工程");
   await refresh();
   openProject(created.projectId);
 }
 
-async function deleteProject(project: CommProjectV1) {
-  await ElMessageBox.confirm(`确认删除工程「${project.name}」？（软删，可通过“显示已删除”查看）`, "删除工程", {
-    confirmButtonText: "删除",
-    cancelButtonText: "取消",
-    type: "warning",
-  });
-  await deleteProjectService(project.projectId);
+async function handleDeleteProject(project: CommProjectV1) {
+  const deleted = await deleteProject(project);
+  if (!deleted) return;
   ElMessage.success("已删除（软删）");
   await refresh();
 }
@@ -147,8 +106,8 @@ onMounted(refresh);
           <el-table-column label="操作" width="240">
             <template #default="{ row }">
               <el-button size="small" @click="openProject(row.projectId)">打开</el-button>
-              <el-button size="small" @click="copyProject(row)">复制</el-button>
-              <el-button size="small" type="danger" :disabled="!!row.deletedAtUtc" @click="deleteProject(row)"
+              <el-button size="small" @click="handleCopyProject(row)">复制</el-button>
+              <el-button size="small" type="danger" :disabled="!!row.deletedAtUtc" @click="handleDeleteProject(row)"
                 >删除</el-button
               >
             </template>
@@ -160,19 +119,19 @@ onMounted(refresh);
     <el-dialog v-model="createDialogOpen" title="新建工程" width="560px">
       <el-form label-width="110px">
         <el-form-item label="工程名称">
-          <el-input v-model="creating.name" />
+          <el-input v-model="createForm.name" />
         </el-form-item>
         <el-form-item label="设备（可选）">
-          <el-input v-model="creating.device" />
+          <el-input v-model="createForm.device" />
         </el-form-item>
         <el-form-item label="备注（可选）">
-          <el-input v-model="creating.notes" type="textarea" :rows="4" />
+          <el-input v-model="createForm.notes" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
 
       <template #footer>
         <el-button @click="createDialogOpen = false">取消</el-button>
-        <el-button type="primary" @click="createProject">创建并进入</el-button>
+        <el-button type="primary" @click="handleCreateProject">创建并进入</el-button>
       </template>
     </el-dialog>
   </div>

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
 
-import { createProject as createProjectService, listProjects } from "../services/projects";
+import { useProjectCatalog } from "../composables/useProjectCatalog";
 
 const router = useRouter();
-const loading = ref(true);
-const createForm = ref({ name: "", device: "", notes: "" });
+const landingLoading = ref(true);
+
+const { projects, createForm, refresh, createProject } = useProjectCatalog();
 
 function goProject(projectId: string) {
   router.replace(`/projects/${projectId}/comm/points`);
@@ -19,34 +19,24 @@ async function tryRedirect() {
     goProject(last);
     return;
   }
-  const resp = await listProjects({ includeDeleted: false });
-  const first = resp.projects.find((p) => !p.deletedAtUtc);
+  await refresh(false);
+  const first = projects.value.find((p) => !p.deletedAtUtc);
   if (first) {
     goProject(first.projectId);
     return;
   }
-  loading.value = false;
+  landingLoading.value = false;
 }
 
-async function createProject() {
-  const name = createForm.value.name.trim();
-  if (!name) {
-    ElMessage.error("工程名称不能为空");
-    return;
-  }
-  const device = createForm.value.device.trim();
-  const notes = createForm.value.notes.trim();
-  const project = await createProjectService({
-    name,
-    device: device ? device : undefined,
-    notes: notes ? notes : undefined,
-  });
+async function handleCreateProject() {
+  const project = await createProject();
+  if (!project) return;
   goProject(project.projectId);
 }
 
 onMounted(() => {
   tryRedirect().catch(() => {
-    loading.value = false;
+    landingLoading.value = false;
   });
 });
 </script>
@@ -59,7 +49,7 @@ onMounted(() => {
           <div class="comm-section-title">进入主界面</div>
         </div>
 
-        <div v-if="loading" class="comm-inline-meta">正在进入最近工程...</div>
+        <div v-if="landingLoading" class="comm-inline-meta">正在进入最近工程...</div>
 
         <div v-else>
           <el-alert
@@ -72,20 +62,20 @@ onMounted(() => {
 
           <el-form label-width="110px">
             <el-form-item label="工程名称">
-              <el-input v-model="createForm.name" placeholder="例如 生产线-A" />
-            </el-form-item>
-            <el-form-item label="设备（可选）">
-              <el-input v-model="createForm.device" />
-            </el-form-item>
-            <el-form-item label="备注（可选）">
-              <el-input v-model="createForm.notes" type="textarea" :rows="3" />
-            </el-form-item>
-          </el-form>
+          <el-input v-model="createForm.name" placeholder="例如 生产线-A" />
+        </el-form-item>
+        <el-form-item label="设备（可选）">
+          <el-input v-model="createForm.device" />
+        </el-form-item>
+        <el-form-item label="备注（可选）">
+          <el-input v-model="createForm.notes" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
 
-          <div class="comm-panel-actions">
-            <el-button type="primary" @click="createProject">创建并进入</el-button>
-          </div>
-        </div>
+      <div class="comm-panel-actions">
+        <el-button type="primary" @click="handleCreateProject">创建并进入</el-button>
+      </div>
+    </div>
       </section>
     </div>
   </div>
