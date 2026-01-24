@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import Grid, { VGridVueEditor, type Editors } from "@revolist/vue3-datagrid";
 import type { ColumnAutoSizeMode } from "@revolist/revogrid";
 
@@ -14,7 +14,6 @@ import ValidationDrawer from "../components/points/ValidationDrawer.vue";
 
 import { COMM_BYTE_ORDERS_32, COMM_DATA_TYPES } from "../constants";
 import { spanForArea } from "../services/address";
-import { useKeyboardShortcuts, createStandardShortcuts } from "../composables/useKeyboardShortcuts";
 import { getSupportedDataTypes } from "../services/dataTypes";
 import { usePointsRun } from "../composables/usePointsRun";
 import { usePointsGrid } from "../composables/usePointsGrid";
@@ -26,6 +25,7 @@ import { usePointsRowOps } from "../composables/usePointsRowOps";
 import { usePointsPersistence } from "../composables/usePointsPersistence";
 import { usePointsColumns } from "../composables/usePointsColumns";
 import { usePointsGridEvents } from "../composables/usePointsGridEvents";
+import { usePointsLifecycle } from "../composables/usePointsLifecycle";
 import {
   formatBackendReason,
   formatFieldLabel,
@@ -41,7 +41,6 @@ import type {
   ProfilesV1,
   RegisterArea,
 } from "../api";
-import { patchProjectUiState } from "../services/projects";
 import { useCommDeviceContext } from "../composables/useDeviceContext";
 import { useCommWorkspaceRuntime } from "../composables/useWorkspaceRuntime";
 
@@ -370,57 +369,31 @@ const { onAfterEdit, onBeforeGridKeyDown, onBeforeAutofill, handleJumpToIssue } 
   handleRedo,
 });
 
-onMounted(() => {
-  nextTick(() => {
-    attachGridSelectionListeners();
-  });
-});
-
-watch(activeChannelName, async (v) => {
-  if (suppressChannelWatch.value) return;
-  selectedRangeRows.value = null;
-  const pid = projectId.value.trim();
-  if (pid) {
-    patchProjectUiState(pid, { activeChannelName: v }).catch((e: unknown) => {
-      pushLog("ui_state", "warning", `当前通道保存失败：${String((e as any)?.message ?? e ?? "")}`);
-    });
-  }
-  await rebuildPlan();
-});
-
-watch(activeDevice, (device) => {
-  if (!device) {
-    profiles.value = { schemaVersion: 1, profiles: [] };
-    activeChannelName.value = "";
-    return;
-  }
-  profiles.value = { schemaVersion: 1, profiles: [JSON.parse(JSON.stringify(device.profile)) as ConnectionProfile] };
-  if (activeChannelName.value !== device.profile.channelName) {
-    activeChannelName.value = device.profile.channelName;
-  }
-  void rebuildPlan();
-});
-
-watch(activeDeviceId, () => {
-  workspaceRuntime.stats.value = null;
-  workspaceRuntime.updatedAtUtc.value = "";
-});
-
-watch([projectId, activeDeviceId], loadAll, { immediate: true });
-
-// 注册键盘快捷键
-useKeyboardShortcuts(createStandardShortcuts({
-  onBatchAdd: openBatchAddDialog,
-  onBatchEdit: openBatchEditDialog,
-  onDelete: removeSelectedRows,
-  onUndo: handleUndo,
-  onRedo: handleRedo,
-  onSave: savePoints,
-}));
-
-onBeforeUnmount(() => {
-  disposeRun();
-  detachGridSelectionListeners?.();
+usePointsLifecycle({
+  projectId,
+  activeDeviceId,
+  activeDevice,
+  activeChannelName,
+  profiles,
+  selectedRangeRows,
+  suppressChannelWatch,
+  rebuildPlan,
+  loadAll,
+  pushLog,
+  workspaceRuntime,
+  attachGridSelectionListeners,
+  detachGridSelectionListeners: () => {
+    detachGridSelectionListeners?.();
+  },
+  disposeRun,
+  shortcuts: {
+    onBatchAdd: openBatchAddDialog,
+    onBatchEdit: openBatchEditDialog,
+    onDelete: removeSelectedRows,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    onSave: savePoints,
+  },
 });
 </script>
 
