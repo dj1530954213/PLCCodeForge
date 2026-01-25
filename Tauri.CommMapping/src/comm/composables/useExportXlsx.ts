@@ -1,6 +1,4 @@
 import { computed, ref, type Ref } from "vue";
-import { ElMessage } from "element-plus";
-
 import type {
   CommExportDeliveryXlsxResponse,
   CommExportXlsxResponse,
@@ -11,6 +9,7 @@ import type {
   RunStats,
 } from "../api";
 import { exportDeliveryXlsx, exportXlsx } from "../services/export";
+import { notifyError, notifySuccess, notifyWarning } from "../services/notify";
 import { loadPoints } from "../services/points";
 import { loadProfiles } from "../services/profiles";
 import { runLatest } from "../services/run";
@@ -46,14 +45,14 @@ export function useExportXlsx(options: UseExportXlsxOptions) {
     const pid = options.projectId.value.trim();
     const did = options.activeDeviceId.value.trim();
     if (!pid || !did) {
-      ElMessage.error("未选择设备");
+      notifyError("未选择设备");
       return null;
     }
 
     const profiles: ProfilesV1 = await loadProfiles(pid, did);
     const points: PointsV1 = await loadPoints(pid, did);
     if (profiles.profiles.length === 0 || points.points.length === 0) {
-      ElMessage.error("profiles/points 为空，请先配置并保存");
+      notifyError("profiles/points 为空，请先配置并保存");
       return null;
     }
     return { pid, did, profiles, points };
@@ -71,7 +70,7 @@ export function useExportXlsx(options: UseExportXlsxOptions) {
         payload.did
       );
       lastDelivery.value = null;
-      ElMessage.success(`已导出：${last.value.outPath}`);
+      notifySuccess(`已导出：${last.value.outPath}`);
     } finally {
       isExporting.value = false;
     }
@@ -98,7 +97,7 @@ export function useExportXlsx(options: UseExportXlsxOptions) {
               stats = latest.stats;
             }
           } catch (e: unknown) {
-            ElMessage.warning(`runLatest 获取失败，将继续导出但 Results 可能缺失：${String(e ?? "")}`);
+            notifyWarning(`runLatest 获取失败，将继续导出但 Results 可能缺失：${String(e ?? "")}`);
           }
         }
       }
@@ -117,7 +116,7 @@ export function useExportXlsx(options: UseExportXlsxOptions) {
         payload.did
       );
       last.value = null;
-      ElMessage.success(`已交付导出：${lastDelivery.value.outPath}`);
+      notifySuccess(`已交付导出：${lastDelivery.value.outPath}`);
     } finally {
       isDeliveryExporting.value = false;
     }

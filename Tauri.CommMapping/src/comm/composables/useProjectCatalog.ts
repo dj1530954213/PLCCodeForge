@@ -1,6 +1,4 @@
 import { computed, ref } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
-
 import type { CommProjectV1 } from "../api";
 import {
   copyProject as copyProjectService,
@@ -8,6 +6,12 @@ import {
   deleteProject as deleteProjectService,
   listProjects,
 } from "../services/projects";
+import {
+  confirmAction,
+  notifyError,
+  promptText,
+  resolveErrorMessage,
+} from "../services/notify";
 
 type CreateProjectForm = {
   name: string;
@@ -43,7 +47,7 @@ export function useProjectCatalog(options?: { includeDeleted?: boolean }) {
   async function createProject(): Promise<CommProjectV1 | null> {
     const name = createForm.value.name.trim();
     if (!name) {
-      ElMessage.error("工程名称不能为空");
+      notifyError("工程名称不能为空");
       return null;
     }
     const device = createForm.value.device.trim();
@@ -55,44 +59,47 @@ export function useProjectCatalog(options?: { includeDeleted?: boolean }) {
         notes: notes ? notes : undefined,
       });
     } catch (e: unknown) {
-      ElMessage.error(String((e as any)?.message ?? e ?? "创建工程失败"));
+      notifyError(resolveErrorMessage(e, "创建工程失败"));
       return null;
     }
   }
 
   async function copyProject(project: CommProjectV1): Promise<CommProjectV1 | null> {
     const suggested = `${project.name} (copy)`;
-    const name = await ElMessageBox.prompt("输入复制后的工程名称", "复制工程", {
+    const name = await promptText("输入复制后的工程名称", "复制工程", {
       inputValue: suggested,
       confirmButtonText: "复制",
       cancelButtonText: "取消",
-    })
-      .then((r) => r.value)
-      .catch(() => "");
+    });
 
-    if (!name.trim()) {
+    if (!name?.trim()) {
       return null;
     }
 
     try {
       return await copyProjectService({ projectId: project.projectId, name: name.trim() });
     } catch (e: unknown) {
-      ElMessage.error(String((e as any)?.message ?? e ?? "复制工程失败"));
+      notifyError(resolveErrorMessage(e, "复制工程失败"));
       return null;
     }
   }
 
   async function deleteProject(project: CommProjectV1): Promise<boolean> {
-    await ElMessageBox.confirm(`确认删除工程「${project.name}」？（软删，可通过“显示已删除”查看）`, "删除工程", {
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-      type: "warning",
-    });
+    const ok = await confirmAction(
+      `确认删除工程「${project.name}」？（软删，可通过“显示已删除”查看）`,
+      "删除工程",
+      {
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        type: "warning",
+      }
+    );
+    if (!ok) return false;
     try {
       await deleteProjectService(project.projectId);
       return true;
     } catch (e: unknown) {
-      ElMessage.error(String((e as any)?.message ?? e ?? "删除工程失败"));
+      notifyError(resolveErrorMessage(e, "删除工程失败"));
       return false;
     }
   }

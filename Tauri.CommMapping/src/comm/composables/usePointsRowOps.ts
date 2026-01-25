@@ -1,9 +1,8 @@
 import { nextTick, type ComputedRef, type Ref } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
-
 import type { CommPoint, ConnectionProfile, DataType, PointsV1, RegisterArea } from "../api";
 import { formatHumanAddressFrom0Based, inferNextAddress, parseHumanAddress } from "../services/address";
 import { newPointKey } from "../services/ids";
+import { confirmAction, notifyError, notifySuccess, notifyWarning } from "../services/notify";
 import { createBatchAddUndoAction, createDeleteRowsUndoAction } from "../services/undoRedo";
 import type { SelectionRange } from "../services/fill";
 import type { UndoManager } from "../services/undoRedo";
@@ -167,7 +166,7 @@ export function usePointsRowOps<T extends PointRowLike>(options: UsePointsRowOps
   async function addSingleRow() {
     const profile = activeProfile.value;
     if (!profile) {
-      ElMessage.error("请先选择连接");
+      notifyError("请先选择连接");
       return;
     }
 
@@ -216,7 +215,7 @@ export function usePointsRowOps<T extends PointRowLike>(options: UsePointsRowOps
       }
     });
 
-    ElMessage.success("已新增 1 行");
+    notifySuccess("已新增 1 行");
   }
 
   async function removeSelectedRows() {
@@ -229,16 +228,17 @@ export function usePointsRowOps<T extends PointRowLike>(options: UsePointsRowOps
       }
     }
     if (selected.length === 0) {
-      ElMessage.warning("请先选中行（点击行号）或框选一段行区域");
+      notifyWarning("请先选中行（点击行号）或框选一段行区域");
       return;
     }
     const count = selected.length;
 
-    await ElMessageBox.confirm(`确认删除选中的 ${count} 行点位？`, "删除点位", {
+    const ok = await confirmAction(`确认删除选中的 ${count} 行点位？`, "删除点位", {
       confirmButtonText: "删除",
       cancelButtonText: "取消",
       type: "warning",
     });
+    if (!ok) return;
 
     const selectedKeys = new Set(selected.map((row) => row.pointKey));
 
@@ -255,7 +255,7 @@ export function usePointsRowOps<T extends PointRowLike>(options: UsePointsRowOps
     undoManager.push(undoAction);
     markPointsChanged();
     await rebuildPlan();
-    ElMessage.success(`已删除 ${count} 行`);
+    notifySuccess(`已删除 ${count} 行`);
   }
 
   return {

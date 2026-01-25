@@ -1,6 +1,5 @@
-import { ElMessage } from "element-plus";
-
 import { UndoManager } from "../services/undoRedo";
+import { notifySuccess, notifyWarning } from "../services/notify";
 
 interface UsePointsUndoOptions {
   limit?: number;
@@ -12,22 +11,22 @@ export function usePointsUndo(options: UsePointsUndoOptions = {}) {
 
   function handleUndo() {
     if (!undoManager.canUndo()) {
-      ElMessage.warning("没有可撤销的操作");
+      notifyWarning("没有可撤销的操作");
       return;
     }
     undoManager.undo();
     void options.onAfterChange?.();
-    ElMessage.success("已撤销");
+    notifySuccess("已撤销");
   }
 
   function handleRedo() {
     if (!undoManager.canRedo()) {
-      ElMessage.warning("没有可重做的操作");
+      notifyWarning("没有可重做的操作");
       return;
     }
     undoManager.redo();
     void options.onAfterChange?.();
-    ElMessage.success("已重做");
+    notifySuccess("已重做");
   }
 
   return {

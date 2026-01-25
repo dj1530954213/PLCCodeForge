@@ -1,6 +1,4 @@
 import { computed, ref, type Ref } from "vue";
-import { ElMessage } from "element-plus";
-
 import type {
   AddressBase,
   CommImportUnionXlsxResponse,
@@ -11,6 +9,7 @@ import type {
   ProfilesV1,
 } from "../api";
 import { importUnionXlsx } from "../services/importUnion";
+import { notifyError, notifySuccess } from "../services/notify";
 import { loadPoints, savePoints } from "../services/points";
 import { loadProfiles, saveProfiles } from "../services/profiles";
 import { unionToCommPoints } from "../mappers/unionToCommPoints";
@@ -80,7 +79,7 @@ export function useImportUnion(options: UseImportUnionOptions) {
     mapperConflictReport.value = null;
 
     if (!filePath.value.trim()) {
-      ElMessage.error("请填写联合 xlsx 文件路径");
+      notifyError("请填写联合 xlsx 文件路径");
       importing.value = false;
       return;
     }
@@ -93,12 +92,12 @@ export function useImportUnion(options: UseImportUnionOptions) {
 
     try {
       last.value = await importUnionXlsx(filePath.value.trim(), optionsPayload);
-      ElMessage.success(
+      notifySuccess(
         `导入成功：points=${last.value.points.points.length}, profiles=${last.value.profiles.profiles.length}, warnings=${warnings.value.length}`
       );
     } catch (e: unknown) {
       lastError.value = e as ImportUnionThrownError;
-      ElMessage.error(`${lastError.value.kind}: ${lastError.value.message}`);
+      notifyError(`${lastError.value.kind}: ${lastError.value.message}`);
     } finally {
       importing.value = false;
     }
@@ -114,7 +113,7 @@ export function useImportUnion(options: UseImportUnionOptions) {
       const pid = options.projectId.value.trim();
       const did = options.activeDeviceId.value.trim();
       if (!pid || !did) {
-        ElMessage.error("未选择设备");
+        notifyError("未选择设备");
         return;
       }
 
@@ -149,7 +148,7 @@ export function useImportUnion(options: UseImportUnionOptions) {
         createdPointKeys: mapped.createdPointKeys,
         skipped: mapped.skipped,
       };
-      ElMessage.success(`已生成并保存：points=${savedSummary.value.points}, profiles=${savedSummary.value.profiles}`);
+      notifySuccess(`已生成并保存：points=${savedSummary.value.points}, profiles=${savedSummary.value.profiles}`);
     } finally {
       generating.value = false;
     }

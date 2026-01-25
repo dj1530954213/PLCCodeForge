@@ -1,6 +1,4 @@
 import { computed, ref, type ComputedRef, type Ref } from "vue";
-import { ElMessage } from "element-plus";
-
 import type {
   BatchInsertMode,
   ByteOrder32,
@@ -13,6 +11,7 @@ import type {
 import { buildBatchPointsTemplate, previewBatchPointsTemplate } from "../services/batchAdd";
 import { applyBatchEdits, computeBatchEdits, type BatchEditRequest } from "../services/batchEdit";
 import { inferNextAddress } from "../services/address";
+import { notifyError, notifyInfo, notifySuccess, notifyWarning } from "../services/notify";
 import { patchProjectUiState } from "../services/projects";
 import { createBatchAddUndoAction, createBatchEditUndoAction } from "../services/undoRedo";
 import type { SelectionRange } from "../services/fill";
@@ -156,7 +155,7 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
   function openBatchAddDialog() {
     const profile = activeProfile.value;
     if (!profile) {
-      ElMessage.error("请先选择连接");
+      notifyError("请先选择连接");
       return;
     }
 
@@ -188,7 +187,7 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
   async function confirmBatchAdd() {
     const profile = activeProfile.value;
     if (!profile) {
-      ElMessage.error("请先选择连接");
+      notifyError("请先选择连接");
       return;
     }
     const built = buildBatchPointsTemplate({
@@ -204,7 +203,7 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
       profileStartAddress: profile.startAddress,
     });
     if (!built.ok) {
-      ElMessage.error(built.message);
+      notifyError(built.message);
       return;
     }
 
@@ -245,7 +244,7 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
 
     await gridScrollToPoint(built.points[0]?.pointKey);
 
-    ElMessage.success(`已新增 ${built.points.length} 行（步长=${built.span}）`);
+    notifySuccess(`已新增 ${built.points.length} 行（步长=${built.span}）`);
 
     const pid = projectId.value.trim();
     if (pid) {
@@ -272,7 +271,7 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
       selectedRangeRows.value = { rowStart: sel.rowStart, rowEnd: sel.rowEnd };
     }
     if (selectedCount.value === 0) {
-      ElMessage.warning("请先选中行（点击行号）或框选一段行区域");
+      notifyWarning("请先选中行（点击行号）或框选一段行区域");
       return;
     }
     batchEditDialogVisible.value = true;
@@ -282,7 +281,7 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
     const result = computeBatchEdits(points.value.points, request);
 
     if (result.totalChanges === 0) {
-      ElMessage.info("没有需要修改的字段");
+      notifyInfo("没有需要修改的字段");
       return;
     }
 
@@ -300,7 +299,7 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
     markPointsChanged();
     await rebuildPlan();
 
-    ElMessage.success(`已批量编辑 ${result.affectedPoints} 行 / ${result.totalChanges} 个字段`);
+    notifySuccess(`已批量编辑 ${result.affectedPoints} 行 / ${result.totalChanges} 个字段`);
   }
 
   async function openReplaceDialog() {
@@ -316,12 +315,12 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
   async function confirmReplaceHmiNames() {
     const find = replaceForm.value.find;
     if (!find) {
-      ElMessage.error("查找内容不能为空");
+      notifyError("查找内容不能为空");
       return;
     }
 
     if (replaceForm.value.scope === "selected" && selectedCount.value === 0) {
-      ElMessage.warning("请先选中要替换的行");
+      notifyWarning("请先选中要替换的行");
       return;
     }
 
@@ -341,7 +340,7 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
     }
 
     if (changes.length === 0) {
-      ElMessage.info("未找到需要替换的变量名称");
+      notifyInfo("未找到需要替换的变量名称");
       return;
     }
 
@@ -376,7 +375,7 @@ export function usePointsBatchOps<T extends PointRowLike>(options: UsePointsBatc
     markPointsChanged();
     await rebuildPlan();
 
-    ElMessage.success(`已替换 ${changes.length} 行 / ${totalCount} 处`);
+    notifySuccess(`已替换 ${changes.length} 行 / ${totalCount} 处`);
   }
 
   async function gridScrollToPoint(pointKey?: string) {

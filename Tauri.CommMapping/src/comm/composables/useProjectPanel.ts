@@ -1,10 +1,9 @@
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage, ElMessageBox } from "element-plus";
-
 import type { CommProjectDataV1, CommProjectV1 } from "../api";
 import { useCommDeviceContext } from "./useDeviceContext";
 import { copyProject, createProject, deleteProject, listProjects } from "../services/projects";
+import { confirmAction, notifyError, notifySuccess, promptText } from "../services/notify";
 
 export function useProjectPanel() {
   const route = useRoute();
@@ -57,7 +56,7 @@ export function useProjectPanel() {
   async function confirmCreateProject() {
     const name = projectCreateForm.value.name.trim();
     if (!name) {
-      ElMessage.error("工程名称不能为空");
+      notifyError("工程名称不能为空");
       return;
     }
     const device = projectCreateForm.value.device.trim();
@@ -75,20 +74,18 @@ export function useProjectPanel() {
   async function copyCurrentProject() {
     const current = project.value;
     if (!current) {
-      ElMessage.error("未选择工程");
+      notifyError("未选择工程");
       return;
     }
     const suggested = `${current.name} (copy)`;
-    const name = await ElMessageBox.prompt("输入复制后的工程名称", "复制工程", {
+    const name = await promptText("输入复制后的工程名称", "复制工程", {
       inputValue: suggested,
       confirmButtonText: "复制",
       cancelButtonText: "取消",
-    })
-      .then((r) => r.value)
-      .catch(() => "");
-    if (!name.trim()) return;
+    });
+    if (!name?.trim()) return;
     const created = await copyProject({ projectId: current.projectId, name: name.trim() });
-    ElMessage.success("已复制工程");
+    notifySuccess("已复制工程");
     await loadProjectList();
     router.push(`/projects/${created.projectId}/comm/points`);
   }
@@ -96,16 +93,17 @@ export function useProjectPanel() {
   async function deleteCurrentProject() {
     const current = project.value;
     if (!current) {
-      ElMessage.error("未选择工程");
+      notifyError("未选择工程");
       return;
     }
-    await ElMessageBox.confirm(`确认删除工程「${current.name}」？（软删）`, "删除工程", {
+    const ok = await confirmAction(`确认删除工程「${current.name}」？（软删）`, "删除工程", {
       confirmButtonText: "删除",
       cancelButtonText: "取消",
       type: "warning",
     });
+    if (!ok) return;
     await deleteProject(current.projectId);
-    ElMessage.success("已删除（软删）");
+    notifySuccess("已删除（软删）");
     await loadProjectList();
     const next = projectList.value.find((p) => p.projectId !== current.projectId);
     if (next) {
@@ -118,12 +116,12 @@ export function useProjectPanel() {
   async function saveProjectMeta() {
     const current = project.value;
     if (!current) {
-      ElMessage.error("未选择工程");
+      notifyError("未选择工程");
       return;
     }
     const name = projectEdit.value.name.trim();
     if (!name) {
-      ElMessage.error("工程名称不能为空");
+      notifyError("工程名称不能为空");
       return;
     }
     const next: CommProjectDataV1 = {
@@ -134,7 +132,7 @@ export function useProjectPanel() {
     };
     await saveProject(next);
     await loadProjectList();
-    ElMessage.success("工程信息已保存");
+    notifySuccess("工程信息已保存");
   }
 
   watch(

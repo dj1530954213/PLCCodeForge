@@ -1,7 +1,6 @@
 import { computed, ref, watch } from "vue";
-import { ElMessage } from "element-plus";
-
 import type { ConnectionProfile, RegisterArea, SerialParity } from "../api";
+import { notifyError, notifySuccess } from "../services/notify";
 import { cloneProfile } from "../services/profiles";
 import { useCommDeviceContext } from "./useDeviceContext";
 
@@ -68,19 +67,19 @@ export function useConnectionPanel() {
     const active = activeDevice.value;
     const draft = profileDraft.value;
     if (!current || !active || !draft) {
-      ElMessage.error("未选择设备");
+      notifyError("未选择设备");
       return;
     }
     if (!draft.channelName.trim()) {
-      ElMessage.error("通道名称不能为空");
+      notifyError("通道名称不能为空");
       return;
     }
     if (draft.protocolType === "TCP" && !draft.ip.trim()) {
-      ElMessage.error("IP 不能为空");
+      notifyError("IP 不能为空");
       return;
     }
     if (draft.protocolType === "485" && !draft.serialPort.trim()) {
-      ElMessage.error("串口不能为空");
+      notifyError("串口不能为空");
       return;
     }
     const devices = current.devices ?? [];
@@ -101,7 +100,7 @@ export function useConnectionPanel() {
     };
     await saveProject(next);
     profileBaseline.value = JSON.stringify(draft);
-    ElMessage.success("连接配置已保存");
+    notifySuccess("连接配置已保存");
   }
 
   watch(project, (next) => {

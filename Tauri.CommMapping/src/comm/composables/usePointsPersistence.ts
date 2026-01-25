@@ -1,7 +1,7 @@
-import { ElMessage } from "element-plus";
 import type { ComputedRef, Ref } from "vue";
 
 import type { CommDeviceV1, CommProjectDataV1, ConnectionProfile, PointsV1, ProfilesV1 } from "../api";
+import { notifyError, notifySuccess, resolveErrorMessage } from "../services/notify";
 import { loadPoints as loadPointsData, savePoints as savePointsData } from "../services/points";
 import type { BatchAddTemplate } from "./usePointsBatchOps";
 import type { PointRowLike } from "./usePointsRows";
@@ -95,9 +95,9 @@ export function usePointsPersistence<T extends PointRowLike>(options: UsePointsP
 
       suppressChannelWatch.value = false;
       await rebuildPlan();
-      ElMessage.success("已加载点位与连接配置");
+      notifySuccess("已加载点位与连接配置");
     } catch (e: unknown) {
-      ElMessage.error(String((e as any)?.message ?? e ?? "加载失败"));
+      notifyError(resolveErrorMessage(e, "加载失败"));
     }
   }
 
@@ -106,11 +106,11 @@ export function usePointsPersistence<T extends PointRowLike>(options: UsePointsP
     await syncFromGridAndMapAddresses();
     const invalid = gridRows.value.map(validateRowForRun).find((v) => Boolean(v));
     if (invalid) {
-      ElMessage.error(invalid);
+      notifyError(invalid);
       return;
     }
     if (!activeDeviceId.value.trim()) {
-      ElMessage.error("未选择设备");
+      notifyError("未选择设备");
       return;
     }
     await savePointsData(points.value, projectId.value, activeDeviceId.value);
@@ -126,7 +126,7 @@ export function usePointsPersistence<T extends PointRowLike>(options: UsePointsP
         project.value = { ...project.value, devices: nextDevices };
       }
     }
-    ElMessage.success("已保存点位");
+    notifySuccess("已保存点位");
     showAllValidation.value = false;
     touchedRowKeys.value = {};
   }

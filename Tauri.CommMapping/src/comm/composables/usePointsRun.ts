@@ -1,6 +1,4 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
-import { ElMessage } from "element-plus";
-
 import type {
   CommRunError,
   CommRunLatestResponse,
@@ -9,6 +7,7 @@ import type {
   SampleResult,
 } from "../api";
 import { buildPlan, runLatestObs, runStartObs, runStopObs } from "../services/run";
+import { notifyError, notifySuccess } from "../services/notify";
 import type { CommWorkspaceRuntime } from "./useWorkspaceRuntime";
 
 type RunUiState = "idle" | "starting" | "running" | "stopping" | "error";
@@ -159,7 +158,7 @@ export function usePointsRun(options: UsePointsRunOptions) {
     if (invalid) {
       runError.value = makeUiConfigError(invalid);
       pushLog("run_start", "error", formatRunErrorTitle(runError.value));
-      ElMessage.error(invalid);
+      notifyError(invalid);
       runUiState.value = "error";
       return;
     }
@@ -170,7 +169,7 @@ export function usePointsRun(options: UsePointsRunOptions) {
         const err = makeUiConfigError("未选择连接");
         runError.value = err;
         pushLog("run_start", "error", formatRunErrorTitle(err));
-        ElMessage.error(formatRunErrorMessage(err.message));
+        notifyError(formatRunErrorMessage(err.message));
         runUiState.value = "error";
         return;
       }
@@ -180,7 +179,7 @@ export function usePointsRun(options: UsePointsRunOptions) {
         const err = makeUiConfigError("点位为空：请先新增点位并保存");
         runError.value = err;
         pushLog("run_start", "error", formatRunErrorTitle(err));
-        ElMessage.error(formatRunErrorMessage(err.message));
+        notifyError(formatRunErrorMessage(err.message));
         runUiState.value = "error";
         return;
       }
@@ -212,7 +211,7 @@ export function usePointsRun(options: UsePointsRunOptions) {
           } as CommRunError);
         runError.value = err;
         pushLog("run_start", "error", formatRunErrorTitle(err));
-        ElMessage.error(formatRunErrorTitle(err));
+        notifyError(formatRunErrorTitle(err));
         runUiState.value = "error";
         return;
       }
@@ -221,14 +220,14 @@ export function usePointsRun(options: UsePointsRunOptions) {
       runUiState.value = "running";
       runPointsRevision.value = options.pointsRevision.value;
       pushLog("run_start", "success", `采集已启动：运行ID=${resp.runId}`);
-      ElMessage.success(`采集已启动：运行ID=${resp.runId}`);
+      notifySuccess(`采集已启动：运行ID=${resp.runId}`);
 
       await startPolling();
     } catch (e: unknown) {
       const err = makeUiConfigError(String((e as any)?.message ?? e ?? "未知错误"));
       runError.value = err;
       pushLog("run_start", "error", formatRunErrorTitle(err));
-      ElMessage.error(formatRunErrorTitle(err));
+      notifyError(formatRunErrorTitle(err));
       runUiState.value = "error";
     }
   }
@@ -284,19 +283,19 @@ export function usePointsRun(options: UsePointsRunOptions) {
           } as CommRunError);
         runError.value = err;
         pushLog("run_stop", "error", formatRunErrorTitle(err));
-        ElMessage.error(formatRunErrorTitle(err));
+        notifyError(formatRunErrorTitle(err));
         runUiState.value = "error";
         return;
       }
       pushLog("run_stop", "success", "已停止");
-      ElMessage.success("采集已停止");
+      notifySuccess("采集已停止");
       runUiState.value = "idle";
       clearTimer();
     } catch (e: unknown) {
       const err = makeUiConfigError(String((e as any)?.message ?? e ?? "未知错误"));
       runError.value = err;
       pushLog("run_stop", "error", formatRunErrorTitle(err));
-      ElMessage.error(formatRunErrorTitle(err));
+      notifyError(formatRunErrorTitle(err));
       runUiState.value = "error";
     }
   }

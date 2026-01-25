@@ -1,6 +1,4 @@
 import { computed, ref, watch } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
-
 import type {
   CommDeviceCopyRuleV1,
   CommDeviceCopyTemplateV1,
@@ -10,6 +8,13 @@ import type {
 } from "../api";
 import { useCommDeviceContext } from "./useDeviceContext";
 import { newPointKey } from "../services/ids";
+import {
+  confirmAction,
+  notifyError,
+  notifySuccess,
+  notifyWarning,
+  resolveErrorMessage,
+} from "../services/notify";
 import { cloneProfile } from "../services/profiles";
 
 export function useDevicePanel() {
@@ -105,11 +110,11 @@ export function useDevicePanel() {
     const current = project.value;
     const active = activeDevice.value;
     if (!current || !active) {
-      ElMessage.warning("未选择设备");
+      notifyWarning("未选择设备");
       return;
     }
 
-    await ElMessageBox.confirm(
+    const ok = await confirmAction(
       `确认删除设备「${active.deviceName}」？删除后将无法恢复该设备的点位与连接配置。`,
       "删除设备",
       {
@@ -118,6 +123,7 @@ export function useDevicePanel() {
         type: "warning",
       }
     );
+    if (!ok) return;
 
     const nextDevices = (current.devices ?? []).filter((d) => d.deviceId !== active.deviceId);
     const nextActiveId = nextDevices[0]?.deviceId ?? "";
@@ -132,16 +138,16 @@ export function useDevicePanel() {
 
     try {
       await saveProject(next);
-      ElMessage.success("设备已删除");
+      notifySuccess("设备已删除");
     } catch (e: unknown) {
-      ElMessage.error(String((e as any)?.message ?? e ?? "删除设备失败"));
+      notifyError(resolveErrorMessage(e, "删除设备失败"));
     }
   }
 
   async function confirmAddDevice() {
     const name = addDeviceName.value.trim();
     if (!name) {
-      ElMessage.error("设备名称不能为空");
+      notifyError("设备名称不能为空");
       return;
     }
     const current = project.value;
@@ -173,23 +179,23 @@ export function useDevicePanel() {
       await saveProject(next);
       activeDeviceId.value = deviceId;
       addDialogOpen.value = false;
-      ElMessage.success("已新增设备");
+      notifySuccess("已新增设备");
     } catch (e: unknown) {
-      ElMessage.error(String((e as any)?.message ?? e ?? "新增设备失败"));
+      notifyError(resolveErrorMessage(e, "新增设备失败"));
     }
   }
 
   async function confirmCopyDevice() {
     const name = copyDeviceName.value.trim();
     if (!name) {
-      ElMessage.error("设备名称不能为空");
+      notifyError("设备名称不能为空");
       return;
     }
     const current = project.value;
     if (!current) return;
     const source = (current.devices ?? []).find((d) => d.deviceId === copySourceDeviceId.value);
     if (!source) {
-      ElMessage.error("源设备不存在");
+      notifyError("源设备不存在");
       return;
     }
 
@@ -225,9 +231,9 @@ export function useDevicePanel() {
       await saveProject(next);
       activeDeviceId.value = deviceId;
       copyDialogOpen.value = false;
-      ElMessage.success("已复制设备");
+      notifySuccess("已复制设备");
     } catch (e: unknown) {
-      ElMessage.error(String((e as any)?.message ?? e ?? "复制设备失败"));
+      notifyError(resolveErrorMessage(e, "复制设备失败"));
     }
   }
 
@@ -235,12 +241,12 @@ export function useDevicePanel() {
     const current = project.value;
     const active = activeDevice.value;
     if (!current || !active) {
-      ElMessage.error("未选择设备");
+      notifyError("未选择设备");
       return;
     }
     const name = deviceEdit.value.name.trim();
     if (!name) {
-      ElMessage.error("设备名称不能为空");
+      notifyError("设备名称不能为空");
       return;
     }
     const workbookName = deviceEdit.value.workbookName.trim() || sanitizeWorkbookName(name);
@@ -258,18 +264,18 @@ export function useDevicePanel() {
       devices: nextDevices,
     };
     await saveProject(next);
-    ElMessage.success("设备信息已保存");
+    notifySuccess("设备信息已保存");
   }
 
   async function saveCopyTemplate() {
     const name = copyTemplateName.value.trim();
     if (!name) {
-      ElMessage.error("模板名称不能为空");
+      notifyError("模板名称不能为空");
       return;
     }
     const rules = normalizedCopyRules();
     if (rules.length === 0) {
-      ElMessage.error("至少需要一条替换规则");
+      notifyError("至少需要一条替换规则");
       return;
     }
     const current = project.value;
@@ -292,9 +298,9 @@ export function useDevicePanel() {
     try {
       await saveProject(next);
       copyTemplateId.value = nextTemplate.templateId;
-      ElMessage.success("模板已保存");
+      notifySuccess("模板已保存");
     } catch (e: unknown) {
-      ElMessage.error(String((e as any)?.message ?? e ?? "保存模板失败"));
+      notifyError(resolveErrorMessage(e, "保存模板失败"));
     }
   }
 
@@ -317,9 +323,9 @@ export function useDevicePanel() {
     try {
       await saveProject(next);
       copyTemplateId.value = "";
-      ElMessage.success("模板已删除");
+      notifySuccess("模板已删除");
     } catch (e: unknown) {
-      ElMessage.error(String((e as any)?.message ?? e ?? "删除模板失败"));
+      notifyError(resolveErrorMessage(e, "删除模板失败"));
     }
   }
 

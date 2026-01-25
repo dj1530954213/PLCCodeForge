@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
-
 import type { CommProjectV1 } from "../api";
 import { useProjectCatalog } from "../composables/useProjectCatalog";
+import { notifySuccess } from "../services/notify";
 
 const router = useRouter();
 
@@ -37,14 +36,14 @@ async function handleCreateProject() {
   if (!project) return;
   createDialogOpen.value = false;
   resetCreateForm();
-  ElMessage.success("已创建工程");
+  notifySuccess("已创建工程");
   openProject(project.projectId);
 }
 
 async function handleCopyProject(project: CommProjectV1) {
   const created = await copyProject(project);
   if (!created) return;
-  ElMessage.success("已复制工程");
+  notifySuccess("已复制工程");
   await refresh();
   openProject(created.projectId);
 }
@@ -52,7 +51,7 @@ async function handleCopyProject(project: CommProjectV1) {
 async function handleDeleteProject(project: CommProjectV1) {
   const deleted = await deleteProject(project);
   if (!deleted) return;
-  ElMessage.success("已删除（软删）");
+  notifySuccess("已删除（软删）");
   await refresh();
 }
 
