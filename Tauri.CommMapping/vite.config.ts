@@ -1,12 +1,39 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import Components from "unplugin-vue-components/vite";
+import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    Components({
+      dts: "src/components.d.ts",
+      resolvers: [ElementPlusResolver({ importStyle: false })],
+    }),
+  ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("element-plus") || id.includes("@element-plus")) {
+            return "element-plus";
+          }
+          if (id.includes("@revolist") || id.includes("revo-grid")) {
+            return "revogrid";
+          }
+          if (id.includes("node_modules/vue") || id.includes("node_modules/@vue")) {
+            return "vue-vendor";
+          }
+          return "vendor";
+        },
+      },
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
