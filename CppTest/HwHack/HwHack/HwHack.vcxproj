@@ -50,6 +50,7 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;HWHACK_EXPORTS;_WINDOWS;_USRDLL;_WINDLL;_AFXEXT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
@@ -69,6 +70,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;HWHACK_EXPORTS;_WINDOWS;_USRDLL;_WINDLL;_AFXEXT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
@@ -82,9 +84,22 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="include\HwHackConfig.h" />
+    <ClInclude Include="include\HwHackTypes.h" />
+    <ClInclude Include="include\HwHackState.h" />
+    <ClInclude Include="include\HwHackUtils.h" />
+    <ClInclude Include="include\HwHackTree.h" />
+    <ClInclude Include="include\HwHackContext.h" />
+    <ClInclude Include="include\HwHackInject.h" />
+    <ClInclude Include="include\HwHackRuntime.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="HwHack.cpp" />
+    <ClCompile Include="src\HwHack.cpp" />
+    <ClCompile Include="src\HwHackUtils.cpp" />
+    <ClCompile Include="src\HwHackTree.cpp" />
+    <ClCompile Include="src\HwHackContext.cpp" />
+    <ClCompile Include="src\HwHackInject.cpp" />
+    <ClCompile Include="src\HwHackRuntime.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
