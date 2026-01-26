@@ -248,3 +248,7 @@
 ## Findings: Additional CHWContainer checks (dll_DPFrame)
 - CheckSlaveSourceInfoExist @0x10142670: resolves protocol ID for slave name; for Modbus (10/11) requires CHWSourceContainer::GetModbusData; for DP (1) requires GSD data; shows error if missing.
 - CheckNumForProcotol @0x10129480: looks up protocol limits from source config, then compares current count via GetProcotolNum or GetProcotolNumEx; returns true if adding is allowed.
+
+## Findings: Session Status (resume)
+- Working tree under CppTest has pending planning file updates (progress.md, task_plan.md) to commit before code changes.
+- Baseline commit 977a6c3 already pushed to origin/master.

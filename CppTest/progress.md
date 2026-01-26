@@ -134,3 +134,11 @@
 
 ## Doc Sync
 - Added Step 1 detailed implementation guidance (thread model, TreeScanner/NameMap strategy, ContextResolver constraints, logging) to Docs/硬件自动化组态规则.md.
+
+## Baseline Commit
+- Commit: 977a6c3 (chore: sync CppTest baseline)
+- Push: master -> origin/master
+- Note: Git reported LF->CRLF conversion warnings for several files.
+
+## Session Progress
+- Resume after network issue; planning file updates queued for commit before code changes.
