@@ -12,7 +12,7 @@ export default defineConfig(async () => ({
     vue(),
     Components({
       dts: "src/components.d.ts",
-      resolvers: [ElementPlusResolver({ importStyle: false })],
+      resolvers: [ElementPlusResolver({ importStyle: "css" })],
     }),
   ],
   build: {

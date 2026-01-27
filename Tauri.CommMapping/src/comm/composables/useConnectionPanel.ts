@@ -27,9 +27,10 @@ export function useConnectionPanel() {
     profileBaseline.value = JSON.stringify(activeDevice.value.profile);
   }
 
-  function switchProfileProtocol(next: "TCP" | "485") {
+  function switchProfileProtocol(next: string | number | boolean | undefined) {
     const current = profileDraft.value;
     if (!current) return;
+    if (next !== "TCP" && next !== "485") return;
     if (current.protocolType === next) return;
     const base = {
       protocolType: next,

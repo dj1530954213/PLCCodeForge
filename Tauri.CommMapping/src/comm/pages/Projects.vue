@@ -68,8 +68,8 @@ onMounted(refresh);
         </div>
         <div class="comm-hero-actions">
           <el-button type="primary" @click="createDialogOpen = true">新建工程</el-button>
-          <el-button :loading="loading" @click="refresh">刷新</el-button>
-          <el-checkbox v-model="showDeleted" @change="refresh">显示已删除</el-checkbox>
+          <el-button :loading="loading" @click="() => refresh()">刷新</el-button>
+          <el-checkbox v-model="showDeleted" @change="() => refresh()">显示已删除</el-checkbox>
         </div>
       </header>
 
