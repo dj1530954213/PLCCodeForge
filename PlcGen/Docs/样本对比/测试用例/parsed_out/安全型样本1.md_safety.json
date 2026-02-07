@@ -1,14 +1,9 @@
 {
-  "name": "ESDV",
-  "header_strings": [
-    "MOV_CTRL",
-    "MOV_CTRL",
-    "MOV_CTRL"
-  ],
+  "name": "TESTAAA",
+  "header_strings": [],
   "variables": [
     {
-      "name": "MOV_CTRL",
-      "type_name": "MOV_CTRL",
+      "name": "MOV_CTRL_1001",
       "children": [
         {
           "name": "CS",
@@ -18,7 +13,7 @@
           "power_down_keep": false,
           "comment": "中心站控状态",
           "var_id": 36873,
-          "addr_id": 1030,
+          "addr_id": 114,
           "mode": 66,
           "id2": null,
           "area_code": 4
@@ -31,7 +26,7 @@
           "power_down_keep": false,
           "comment": "远程就地状态，远程为1",
           "var_id": 8322,
-          "addr_id": 1031,
+          "addr_id": 115,
           "mode": 66,
           "id2": null,
           "area_code": 4
@@ -44,7 +39,7 @@
           "power_down_keep": false,
           "comment": "故障状态，故障为1",
           "var_id": 8299,
-          "addr_id": 1032,
+          "addr_id": 116,
           "mode": 66,
           "id2": null,
           "area_code": 4
@@ -57,7 +52,7 @@
           "power_down_keep": false,
           "comment": "自动开阀命令",
           "var_id": 720,
-          "addr_id": 1033,
+          "addr_id": 117,
           "mode": 66,
           "id2": null,
           "area_code": 4
@@ -70,7 +65,7 @@
           "power_down_keep": false,
           "comment": "自动关阀命令",
           "var_id": 1287,
-          "addr_id": 1034,
+          "addr_id": 118,
           "mode": 66,
           "id2": null,
           "area_code": 4
@@ -83,7 +78,7 @@
           "power_down_keep": false,
           "comment": "阀门开到位",
           "var_id": 8313,
-          "addr_id": 1035,
+          "addr_id": 119,
           "mode": 66,
           "id2": null,
           "area_code": 4
@@ -96,7 +91,7 @@
           "power_down_keep": false,
           "comment": "阀门关到位",
           "var_id": 8301,
-          "addr_id": 1036,
+          "addr_id": 120,
           "mode": 66,
           "id2": null,
           "area_code": 4
@@ -109,7 +104,7 @@
           "power_down_keep": false,
           "comment": "阀门运行状态",
           "var_id": 8317,
-          "addr_id": 1037,
+          "addr_id": 121,
           "mode": 66,
           "id2": null,
           "area_code": 4
@@ -122,7 +117,7 @@
           "power_down_keep": false,
           "comment": "阀门超时时间",
           "var_id": 995,
-          "addr_id": 1040,
+          "addr_id": 124,
           "mode": 66,
           "id2": null,
           "area_code": 4
@@ -135,7 +130,1416 @@
           "power_down_keep": false,
           "comment": "超时复位命令",
           "var_id": 506,
-          "addr_id": 1044,
+          "addr_id": 128,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "阀门手自动状态反馈",
+          "var_id": 36863,
+          "addr_id": 129,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "XO",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "开阀命令输出",
+          "var_id": 36911,
+          "addr_id": 130,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "XC",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "关阀命令输出",
+          "var_id": 36899,
+          "addr_id": 131,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "DA",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "阀门超时报警",
+          "var_id": 36857,
+          "addr_id": 132,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "C_AM",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "中心发手自动切换命令",
+          "var_id": 16531,
+          "addr_id": 133,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "S_AM",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "站控发手自动切换命令",
+          "var_id": 16659,
+          "addr_id": 134,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "C_OPEN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "中心发开阀命令",
+          "var_id": 784,
+          "addr_id": 135,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "C_CLOSE",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "中心发关阀命令",
+          "var_id": 1415,
+          "addr_id": 136,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "S_OPEN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "站控发开阀命令",
+          "var_id": 1296,
+          "addr_id": 137,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "S_CLOSE",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "站控发关阀命令",
+          "var_id": 2439,
+          "addr_id": 138,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRS_1",
+          "data_type": "RS",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRS_1.Set",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 47226,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRS_1.Reset",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 57890,
+          "addr_id": 1,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRS_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 60937,
+          "addr_id": 0,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLTON_1",
+          "data_type": "TON",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLTON_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输入",
+          "var_id": 47296,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLTON_1.PT",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "延迟时间",
+          "var_id": 47316,
+          "addr_id": 8,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLTON_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输出",
+          "var_id": 56409,
+          "addr_id": 12,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLTON_1.ET",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "计时时间",
+          "var_id": 47294,
+          "addr_id": 4,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLTON_1.M",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 56405,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLTON_1.StartTime",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 31123,
+          "addr_id": 4,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRS_2",
+          "data_type": "RS",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRS_2.Set",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 47242,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRS_2.Reset",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 57954,
+          "addr_id": 1,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRS_2.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 60941,
+          "addr_id": 0,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_1",
+          "data_type": "RST_2S",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "2S后复位输入",
+          "var_id": 53664,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_1.RST_2STP_1",
+          "data_type": "TP",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_1.RST_2STP_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输入",
+          "var_id": 51648,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_1.RST_2STP_1.PT",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "延迟时间",
+          "var_id": 51668,
+          "addr_id": 4,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_1.RST_2STP_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输出",
+          "var_id": 25817,
+          "addr_id": 8,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_1.RST_2STP_1.ET",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "计时时间",
+          "var_id": 51646,
+          "addr_id": 4,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_1.RST_2STP_1.StartTime",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 63891,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRS_3",
+          "data_type": "RS",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRS_3.Set",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 47258,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRS_3.Reset",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 58018,
+          "addr_id": 1,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRS_3.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 60945,
+          "addr_id": 0,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_2",
+          "data_type": "RST_2S",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_2.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "2S后复位输入",
+          "var_id": 53672,
+          "addr_id": 8,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_2.RST_2STP_1",
+          "data_type": "TP",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_2.RST_2STP_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输入",
+          "var_id": 2496,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_2.RST_2STP_1.PT",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "延迟时间",
+          "var_id": 2516,
+          "addr_id": 4,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_2.RST_2STP_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输出",
+          "var_id": 34009,
+          "addr_id": 8,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_2.RST_2STP_1.ET",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "计时时间",
+          "var_id": 2494,
+          "addr_id": 4,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_2.RST_2STP_1.StartTime",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 63891,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_3",
+          "data_type": "RST_2S",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_3.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "2S后复位输入",
+          "var_id": 53680,
+          "addr_id": 8,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_3.RST_2STP_1",
+          "data_type": "TP",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_3.RST_2STP_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输入",
+          "var_id": 18880,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_3.RST_2STP_1.PT",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "延迟时间",
+          "var_id": 18900,
+          "addr_id": 4,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_3.RST_2STP_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输出",
+          "var_id": 42201,
+          "addr_id": 8,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_3.RST_2STP_1.ET",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "计时时间",
+          "var_id": 18878,
+          "addr_id": 4,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_3.RST_2STP_1.StartTime",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 63891,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_4",
+          "data_type": "RST_2S",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_4.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "2S后复位输入",
+          "var_id": 53688,
+          "addr_id": 8,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_4.RST_2STP_1",
+          "data_type": "TP",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_4.RST_2STP_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输入",
+          "var_id": 35264,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_4.RST_2STP_1.PT",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "延迟时间",
+          "var_id": 35284,
+          "addr_id": 4,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_4.RST_2STP_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输出",
+          "var_id": 50393,
+          "addr_id": 8,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_4.RST_2STP_1.ET",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "计时时间",
+          "var_id": 35262,
+          "addr_id": 4,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "VALVE_CTRLRST_2S_4.RST_2STP_1.StartTime",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 63891,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1",
+          "data_type": "AM_SWITCH",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.CS",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "中心站控状态",
+          "var_id": 30713,
+          "addr_id": 40,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "手自动状态",
+          "var_id": 30703,
+          "addr_id": 41,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.C_AM",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "中心发手自动切换命令",
+          "var_id": 57427,
+          "addr_id": 42,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.S_AM",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "站控发手自动切换命令",
+          "var_id": 57555,
+          "addr_id": 43,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1",
+          "data_type": "ONE_SWITCH",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "单点触发输入",
+          "var_id": 22528,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.OUT",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 45130,
+          "addr_id": 14,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHSR_1",
+          "data_type": "SR",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHSR_1.Set",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 50874,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHSR_1.Reset",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 6946,
+          "addr_id": 1,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHSR_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 45465,
+          "addr_id": 0,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHTP_1",
+          "data_type": "TP",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHTP_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输入",
+          "var_id": 25408,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHTP_1.PT",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "延迟时间",
+          "var_id": 25428,
+          "addr_id": 4,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHTP_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输出",
+          "var_id": 45465,
+          "addr_id": 8,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHTP_1.ET",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "计时时间",
+          "var_id": 25406,
+          "addr_id": 4,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHTP_1.StartTime",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 47507,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHR_TRIG_1",
+          "data_type": "R_TRIG",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHR_TRIG_1.CLK",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输入",
+          "var_id": 44735,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHR_TRIG_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输出",
+          "var_id": 11177,
+          "addr_id": 1,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHONE_SWITCH_1.ONE_SWITCHR_TRIG_1.M",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 11173,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_1",
+          "data_type": "RST_2S",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "2S后复位输入",
+          "var_id": 16800,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_1.RST_2STP_1",
+          "data_type": "TP",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_1.RST_2STP_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输入",
+          "var_id": 51648,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_1.RST_2STP_1.PT",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "延迟时间",
+          "var_id": 51668,
+          "addr_id": 4,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_1.RST_2STP_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输出",
+          "var_id": 25817,
+          "addr_id": 8,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_1.RST_2STP_1.ET",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "计时时间",
+          "var_id": 51646,
+          "addr_id": 4,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_1.RST_2STP_1.StartTime",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 63891,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_2",
+          "data_type": "RST_2S",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_2.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "2S后复位输入",
+          "var_id": 16808,
+          "addr_id": 8,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_2.RST_2STP_1",
+          "data_type": "TP",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_2.RST_2STP_1.IN",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输入",
+          "var_id": 2496,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_2.RST_2STP_1.PT",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "延迟时间",
+          "var_id": 2516,
+          "addr_id": 4,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_2.RST_2STP_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "输出",
+          "var_id": 34009,
+          "addr_id": 8,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_2.RST_2STP_1.ET",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "计时时间",
+          "var_id": 2494,
+          "addr_id": 4,
+          "mode": 67,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "AM_SWITCH_1.AM_SWITCHRST_2S_2.RST_2STP_1.StartTime",
+          "data_type": "TIME",
+          "init_value": "T#0MS",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 63891,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 3
+        },
+        {
+          "name": "BDV_CTRLSR_1",
+          "data_type": "SR",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "BDV_CTRLSR_1.Set",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 22714,
+          "addr_id": 0,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "BDV_CTRLSR_1.Reset",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 25378,
+          "addr_id": 1,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "BDV_CTRLSR_1.Q",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 54809,
+          "addr_id": 0,
+          "mode": 67,
+          "id2": null,
+          "area_code": 3
+        }
+      ]
+    },
+    {
+      "name": "Local Variables",
+      "children": [
+        {
+          "name": "MOV_CTRL_1001",
+          "data_type": "MOV_CTRL",
+          "init_value": "",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 0,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "TEST1",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 56637,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "TEST2",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 56638,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "TEST3",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 56639,
+          "addr_id": 4294967295,
+          "mode": 66,
+          "id2": null,
+          "area_code": 4
+        },
+        {
+          "name": "TEST4",
+          "data_type": "BOOL",
+          "init_value": "FALSE",
+          "soe_enable": true,
+          "power_down_keep": false,
+          "comment": "",
+          "var_id": 56640,
+          "addr_id": 4294967295,
           "mode": 66,
           "id2": null,
           "area_code": 4
@@ -145,486 +1549,23 @@
   ],
   "networks": [
     {
-      "id": 31,
-      "label": "",
-      "comment": "",
-      "elements": []
-    },
-    {
-      "id": 28,
-      "label": "",
-      "comment": "",
-      "elements": []
-    },
-    {
-      "id": 25,
-      "label": "",
-      "comment": "",
-      "elements": []
-    },
-    {
-      "id": 22,
+      "id": 2,
       "label": "",
       "comment": "",
       "elements": [
         {
-          "id": 33,
-          "type_code": "Box",
-          "name": "MOV_CTRL",
+          "id": 10,
+          "type_code": "Contact",
+          "name": "TEST4",
           "comment": "",
           "desc": "",
-          "instance": "MOV_CTRL_1003",
-          "pins": [
-            {
-              "name": "EN",
-              "variable": "",
-              "direction": "Input"
-            },
-            {
-              "name": "CS",
-              "variable": "CS01_SIS",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIX",
-              "variable": "ESDV_1003_RL",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIA",
-              "variable": "ESDV_1003_F",
-              "direction": "Input"
-            },
-            {
-              "name": "A_OPEN",
-              "variable": "FALSE",
-              "direction": "Input"
-            },
-            {
-              "name": "A_CLOSE",
-              "variable": "FALSE",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIO",
-              "variable": "ESDV_1003_OF",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIC",
-              "variable": "ESDV_1003_CF",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIS",
-              "variable": "FALSE",
-              "direction": "Input"
-            },
-            {
-              "name": "DA_TIME",
-              "variable": "T#100S",
-              "direction": "Input"
-            },
-            {
-              "name": "DA_RST",
-              "variable": "RESET_SIS",
-              "direction": "Input"
-            },
-            {
-              "name": "C_AM",
-              "variable": "C_AM_1003",
-              "direction": "Input"
-            },
-            {
-              "name": "S_AM",
-              "variable": "S_AM_1003",
-              "direction": "Input"
-            },
-            {
-              "name": "C_OPEN",
-              "variable": "C_OPEN_ESDV_1003",
-              "direction": "Input"
-            },
-            {
-              "name": "C_CLOSE",
-              "variable": "C_CLOSE_ESDV_1003",
-              "direction": "Input"
-            },
-            {
-              "name": "S_OPEN",
-              "variable": "S_OPEN_ESDV_1003",
-              "direction": "Input"
-            },
-            {
-              "name": "S_CLOSE",
-              "variable": "S_CLOSE_ESDV_1003",
-              "direction": "Input"
-            },
-            {
-              "name": "ENO",
-              "variable": "",
-              "direction": "Output"
-            },
-            {
-              "name": "AM",
-              "variable": "AM_ESDV_1003",
-              "direction": "Output"
-            },
-            {
-              "name": "XO",
-              "variable": "ESDV_1003_O",
-              "direction": "Output"
-            },
-            {
-              "name": "XC",
-              "variable": "ESDV_1003_C",
-              "direction": "Output"
-            },
-            {
-              "name": "DA",
-              "variable": "DA_ESDV_1003",
-              "direction": "Output"
-            },
-            {
-              "name": "C_AM",
-              "variable": "C_AM_1003",
-              "direction": "Output"
-            },
-            {
-              "name": "S_AM",
-              "variable": "S_AM_1003",
-              "direction": "Output"
-            },
-            {
-              "name": "C_OPEN",
-              "variable": "C_OPEN_ESDV_1003",
-              "direction": "Output"
-            },
-            {
-              "name": "C_CLOSE",
-              "variable": "C_CLOSE_ESDV_1003",
-              "direction": "Output"
-            },
-            {
-              "name": "S_OPEN",
-              "variable": "S_OPEN_ESDV_1003",
-              "direction": "Output"
-            },
-            {
-              "name": "S_CLOSE",
-              "variable": "S_CLOSE_ESDV_1003",
-              "direction": "Output"
-            }
-          ],
+          "instance": "",
+          "pins": [],
           "connections": [],
-          "sub_type": 0
+          "sub_type": 1
         },
         {
-          "id": 30,
-          "type_code": "Box",
-          "name": "MOV_CTRL",
-          "comment": "",
-          "desc": "",
-          "instance": "MOV_CTRL_1002",
-          "pins": [
-            {
-              "name": "EN",
-              "variable": "",
-              "direction": "Input"
-            },
-            {
-              "name": "CS",
-              "variable": "CS01_SIS",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIX",
-              "variable": "ESDV_1002_RL",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIA",
-              "variable": "ESDV_1002_F",
-              "direction": "Input"
-            },
-            {
-              "name": "A_OPEN",
-              "variable": "FALSE",
-              "direction": "Input"
-            },
-            {
-              "name": "A_CLOSE",
-              "variable": "FALSE",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIO",
-              "variable": "ESDV_1002_OF",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIC",
-              "variable": "ESDV_1002_CF",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIS",
-              "variable": "FALSE",
-              "direction": "Input"
-            },
-            {
-              "name": "DA_TIME",
-              "variable": "T#100S",
-              "direction": "Input"
-            },
-            {
-              "name": "DA_RST",
-              "variable": "RESET_SIS",
-              "direction": "Input"
-            },
-            {
-              "name": "C_AM",
-              "variable": "C_AM_1002",
-              "direction": "Input"
-            },
-            {
-              "name": "S_AM",
-              "variable": "S_AM_1002",
-              "direction": "Input"
-            },
-            {
-              "name": "C_OPEN",
-              "variable": "C_OPEN_ESDV_1002",
-              "direction": "Input"
-            },
-            {
-              "name": "C_CLOSE",
-              "variable": "C_CLOSE_ESDV_1002",
-              "direction": "Input"
-            },
-            {
-              "name": "S_OPEN",
-              "variable": "S_OPEN_ESDV_1002",
-              "direction": "Input"
-            },
-            {
-              "name": "S_CLOSE",
-              "variable": "S_CLOSE_ESDV_1002",
-              "direction": "Input"
-            },
-            {
-              "name": "ENO",
-              "variable": "",
-              "direction": "Output"
-            },
-            {
-              "name": "AM",
-              "variable": "AM_ESDV_1002",
-              "direction": "Output"
-            },
-            {
-              "name": "XO",
-              "variable": "ESDV_1002_O",
-              "direction": "Output"
-            },
-            {
-              "name": "XC",
-              "variable": "ESDV_1002_C",
-              "direction": "Output"
-            },
-            {
-              "name": "DA",
-              "variable": "DA_ESDV_1002",
-              "direction": "Output"
-            },
-            {
-              "name": "C_AM",
-              "variable": "C_AM_1002",
-              "direction": "Output"
-            },
-            {
-              "name": "S_AM",
-              "variable": "S_AM_1002",
-              "direction": "Output"
-            },
-            {
-              "name": "C_OPEN",
-              "variable": "C_OPEN_ESDV_1002",
-              "direction": "Output"
-            },
-            {
-              "name": "C_CLOSE",
-              "variable": "C_CLOSE_ESDV_1002",
-              "direction": "Output"
-            },
-            {
-              "name": "S_OPEN",
-              "variable": "S_OPEN_ESDV_1002",
-              "direction": "Output"
-            },
-            {
-              "name": "S_CLOSE",
-              "variable": "S_CLOSE_ESDV_1002",
-              "direction": "Output"
-            }
-          ],
-          "connections": [],
-          "sub_type": 0
-        },
-        {
-          "id": 27,
-          "type_code": "Box",
-          "name": "MOV_CTRL",
-          "comment": "",
-          "desc": "",
-          "instance": "MOV_CTRL_1001",
-          "pins": [
-            {
-              "name": "EN",
-              "variable": "",
-              "direction": "Input"
-            },
-            {
-              "name": "CS",
-              "variable": "CS01_SIS",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIX",
-              "variable": "ESDV_1001_RL",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIA",
-              "variable": "ESDV_1001_F",
-              "direction": "Input"
-            },
-            {
-              "name": "A_OPEN",
-              "variable": "FALSE",
-              "direction": "Input"
-            },
-            {
-              "name": "A_CLOSE",
-              "variable": "FALSE",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIO",
-              "variable": "ESDV_1001_OF",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIC",
-              "variable": "ESDV_1001_CF",
-              "direction": "Input"
-            },
-            {
-              "name": "ZIS",
-              "variable": "FALSE",
-              "direction": "Input"
-            },
-            {
-              "name": "DA_TIME",
-              "variable": "T#100S",
-              "direction": "Input"
-            },
-            {
-              "name": "DA_RST",
-              "variable": "RESET_SIS",
-              "direction": "Input"
-            },
-            {
-              "name": "C_AM",
-              "variable": "C_AM_1001",
-              "direction": "Input"
-            },
-            {
-              "name": "S_AM",
-              "variable": "S_AM_1001",
-              "direction": "Input"
-            },
-            {
-              "name": "C_OPEN",
-              "variable": "C_OPEN_ESDV_1001",
-              "direction": "Input"
-            },
-            {
-              "name": "C_CLOSE",
-              "variable": "C_CLOSE_ESDV_1001",
-              "direction": "Input"
-            },
-            {
-              "name": "S_OPEN",
-              "variable": "S_OPEN_ESDV_1001",
-              "direction": "Input"
-            },
-            {
-              "name": "S_CLOSE",
-              "variable": "S_CLOSE_ESDV_1001",
-              "direction": "Input"
-            },
-            {
-              "name": "ENO",
-              "variable": "",
-              "direction": "Output"
-            },
-            {
-              "name": "AM",
-              "variable": "AM_ESDV_1001",
-              "direction": "Output"
-            },
-            {
-              "name": "XO",
-              "variable": "ESDV_1001_O",
-              "direction": "Output"
-            },
-            {
-              "name": "XC",
-              "variable": "ESDV_1001_C",
-              "direction": "Output"
-            },
-            {
-              "name": "DA",
-              "variable": "DA_ESDV_1001",
-              "direction": "Output"
-            },
-            {
-              "name": "C_AM",
-              "variable": "C_AM_1001",
-              "direction": "Output"
-            },
-            {
-              "name": "S_AM",
-              "variable": "S_AM_1001",
-              "direction": "Output"
-            },
-            {
-              "name": "C_OPEN",
-              "variable": "C_OPEN_ESDV_1001",
-              "direction": "Output"
-            },
-            {
-              "name": "C_CLOSE",
-              "variable": "C_CLOSE_ESDV_1001",
-              "direction": "Output"
-            },
-            {
-              "name": "S_OPEN",
-              "variable": "S_OPEN_ESDV_1001",
-              "direction": "Output"
-            },
-            {
-              "name": "S_CLOSE",
-              "variable": "S_CLOSE_ESDV_1001",
-              "direction": "Output"
-            }
-          ],
-          "connections": [],
-          "sub_type": 0
-        },
-        {
-          "id": 32,
+          "id": 3,
           "type_code": "Assign",
           "name": "",
           "comment": "",
@@ -632,8 +1573,49 @@
           "instance": "",
           "pins": [],
           "connections": [
-            33
+            12,
+            14
           ],
+          "sub_type": 0
+        }
+      ]
+    },
+    {
+      "id": 0,
+      "label": "",
+      "comment": "",
+      "elements": [
+        {
+          "id": 7,
+          "type_code": "Contact",
+          "name": "TEST2",
+          "comment": "",
+          "desc": "",
+          "instance": "",
+          "pins": [],
+          "connections": [],
+          "sub_type": 0
+        },
+        {
+          "id": 4,
+          "type_code": "Contact",
+          "name": "TEST1",
+          "comment": "",
+          "desc": "",
+          "instance": "",
+          "pins": [],
+          "connections": [],
+          "sub_type": 0
+        },
+        {
+          "id": 9,
+          "type_code": "Contact",
+          "name": "TEST3",
+          "comment": "",
+          "desc": "",
+          "instance": "",
+          "pins": [],
+          "connections": [],
           "sub_type": 0
         }
       ]
