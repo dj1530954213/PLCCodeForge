@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { onBeforeUnmount } from "vue";
 import { useProjectPanel } from "../../composables/useProjectPanel";
+import { useWorkspaceSaveAll } from "../../composables/useWorkspaceSaveAll";
 
 const {
   project,
@@ -21,6 +23,18 @@ const {
   reloadProject,
   saveProjectMeta,
 } = useProjectPanel();
+
+const workspaceSaveAll = useWorkspaceSaveAll();
+const unregisterSave = workspaceSaveAll.registerSaveHandler({
+  id: "project-meta",
+  label: "工程信息",
+  isDirty: () => projectDirty.value,
+  save: () => saveProjectMeta({ silent: true }),
+});
+
+onBeforeUnmount(() => {
+  unregisterSave();
+});
 </script>
 
 <template>
@@ -65,7 +79,6 @@ const {
     <div class="comm-panel-actions">
       <el-button size="small" :loading="projectListLoading" @click="loadProjectList">刷新</el-button>
       <el-button size="small" @click="reloadProject">同步当前</el-button>
-      <el-button size="small" type="primary" :disabled="!projectDirty" @click="saveProjectMeta">保存项目</el-button>
     </div>
   </section>
 

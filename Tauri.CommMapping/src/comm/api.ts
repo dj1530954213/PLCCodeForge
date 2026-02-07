@@ -656,6 +656,10 @@ export async function commPing(): Promise<{ ok: boolean }> {
   return invoke("comm_ping");
 }
 
+export async function commSerialPortsList(): Promise<string[]> {
+  return invoke("comm_serial_ports_list");
+}
+
 export async function commProjectCreate(request: CommProjectCreateRequest): Promise<CommProjectV1> {
   return invoke("comm_project_create", { request });
 }

@@ -12,7 +12,7 @@ use comm::tauri_api::{
     comm_project_create, comm_project_delete, comm_project_get, comm_project_load_v1,
     comm_project_save_v1, comm_project_ui_state_patch_v1, comm_projects_list, comm_run_latest,
     comm_run_latest_obs, comm_run_start, comm_run_start_obs, comm_run_stop, comm_run_stop_obs,
-    comm_unified_export_plc_import_stub_v1, CommState,
+    comm_serial_ports_list, comm_unified_export_plc_import_stub_v1, CommState,
 };
 
 #[tauri::command]
@@ -60,6 +60,7 @@ pub fn run() {
             comm_evidence_pack_create,
             comm_evidence_verify_v1,
             comm_import_union_xlsx,
+            comm_serial_ports_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

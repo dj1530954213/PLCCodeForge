@@ -49,7 +49,7 @@ export function usePointsPersistence<T extends PointRowLike>(options: UsePointsP
     syncFromGridAndMapAddresses,
   } = options;
 
-  async function loadAll() {
+  async function loadAll(): Promise<boolean> {
     try {
       const pid = projectId.value.trim();
       const did = activeDeviceId.value.trim();
@@ -57,7 +57,7 @@ export function usePointsPersistence<T extends PointRowLike>(options: UsePointsP
         profiles.value = { schemaVersion: 1, profiles: [] };
         points.value = { schemaVersion: 1, points: [] };
         activeChannelName.value = "";
-        return;
+        return true;
       }
 
       const device = activeDevice.value;
@@ -96,22 +96,24 @@ export function usePointsPersistence<T extends PointRowLike>(options: UsePointsP
       suppressChannelWatch.value = false;
       await rebuildPlan();
       notifySuccess("已加载点位与连接配置");
+      return true;
     } catch (e: unknown) {
       notifyError(resolveErrorMessage(e, "加载失败"));
+      return false;
     }
   }
 
-  async function savePoints() {
+  async function savePoints(options?: { silent?: boolean }): Promise<boolean> {
     showAllValidation.value = true;
     await syncFromGridAndMapAddresses();
     const invalid = gridRows.value.map(validateRowForRun).find((v) => Boolean(v));
     if (invalid) {
       notifyError(invalid);
-      return;
+      return false;
     }
     if (!activeDeviceId.value.trim()) {
       notifyError("未选择设备");
-      return;
+      return false;
     }
     await savePointsData(points.value, projectId.value, activeDeviceId.value);
     if (project.value) {
@@ -126,9 +128,12 @@ export function usePointsPersistence<T extends PointRowLike>(options: UsePointsP
         project.value = { ...project.value, devices: nextDevices };
       }
     }
-    notifySuccess("已保存点位");
+    if (!options?.silent) {
+      notifySuccess("已保存点位");
+    }
     showAllValidation.value = false;
     touchedRowKeys.value = {};
+    return true;
   }
 
   return {

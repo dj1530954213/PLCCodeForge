@@ -17,7 +17,7 @@ export interface UsePointsLifecycleOptions {
   selectedRangeRows: Ref<RowSpan | null>;
   suppressChannelWatch: Ref<boolean>;
   rebuildPlan: () => Promise<void>;
-  loadAll: () => Promise<void>;
+  loadAll: () => Promise<boolean>;
   pushLog: (scope: string, level: LogLevel, message: string) => void;
   workspaceRuntime: CommWorkspaceRuntime;
   attachGridSelectionListeners: () => void;

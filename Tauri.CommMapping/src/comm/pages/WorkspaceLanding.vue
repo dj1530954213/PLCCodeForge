@@ -14,12 +14,16 @@ function goProject(projectId: string) {
 }
 
 async function tryRedirect() {
+  await refresh(false);
   const last = localStorage.getItem("comm.lastProjectId")?.trim();
   if (last) {
-    goProject(last);
-    return;
+    const target = projects.value.find((p) => !p.deletedAtUtc && p.projectId === last);
+    if (target) {
+      goProject(target.projectId);
+      return;
+    }
+    localStorage.removeItem("comm.lastProjectId");
   }
-  await refresh(false);
   const first = projects.value.find((p) => !p.deletedAtUtc);
   if (first) {
     goProject(first.projectId);

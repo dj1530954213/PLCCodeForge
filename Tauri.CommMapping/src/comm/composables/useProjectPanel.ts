@@ -105,24 +105,27 @@ export function useProjectPanel() {
     await deleteProject(current.projectId);
     notifySuccess("已删除（软删）");
     await loadProjectList();
+    if (localStorage.getItem("comm.lastProjectId") === current.projectId) {
+      localStorage.removeItem("comm.lastProjectId");
+    }
     const next = projectList.value.find((p) => p.projectId !== current.projectId);
     if (next) {
       router.push(`/projects/${next.projectId}/comm/points`);
     } else {
-      router.push("/");
+      router.replace("/");
     }
   }
 
-  async function saveProjectMeta() {
+  async function saveProjectMeta(options?: { silent?: boolean }): Promise<boolean> {
     const current = project.value;
     if (!current) {
       notifyError("未选择工程");
-      return;
+      return false;
     }
     const name = projectEdit.value.name.trim();
     if (!name) {
       notifyError("工程名称不能为空");
-      return;
+      return false;
     }
     const next: CommProjectDataV1 = {
       ...current,
@@ -132,7 +135,10 @@ export function useProjectPanel() {
     };
     await saveProject(next);
     await loadProjectList();
-    notifySuccess("工程信息已保存");
+    if (!options?.silent) {
+      notifySuccess("工程信息已保存");
+    }
+    return true;
   }
 
   watch(

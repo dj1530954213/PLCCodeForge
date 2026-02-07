@@ -199,6 +199,9 @@ pub fn load_project_data(
             meta.schema_version
         ));
     }
+    if meta.deleted_at_utc.is_some() {
+        return Err("project deleted".to_string());
+    }
 
     // Prefer project.v1.json embedded fields; fallback to legacy split files when missing.
     let mut connections = if value.get("connections").is_some() {

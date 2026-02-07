@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import Grid, { VGridVueEditor, type Editors } from "@revolist/vue3-datagrid";
 import type { ColumnAutoSizeMode } from "@revolist/revogrid";
 
@@ -41,9 +41,11 @@ import type {
 } from "../api";
 import { useCommDeviceContext } from "../composables/useDeviceContext";
 import { useCommWorkspaceRuntime } from "../composables/useWorkspaceRuntime";
+import { useWorkspaceSaveAll } from "../composables/useWorkspaceSaveAll";
 
 const { projectId, project, activeDeviceId, activeDevice } = useCommDeviceContext();
 const workspaceRuntime = useCommWorkspaceRuntime();
+const workspaceSaveAll = useWorkspaceSaveAll();
 
 const BYTE_ORDERS: ByteOrder32[] = COMM_BYTE_ORDERS_32;
 
@@ -71,6 +73,7 @@ const gridRows = ref<PointRow[]>([]);
 const showAllValidation = ref(false);
 const touchedRowKeys = ref<Record<string, boolean>>({});
 const pointsRevision = ref(0);
+const lastSavedRevision = ref(0);
 const validationPanelOpen = ref(false);
 const focusedIssueCell = ref<{ pointKey: string; field: keyof PointRow } | null>(null);
 const suppressChannelWatch = ref(false);
@@ -320,6 +323,35 @@ const { loadAll, savePoints } = usePointsPersistence({
   syncFromGridAndMapAddresses,
 });
 
+const pointsDirty = computed(() => pointsRevision.value !== lastSavedRevision.value);
+
+async function loadAllAndMark() {
+  const ok = await loadAll();
+  if (ok) {
+    lastSavedRevision.value = pointsRevision.value;
+  }
+  return ok;
+}
+
+async function savePointsAndMark(options?: { silent?: boolean }) {
+  const ok = await savePoints(options);
+  if (ok) {
+    lastSavedRevision.value = pointsRevision.value;
+  }
+  return ok;
+}
+
+const unregisterSave = workspaceSaveAll.registerSaveHandler({
+  id: "points",
+  label: "点位配置",
+  isDirty: () => pointsDirty.value,
+  save: () => savePointsAndMark({ silent: true }),
+});
+
+onBeforeUnmount(() => {
+  unregisterSave();
+});
+
 const { onAfterEdit, onBeforeGridKeyDown, onBeforeAutofill, handleJumpToIssue } = usePointsGridEvents<PointRow>({
   gridRows,
   selectedRangeRows,
@@ -346,7 +378,7 @@ usePointsLifecycle({
   selectedRangeRows,
   suppressChannelWatch,
   rebuildPlan,
-  loadAll,
+  loadAll: loadAllAndMark,
   pushLog,
   workspaceRuntime,
   attachGridSelectionListeners,
@@ -360,14 +392,16 @@ usePointsLifecycle({
     onDelete: removeSelectedRows,
     onUndo: handleUndo,
     onRedo: handleRedo,
-    onSave: savePoints,
+    onSave: () => {
+      void workspaceSaveAll.saveAll();
+    },
   },
 });
 </script>
 
 <template>
   <div class="comm-subpage comm-subpage--points">
-    <PointsHeader :active-device-name="activeDevice?.deviceName" @load="loadAll" @save="savePoints" />
+    <PointsHeader :active-device-name="activeDevice?.deviceName" @load="loadAllAndMark" />
 
       <el-alert
         class="comm-hint-bar comm-animate"

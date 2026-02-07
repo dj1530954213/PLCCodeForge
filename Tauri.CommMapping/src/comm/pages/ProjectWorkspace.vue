@@ -11,6 +11,7 @@ import DiagnosticsPanel from "../components/workspace/DiagnosticsPanel.vue";
 
 import { provideCommDeviceContext } from "../composables/useDeviceContext";
 import { provideCommWorkspaceRuntime } from "../composables/useWorkspaceRuntime";
+import { provideWorkspaceSaveAll } from "../composables/useWorkspaceSaveAll";
 
 const route = useRoute();
 const router = useRouter();
@@ -18,6 +19,7 @@ const router = useRouter();
 const projectId = computed(() => String(route.params.projectId ?? ""));
 provideCommDeviceContext(projectId);
 provideCommWorkspaceRuntime();
+const workspaceSaveAll = provideWorkspaceSaveAll();
 
 const tabs = computed(() => {
   const pid = projectId.value;
@@ -57,8 +59,21 @@ const activeTab = computed<string>({
         <main class="comm-workspace-main">
           <section class="comm-panel comm-panel--flat comm-animate" style="--delay: 100ms">
             <div class="comm-panel-header">
-            <div class="comm-section-title">功能导航</div>
-              <div class="comm-inline-meta">点位 → 导出 → 集成</div>
+              <div class="comm-panel-title">
+                <div class="comm-section-title">功能导航</div>
+                <div class="comm-inline-meta">点位 → 导出 → 集成</div>
+              </div>
+              <div class="comm-panel-actions-inline">
+                <el-button
+                  size="small"
+                  type="primary"
+                  :disabled="!workspaceSaveAll.hasDirty"
+                  :loading="workspaceSaveAll.isSaving"
+                  @click="workspaceSaveAll.saveAll"
+                >
+                  保存全部
+                </el-button>
+              </div>
             </div>
             <el-tabs v-model="activeTab" type="card" class="comm-workspace-tabs">
               <el-tab-pane v-for="t in tabs" :key="t.name" :name="t.name" :label="t.label" />
@@ -92,6 +107,18 @@ const activeTab = computed<string>({
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+}
+
+.comm-panel-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.comm-panel-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 @media (max-width: 1400px) {

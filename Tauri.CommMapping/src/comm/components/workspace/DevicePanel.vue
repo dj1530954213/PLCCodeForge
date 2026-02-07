@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { onBeforeUnmount } from "vue";
 import { useDevicePanel } from "../../composables/useDevicePanel";
+import { useWorkspaceSaveAll } from "../../composables/useWorkspaceSaveAll";
 
 const {
   devices,
@@ -28,6 +30,18 @@ const {
   saveCopyTemplate,
   deleteCopyTemplate,
 } = useDevicePanel();
+
+const workspaceSaveAll = useWorkspaceSaveAll();
+const unregisterSave = workspaceSaveAll.registerSaveHandler({
+  id: "device-meta",
+  label: "设备信息",
+  isDirty: () => deviceDirty.value,
+  save: () => saveDeviceMeta({ silent: true }),
+});
+
+onBeforeUnmount(() => {
+  unregisterSave();
+});
 </script>
 
 <template>
@@ -58,10 +72,6 @@ const {
         <el-input v-model="deviceEdit.workbookName" :disabled="!activeDevice" />
       </el-form-item>
     </el-form>
-
-    <div class="comm-panel-actions">
-      <el-button size="small" type="primary" :disabled="!deviceDirty" @click="saveDeviceMeta">保存设备</el-button>
-    </div>
 
     <el-alert
       v-if="devices.length === 0"

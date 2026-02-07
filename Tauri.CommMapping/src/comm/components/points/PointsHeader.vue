@@ -5,7 +5,6 @@ defineProps<{
 
 const emit = defineEmits<{
   (e: "load"): void;
-  (e: "save"): void;
 }>();
 </script>
 
@@ -19,7 +18,6 @@ const emit = defineEmits<{
     </div>
     <div class="comm-hero-actions">
       <el-button @click="emit('load')">加载</el-button>
-      <el-button type="primary" @click="emit('save')">保存</el-button>
     </div>
   </header>
 </template>

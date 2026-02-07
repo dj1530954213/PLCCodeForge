@@ -237,17 +237,17 @@ export function useDevicePanel() {
     }
   }
 
-  async function saveDeviceMeta() {
+  async function saveDeviceMeta(options?: { silent?: boolean }): Promise<boolean> {
     const current = project.value;
     const active = activeDevice.value;
     if (!current || !active) {
       notifyError("未选择设备");
-      return;
+      return false;
     }
     const name = deviceEdit.value.name.trim();
     if (!name) {
       notifyError("设备名称不能为空");
-      return;
+      return false;
     }
     const workbookName = deviceEdit.value.workbookName.trim() || sanitizeWorkbookName(name);
     const devices = current.devices ?? [];
@@ -264,7 +264,10 @@ export function useDevicePanel() {
       devices: nextDevices,
     };
     await saveProject(next);
-    notifySuccess("设备信息已保存");
+    if (!options?.silent) {
+      notifySuccess("设备信息已保存");
+    }
+    return true;
   }
 
   async function saveCopyTemplate() {

@@ -1,7 +1,8 @@
 import { computed, ref, watch } from "vue";
 import type { ConnectionProfile, RegisterArea, SerialParity } from "../api";
-import { notifyError, notifySuccess } from "../services/notify";
+import { notifyError, notifySuccess, resolveErrorMessage } from "../services/notify";
 import { cloneProfile } from "../services/profiles";
+import { listSerialPorts } from "../services/serial";
 import { useCommDeviceContext } from "./useDeviceContext";
 
 export function useConnectionPanel() {
@@ -9,6 +10,9 @@ export function useConnectionPanel() {
 
   const AREA_OPTIONS: RegisterArea[] = ["Holding", "Coil"];
   const PARITY_OPTIONS: SerialParity[] = ["None", "Even", "Odd"];
+  const BAUD_OPTIONS = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
+  const DATA_BITS_OPTIONS = [5, 6, 7, 8];
+  const STOP_BITS_OPTIONS = [1, 2];
 
   const profileDraft = ref<ConnectionProfile | null>(null);
   const profileBaseline = ref("");
@@ -63,29 +67,64 @@ export function useConnectionPanel() {
     }
   }
 
-  async function saveProfileDraft() {
+  const serialPorts = ref<string[]>([]);
+  const serialPortsLoading = ref(false);
+  const serialPortsLoaded = ref(false);
+  const serialPortOptions = computed(() => {
+    const set = new Set(serialPorts.value);
+    const current = profileDraft.value?.protocolType === "485" ? profileDraft.value.serialPort.trim() : "";
+    if (current) set.add(current);
+    return Array.from(set);
+  });
+
+  async function refreshSerialPorts(force = false) {
+    if (serialPortsLoading.value) return;
+    if (!force && serialPortsLoaded.value) return;
+    serialPortsLoading.value = true;
+    try {
+      const ports = await listSerialPorts();
+      const normalized = ports.map((p) => p.trim()).filter((p) => p.length > 0);
+      normalized.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+      serialPorts.value = normalized;
+      serialPortsLoaded.value = true;
+      if (profileDraft.value?.protocolType === "485") {
+        const current = profileDraft.value.serialPort.trim();
+        if (!current && normalized.length > 0) {
+          profileDraft.value.serialPort = normalized[0];
+        }
+      }
+    } catch (e: unknown) {
+      notifyError(resolveErrorMessage(e, "读取串口失败"));
+      serialPorts.value = [];
+      serialPortsLoaded.value = false;
+    } finally {
+      serialPortsLoading.value = false;
+    }
+  }
+
+  async function saveProfileDraft(options?: { silent?: boolean }): Promise<boolean> {
     const current = project.value;
     const active = activeDevice.value;
     const draft = profileDraft.value;
     if (!current || !active || !draft) {
       notifyError("未选择设备");
-      return;
+      return false;
     }
     if (!draft.channelName.trim()) {
       notifyError("通道名称不能为空");
-      return;
+      return false;
     }
     if (draft.protocolType === "TCP" && !draft.ip.trim()) {
       notifyError("IP 不能为空");
-      return;
+      return false;
     }
     if (draft.protocolType === "485" && !draft.serialPort.trim()) {
       notifyError("串口不能为空");
-      return;
+      return false;
     }
     const devices = current.devices ?? [];
     const idx = devices.findIndex((d) => d.deviceId === active.deviceId);
-    if (idx < 0) return;
+    if (idx < 0) return false;
     const nextDevices = [...devices];
     nextDevices[idx] = {
       ...nextDevices[idx],
@@ -101,7 +140,10 @@ export function useConnectionPanel() {
     };
     await saveProject(next);
     profileBaseline.value = JSON.stringify(draft);
-    notifySuccess("连接配置已保存");
+    if (!options?.silent) {
+      notifySuccess("连接配置已保存");
+    }
+    return true;
   }
 
   watch(project, (next) => {
@@ -117,13 +159,29 @@ export function useConnectionPanel() {
     resetProfileDraft();
   });
 
+  watch(
+    () => profileDraft.value?.protocolType,
+    (next) => {
+      if (next === "485") {
+        void refreshSerialPorts();
+      }
+    }
+  );
+
   return {
     AREA_OPTIONS,
     PARITY_OPTIONS,
+    BAUD_OPTIONS,
+    DATA_BITS_OPTIONS,
+    STOP_BITS_OPTIONS,
     profileDraft,
     profileDirty,
+    serialPorts,
+    serialPortsLoading,
+    serialPortOptions,
     resetProfileDraft,
     switchProfileProtocol,
+    refreshSerialPorts,
     saveProfileDraft,
   };
 }
