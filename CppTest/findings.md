@@ -18,7 +18,8 @@
     - Python implementation
 -->
 <!-- Captured from user request -->
--
+- 需要重新梳理三个 IDA（dllDPLogic/dllDPFrame/dllDPSource）中与“添加协议/设备”相关的完整调用链路。
+- 在不确定的环节，要求结合 x32dbg/x64dbg 或其他反编译工具进一步确认。
 
 ## Research Findings
 <!-- 
@@ -31,7 +32,23 @@
     - Standard pattern: python script.py <command> [args]
 -->
 <!-- Key discoveries during exploration -->
--
+- 当前注入流程仍卡在 `OnMakeNewLogicData(Procotol)`；需要从调用链和参数依赖角度复核。
+- 三个 IDA 实例的 image base 均为 `0x10000000`（dllDPLogic/dll_DPFrame/dllDPSource）。
+- 通过 `lookup_funcs` 直接按函数名检索未命中，说明符号名不稳定，需要用 RVA+base 或字符串/交叉引用定位。
+- CHWFrameContainer::OnAddProcotol (0x101A697A) 主要链路：CheckProcotolMasterSourceInfoExist -> GetCommunDeviceFromNO -> GetProcotolIDFormName -> CheckNumForProcotol/CheckRedunForProcotol -> CHWDataContainer::OnMakeNewLogicData -> SendMessage(ProTreeHwnd=1126) -> NameMap 更新(sub_1008E4E0)；并包含 AppVersion==2 + IsTaskSpptPriAndWdg 时的 DoModal 分支（可能阻塞 UI）。
+- CHWFrameContainer::OnAddGateWayProtocol (0x101ACEBA) 结构相似：对 Gateway 设备做类型检查 -> Source/数量校验 -> OnMakeNewLogicData -> 发送 ProTreeHwnd 消息 -> NameMap 更新。
+- CHWDataContainer::OnMakeNewLogicData (dllDPLogic 0x1005A824) 会根据参数是否包含 Link/desc 等走不同分支：协议路径调用 OnMakeNewLogicData_Procotol；Slave 路径调用 OnMakeNewLogicData_Slave；并受 CPUType 与 AppVersion 限制。
+- CHWDataContainer::OnMakeNewLogicData_Slave (0x10059F10) 内部循环调用 MakeNewData，成功时把新 ID 写入 outIds；失败即返回 0。
+- dllDPSource 存在大量 Modbus 配置相关符号/路径字符串（HardWare\\ModbusTCP\\*.ini、CSourceModbusSlave/CModbusInfo 等），但符号字符串地址仅是 .rdata 数据引用，需改用函数列表或交叉引用来定位实际代码入口。
+- dllDPSource 已枚举到 Modbus 相关函数入口（示例）：GetProcotolIDFormName@CHWSourceContainer(0x100AA4A0)、GetMODBUS_TCPFilePathArry(0x100AA5B0)、ReadModbusFilesToMap@CModbusInfo(0x100B8500)、ReadAllInfo@CSourceModbusSlave(0x100BA760) 等，可用于后续链路确认。
+- CHWSourceContainer::GetProcotolIDFormName(0x100AA4A0) 会遍历 SourceContainer 的协议名表做大小写比较，返回协议 ID；若 ID=18 且 AppVersion=2，会改成 12（版本分支修正）。
+- CSourceModbusSlave::ReadAllInfo(0x100BA760) 从 MODBUS_SlavePrms.ini 读取配置，依次 FillSectionList/ReadSlaveInfo/ReadOrderInfo，并维护内部 map/list。
+- OnAddProcotol 的直接被调函数已确认：CheckProcotolMasterSourceInfoExist(0x101089C0)、GetCommunDeviceFromNO(0x10117760)、GetProcotolIDFormName(外部导入)、CheckNumForProcotol(0x10129480)、CheckRedunForProcotol(0x10118800)、OnMakeNewLogicData(导入)、SendMessage(ProTreeHwnd=1126) 与 NameMap 更新(sub_1008E4E0)。
+- OnMakeNewLogicData 内部显式调用 OnMakeNewLogicData_Procotol(0x10059E00) 与 OnMakeNewLogicData_Slave(0x10059F10)，说明“协议”和“设备”走不同内核路径。
+- CHWDataContainer::OnMakeNewLogicData_Procotol(0x10059E00) 仅围绕 MakeNewData 批量创建，参数中不见 Link；核心依赖是 typeName + outIds + CControl(从 a7 传入) 与 dupFlag/count。
+- CHWContainer::CheckProcotolMasterSourceInfoExist(0x101089C0) 会根据协议 ID 走不同 Source 路径：GSD(ProcotolID=1) 或 Modbus(ProcotolID=10/11) -> GetModbusData；若无数据或版本不匹配则弹窗并返回失败。
+- CHWContainer::CheckNumForProcotol(0x10129480) 读取协议数量上限并比较当前数量（区分 ProcotolNumEx/ProcotolNum），用于阻止超量添加。
+- CHWContainer::CheckRedunForProcotol(0x10118800) 通过遍历当前通信设备下的协议节点判断是否重复；对 HolliTCP_Master 有特殊处理。
 
 ## Technical Decisions
 <!-- 
@@ -45,7 +62,7 @@
 <!-- Decisions made with rationale -->
 | Decision | Rationale |
 |----------|-----------|
-|          |           |
+| 先做调用链复盘再做代码修改 | 避免在参数/上下文不完整时继续试错 |
 
 ## Issues Encountered
 <!-- 
@@ -58,7 +75,7 @@
 <!-- Errors and how they were resolved -->
 | Issue | Resolution |
 |-------|------------|
-|       |            |
+| OnMakeNewLogicData 调用仍然阻塞 | 待用 IDA/x32dbg 复核前置链路与必要参数 |
 
 ## Resources
 <!-- 
@@ -252,3 +269,31 @@
 ## Findings: Session Status (resume)
 - Working tree under CppTest has pending planning file updates (progress.md, task_plan.md) to commit before code changes.
 - Baseline commit 977a6c3 already pushed to origin/master.
+
+## Findings: Implementation Updates (in progress)
+- Added OnAddProcotol offset (dll_DPFrame @0x1A697A) and function pointer type for protocol add.
+- Injector now adds MODBUSTCP_MASTER when target is not already master, locates new node by tree diff, and updates target context before adding slave.
+- TreeScanner gains CollectChildren and FindNewChildByDiff helpers to identify newly inserted protocol nodes.
+- Added protocol-dialog watcher (focus/optional auto-close) to mitigate OnAddProcotol modal blocking.
+
+## Findings: IDA decompile CHWFrameContainer::OnAddProcotol (dll_DPFrame @0x101A697A)
+- Contains multiple blocking UI paths: `AfxMessageBox` on CheckNumForProcotol/CheckRedunForProcotol failure; and a `CDialog::DoModal` path when `GetAppVersion()==2` and `IsTaskSpptPriAndWdg()` is true.
+- The DoModal branch appears before `OnMakeNewLogicData` and can block the UI thread waiting for user interaction (likely the hang observed after calling OnAddProcotol).
+
+## Findings: OnMakeNewLogicData signature (dllDPLogic)
+- Demangled signature: `char __thiscall CHWDataContainer::OnMakeNewLogicData(CString typeName, unsigned int count, char dupFlag, unsigned int* outIds, CControl* pControl, CLink* pLink, CString desc, unsigned int extraFlag, CControl* pContext)`.
+- IDA address: 0x1005A824 (RVA 0x5A824).
+- This provides a UI-free path for creating protocol/master nodes, avoiding OnAddProcotol modal dialogs.
+- Link may be unavailable before master exists; resolver now supports skipping link resolution for the master-create step.
+
+## Findings: Current Failure (master create)
+- Base resolve is called with `requireLink=false`, so Link is expected to be null for ETHERNET.
+- Injector still rejects master creation when `pLink` is null, so it exits before calling OnMakeNewLogicData.
+- Resolver currently prefers `curControlId` over NameMap IDs, so parent may resolve to LK220 rather than ETHERNET; this can misplace protocol creation if not adjusted.
+
+## Findings: Fix Applied
+- Master-create path now permits `pLink == nullptr` and uses `preferTargetName` to prioritize ETHERNET IDs over `curControlId` during parent resolution.
+
+## Findings: Current Investigation
+- OnMakeNewLogicData call does not return in latest run; likely needs correct `CControl*` from `GetCommunDeviceFromNO` rather than raw ETHERNET device pointer.
+- Added binding for `CHWContainer::GetCommunDeviceFromNO` (dll_DPFrame @0x10117760) to supply proper control pointer for protocol creation.

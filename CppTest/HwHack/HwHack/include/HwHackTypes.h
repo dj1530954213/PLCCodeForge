@@ -21,6 +21,21 @@ typedef char (__thiscall *FnMakeNewLogicData_Slave)(
     void* pContext);
 
 /// <summary>
+/// 通用逻辑数据创建入口（协议/从站/控制）。
+/// </summary>
+typedef char (__thiscall *FnOnMakeNewLogicData)(
+    void* pThis,
+    CString typeName,
+    unsigned int count,
+    char dupFlag,
+    unsigned int* pOutIDs,
+    void* pControl,
+    void* pLink,
+    CString desc,
+    unsigned int extraFlag,
+    void* pContext);
+
+/// <summary>
 /// 通过逻辑 ID 获取设备对象。
 /// </summary>
 typedef void* (__thiscall *FnGetDeviceByLogicID)(void* pThis, unsigned int id);
@@ -46,6 +61,10 @@ typedef void* (__cdecl *FnGetGlobalContainer)();
 /// </summary>
 typedef void* (__thiscall *FnGetLinkFromNO)(void* pThis, unsigned int a2, unsigned int a3, unsigned int a4);
 /// <summary>
+/// 获取通讯设备对象。
+/// </summary>
+typedef void* (__thiscall *FnGetCommunDeviceFromNO)(void* pThis, unsigned int commNo, CString commName);
+/// <summary>
 /// 获取数据容器。
 /// </summary>
 typedef void* (__thiscall *FnGetDataContainer)(void* pThis);
@@ -69,6 +88,10 @@ typedef int* (__thiscall *FnMapTreeToId)(void* pThis, int key);
 /// 逻辑 ID -> TreeItem 映射。
 /// </summary>
 typedef int* (__thiscall *FnMapIdToTree)(void* pThis, int key);
+/// <summary>
+/// UI 侧添加协议（如 MODBUSTCP_MASTER）。
+/// </summary>
+typedef char (__thiscall *FnOnAddProcotol)(void* pThis, CString protocolName);
 /// <summary>
 /// UI 侧添加/操作从站。
 /// </summary>

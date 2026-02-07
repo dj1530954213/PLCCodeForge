@@ -19,11 +19,19 @@ public:
     /// <summary>
     /// 解析上下文（可能抛异常，由调用方保证安全）。
     /// </summary>
-    bool Resolve(DWORD rawParentData, const char* targetName, ResolvedContext* out);
+    bool Resolve(DWORD rawParentData,
+                 const char* targetName,
+                 ResolvedContext* out,
+                 bool requireLink = true,
+                 bool preferTargetName = false);
     /// <summary>
     /// 安全解析：带 SEH 保护。
     /// </summary>
-    bool SafeResolve(DWORD rawParentData, const char* targetName, ResolvedContext* out);
+    bool SafeResolve(DWORD rawParentData,
+                     const char* targetName,
+                     ResolvedContext* out,
+                     bool requireLink = true,
+                     bool preferTargetName = false);
 
 private:
     /// <summary>

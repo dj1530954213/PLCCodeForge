@@ -142,3 +142,37 @@
 
 ## Session Progress
 - Resume after network issue; planning file updates queued for commit before code changes.
+
+## Session Progress
+- Implemented OnAddProcotol binding and offset; added TreeScanner child diff utilities.
+- Injector now performs MODBUSTCP_MASTER add (if needed) then resolves context and adds MODBUSSLAVE_TCP.
+
+## Session Progress
+- Decompiled OnAddProcotol: includes AfxMessageBox and a DoModal branch (AppVersion==2 + IsTaskSpptPriAndWdg), which can block UI.
+
+## Session Progress
+- Added protocol dialog watcher in injector (focus/optional auto-close) with new settings to reduce blocking.
+
+## Session Progress
+- Demangled OnMakeNewLogicData signature and switched protocol add to silent logic path (OnMakeNewLogicData + AddNodeToCfgTree).
+
+## Session Progress
+- Added resolver flag to skip link resolution during master creation to avoid failure on ETHERNET with no links yet.
+
+## Session Progress
+- 更新 task_plan.md 以“重新梳理三模块 IDA 调用链路”为当前主线。
+- 记录需求到 findings.md，明确需结合 x32dbg/x64dbg 验证不确定点。
+- 修复编译错误：移除 OnMakeNewLogicData 调用处的 __try（避免 C2713/C2712）。
+
+## Session Progress
+- 完成三模块调用链梳理：DPFrame 的 OnAddProcotol/OnAddGateWayProtocol、DPLogic 的 OnMakeNewLogicData/OnMakeNewLogicData_Procotol/Slave、DPSource 的 GetProcotolIDFormName/ReadAllInfo。
+- 记录关键前置检查（Source/Num/Redun）与 UI 插入/NameMap 更新路径到 findings.md。
+
+## Session Progress
+- Latest log shows master creation aborted because pLink is null even though Link resolution was intentionally skipped; need to relax guard and prefer ETHERNET parent over curControlId.
+
+## Session Progress
+- Relaxed master creation guard to allow null Link and added resolver option to prefer target-name IDs when resolving Parent.
+
+## Session Progress
+- Bound GetCommunDeviceFromNO and now pass comm-device pointer to OnMakeNewLogicData; wrapped call with SEH logging for crashes.

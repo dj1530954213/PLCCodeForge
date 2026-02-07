@@ -228,7 +228,11 @@ void ContextResolver::LogThreadInfo() const {
  * @param out 输出解析结果。
  * @return 解析成功返回 true。
  */
-bool ContextResolver::Resolve(DWORD rawParentData, const char* targetName, ResolvedContext* out) {
+bool ContextResolver::Resolve(DWORD rawParentData,
+                              const char* targetName,
+                              ResolvedContext* out,
+                              bool requireLink,
+                              bool preferTargetName) {
     if (!out) return false;
     ZeroMemory(out, sizeof(*out));
     SetStage("resolve_start");
@@ -512,9 +516,17 @@ bool ContextResolver::Resolve(DWORD rawParentData, const char* targetName, Resol
             reinterpret_cast<BYTE*>(pContainer) + offsets::kContainerDeviceMap);
         LogPtr(state_.settings, "DeviceMapThis", mapThis);
         // 依次尝试多来源 ID，优先命中虚表一致的候选。
-        int tryIds[] = {preLinkId, static_cast<int>(curControlId), nameId, fullId, shortId, typeId,
-                        mapName, mapFull, mapShort, mapType, static_cast<int>(rawParentData)};
-        for (int id : tryIds) {
+        int tryIdsPrefer[] = {nameId, mapName, fullId, mapFull, shortId, mapShort,
+                              typeId, mapType, preLinkId, static_cast<int>(curControlId),
+                              static_cast<int>(rawParentData)};
+        int tryIdsDefault[] = {preLinkId, static_cast<int>(curControlId), nameId, fullId, shortId,
+                               typeId, mapName, mapFull, mapShort, mapType,
+                               static_cast<int>(rawParentData)};
+        int* tryIds = preferTargetName ? tryIdsPrefer : tryIdsDefault;
+        size_t tryCount = preferTargetName ? (sizeof(tryIdsPrefer) / sizeof(tryIdsPrefer[0]))
+                                           : (sizeof(tryIdsDefault) / sizeof(tryIdsDefault[0]));
+        for (size_t i = 0; i < tryCount; ++i) {
+            int id = tryIds[i];
             if (id <= 0) continue;
             void* candidate = nullptr;
             int ok = GetDeviceByMap(mapThis, id, &candidate);
@@ -543,9 +555,17 @@ bool ContextResolver::Resolve(DWORD rawParentData, const char* targetName, Resol
         FnGetDeviceByLogicID GetDeviceByLogicID =
             reinterpret_cast<FnGetDeviceByLogicID>(reinterpret_cast<BYTE*>(hLogic) +
                                                    offsets::kGetDeviceByLogicId);
-        int tryIds[] = {preLinkId, static_cast<int>(curControlId), nameId, fullId, shortId, typeId,
-                        mapName, mapFull, mapShort, mapType, static_cast<int>(rawParentData)};
-        for (int id : tryIds) {
+        int tryIdsPrefer[] = {nameId, mapName, fullId, mapFull, shortId, mapShort,
+                              typeId, mapType, preLinkId, static_cast<int>(curControlId),
+                              static_cast<int>(rawParentData)};
+        int tryIdsDefault[] = {preLinkId, static_cast<int>(curControlId), nameId, fullId, shortId,
+                               typeId, mapName, mapFull, mapShort, mapType,
+                               static_cast<int>(rawParentData)};
+        int* tryIds = preferTargetName ? tryIdsPrefer : tryIdsDefault;
+        size_t tryCount = preferTargetName ? (sizeof(tryIdsPrefer) / sizeof(tryIdsPrefer[0]))
+                                           : (sizeof(tryIdsDefault) / sizeof(tryIdsDefault[0]));
+        for (size_t i = 0; i < tryCount; ++i) {
+            int id = tryIds[i];
             if (id <= 0 || !GetDeviceByLogicID) continue;
             void* candidate = GetDeviceByLogicID(pDataContainer, id);
             if (state_.settings.verbose) {
@@ -598,6 +618,18 @@ bool ContextResolver::Resolve(DWORD rawParentData, const char* targetName, Resol
         std::cout << "[DBG] 类型判断 Modbus=" << (IsKindOf(pParent, clsModbus) ? 1 : 0)
                   << " DP=" << (IsKindOf(pParent, clsDp) ? 1 : 0)
                   << " Gateway=" << (IsKindOf(pParent, clsGateway) ? 1 : 0) << "\n";
+    }
+
+    if (!requireLink) {
+        if (state_.settings.verbose) {
+            std::cout << "[DBG] 跳过Link解析（无需Link）\n";
+        }
+        out->pLink = nullptr;
+        out->commIdx = 0;
+        out->linkIdx = 0;
+        out->subIdx = 0;
+        SetStage("resolve_done");
+        return true;
     }
 
     SetStage("resolve_link");
@@ -707,10 +739,14 @@ bool ContextResolver::Resolve(DWORD rawParentData, const char* targetName, Resol
  * @param out 输出解析结果。
  * @return 解析成功返回 true。
  */
-bool ContextResolver::SafeResolve(DWORD rawParentData, const char* targetName, ResolvedContext* out) {
+bool ContextResolver::SafeResolve(DWORD rawParentData,
+                                  const char* targetName,
+                                  ResolvedContext* out,
+                                  bool requireLink,
+                                  bool preferTargetName) {
     __try {
         SetStage("seh_enter");
-        return Resolve(rawParentData, targetName, out);
+        return Resolve(rawParentData, targetName, out, requireLink, preferTargetName);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         std::cout << "[-] ResolveContext: 捕获异常，阶段=" << StageToZh(state_.lastStage)
                   << "（可能是无效指针或线程亲和性问题）。\n";

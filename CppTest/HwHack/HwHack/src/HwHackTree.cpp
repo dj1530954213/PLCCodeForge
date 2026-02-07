@@ -396,6 +396,58 @@ HTREEITEM TreeScanner::FindNodeById(HTREEITEM start, void* mapTree, FnMapTreeToI
 }
 
 /**
+ * @brief 收集指定父节点的子节点句柄。
+ * @param parent 父节点 TreeItem。
+ * @param out 输出子节点列表。
+ * @return 成功返回 true；超时返回 false。
+ */
+bool TreeScanner::CollectChildren(HTREEITEM parent, std::vector<HTREEITEM>* out) const {
+    if (!out) return false;
+    out->clear();
+    HWND hTree = state_.treeView;
+    if (!hTree || !parent) return false;
+    LRESULT res = 0;
+    if (!TrySendTreeMsg(state_.settings, hTree, TVM_GETNEXTITEM, TVGN_CHILD,
+                        reinterpret_cast<LPARAM>(parent), &res)) {
+        return false;
+    }
+    HTREEITEM child = reinterpret_cast<HTREEITEM>(res);
+    while (child) {
+        out->push_back(child);
+        if (!TrySendTreeMsg(state_.settings, hTree, TVM_GETNEXTITEM, TVGN_NEXT,
+                            reinterpret_cast<LPARAM>(child), &res)) {
+            return false;
+        }
+        child = reinterpret_cast<HTREEITEM>(res);
+    }
+    return true;
+}
+
+/**
+ * @brief 通过前后对比定位新增子节点。
+ * @param before 修改前子节点列表。
+ * @param after 修改后子节点列表。
+ * @param outNewCount 新增数量输出（可选）。
+ * @return 唯一新增节点句柄；不唯一返回 nullptr。
+ */
+HTREEITEM TreeScanner::FindNewChildByDiff(const std::vector<HTREEITEM>& before,
+                                          const std::vector<HTREEITEM>& after,
+                                          int* outNewCount) const {
+    int newCount = 0;
+    HTREEITEM candidate = nullptr;
+    for (HTREEITEM item : after) {
+        if (std::find(before.begin(), before.end(), item) == before.end()) {
+            ++newCount;
+            if (!candidate) {
+                candidate = item;
+            }
+        }
+    }
+    if (outNewCount) *outNewCount = newCount;
+    return (newCount == 1) ? candidate : nullptr;
+}
+
+/**
  * @brief 获取同级节点图标索引。
  * @param parent 父节点 TreeItem。
  * @return 图标索引；失败返回 -1。

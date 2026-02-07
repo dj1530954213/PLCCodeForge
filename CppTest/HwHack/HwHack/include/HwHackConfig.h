@@ -10,6 +10,7 @@ namespace hw {
 namespace offsets {
 // dllDPLogic.dll
 constexpr DWORD kMakeNew = 0x59F10;
+constexpr DWORD kOnMakeNewLogicData = 0x5A824;
 constexpr DWORD kGetDeviceByLogicId = 0x50770;
 
 // dll_DPFrame.dll
@@ -19,6 +20,7 @@ constexpr DWORD kGetDataContainer = 0x106C60;
 constexpr DWORD kGetCurControl = 0x106C80;
 constexpr DWORD kUpdateView = 0x106E00;
 constexpr DWORD kGetPlcDevice = 0x125CB0;
+constexpr DWORD kGetCommunDeviceFromNO = 0x117760;
 constexpr DWORD kContainerDeviceMap = 0x250;
 constexpr DWORD kGetDeviceByMap = 0x45E80;
 constexpr DWORD kMapNameToId = 0x45E00;
@@ -31,6 +33,7 @@ constexpr DWORD kIdToTreeMapBase = 0x9D4;
 constexpr DWORD kOnSlaveOperate = 0x155D70;
 constexpr DWORD kGetCommunNoForLink = 0x1293B0;
 constexpr DWORD kOnDptreeSlaveOperate = 0x167AB0;
+constexpr DWORD kOnAddProcotol = 0x1A697A;
 constexpr DWORD kOnAddSlave = 0x1A7AF0;
 constexpr DWORD kFrameContainer = 0x640;
 constexpr DWORD kLinkId = 0x10;
@@ -87,6 +90,18 @@ struct Settings {
     bool preferOnAddSlave = true;
     /// 是否允许回退低层 MakeSlave 注入。
     bool enableFallbackInjection = false;
+    /// 是否优先使用无弹窗协议添加路径。
+    bool preferSilentAddProtocol = true;
+    /// 是否允许回退调用 OnAddProcotol（可能弹窗）。
+    bool enableOnAddProcotolFallback = false;
+    /// 是否在添加协议时尝试聚焦弹窗。
+    bool focusProtocolDialog = true;
+    /// 是否自动关闭添加协议的弹窗（默认关闭）。
+    bool autoCloseProtocolDialog = false;
+    /// 弹窗监测超时（毫秒）。
+    DWORD protocolDialogTimeoutMs = 8000;
+    /// 弹窗监测轮询间隔（毫秒）。
+    DWORD protocolDialogPollMs = 200;
     /// Comm 扫描上限。
     unsigned int maxCommScan = 64;
     /// Link 扫描上限。

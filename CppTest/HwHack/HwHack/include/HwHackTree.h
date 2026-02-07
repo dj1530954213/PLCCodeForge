@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "HwHackState.h"
 #include "HwHackTypes.h"
@@ -82,6 +83,16 @@ public:
     /// </summary>
     HTREEITEM FindNodeById(HTREEITEM start, void* mapTree, FnMapTreeToId mapTreeToId,
                            int targetId) const;
+    /// <summary>
+    /// 收集指定父节点的子节点句柄。
+    /// </summary>
+    bool CollectChildren(HTREEITEM parent, std::vector<HTREEITEM>* out) const;
+    /// <summary>
+    /// 通过前后对比定位新增子节点。
+    /// </summary>
+    HTREEITEM FindNewChildByDiff(const std::vector<HTREEITEM>& before,
+                                 const std::vector<HTREEITEM>& after,
+                                 int* outNewCount) const;
     /// <summary>
     /// 获取同级节点图标索引。
     /// </summary>
